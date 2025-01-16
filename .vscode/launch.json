@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Game",
+            "program": "${workspaceFolder}/vecc.exe",
+            "args": ["test1.vecc"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build_debug",
+        },
+    ]
+}

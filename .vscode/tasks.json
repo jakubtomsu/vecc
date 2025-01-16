@@ -1,0 +1,22 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build_debug",
+            "type": "shell",
+            "command": "odin",
+            "args": ["build", ".", "-debug"],
+            "group": {
+                "kind": "build",
+                "isDefault": true,
+            },
+            "presentation": {
+                "reveal": "never",
+                "revealProblems": "never",
+                "panel": "shared",
+                "close": false,
+            },
+            "problemMatcher": "$gcc",
+        }
+    ]
+}

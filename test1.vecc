@@ -1,0 +1,129 @@
+// test1 module {
+//     
+// }
+// 
+// GLOBAL_CONST i32 = 69
+// global_var i32 = 1
+
+// bar proc() {
+//     asdf i32 = 0x1234
+//     @println(asdf)
+// }
+// 
+// // foo proc(a *i32) f32 {
+// foo proc() {
+//     a i32 = 1
+//     b i32 = 2 + a
+//     b = b * 2
+//     a = a + b
+//     c f32 = 123.123123123;
+//     if a > 10 {
+//         a = a + 1000
+//         if b > 10 {
+//             a = a + 69
+//         }
+//     }
+//     
+//     {
+//         x i32 = 1111
+//         @println(x)
+//     }
+//     
+//     // for i; i < 10; i++ {
+//     //     b = b + 2
+//     // }
+//     
+//     @println(a)
+//     @println(b)
+// }
+
+// temp boilerplate
+
+print_v4f32 proc(x v4f32) {
+    printf("{")
+    val i32
+    val = _mm_extract_ps(x, 0); printf("%f, ", reinterpret(f32, val))
+    val = _mm_extract_ps(x, 1); printf("%f, ", reinterpret(f32, val))
+    val = _mm_extract_ps(x, 2); printf("%f, ", reinterpret(f32, val))
+    val = _mm_extract_ps(x, 3); printf("%f"  , reinterpret(f32, val))
+    printf("}")
+}
+
+print_v8f32 proc(x v8f32) {
+    printf("{")
+    print_v4f32(_mm256_extractf128_ps(x, 0))
+    printf(", ")
+    print_v4f32(_mm256_extractf128_ps(x, 1))
+    printf("}")
+}
+
+print_v4i32 proc(x v4i32) {
+    printf("{")
+    val i32
+    val = _mm_extract_epi32(x, 0); printf("%i, ", reinterpret(i32, val))
+    val = _mm_extract_epi32(x, 1); printf("%i, ", reinterpret(i32, val))
+    val = _mm_extract_epi32(x, 2); printf("%i, ", reinterpret(i32, val))
+    val = _mm_extract_epi32(x, 3); printf("%i"  , reinterpret(i32, val))
+    printf("}")
+}
+
+print_v8i32 proc(x v8i32) {
+    printf("{")
+    print_v4i32(_mm256_extractf128_si256(x, 0))
+    printf(", ")
+    print_v4i32(_mm256_extractf128_si256(x, 1))
+    printf("}")
+}
+
+println_v4f32 proc(x v4f32) {
+    print_v4f32(x)
+    printf("\n");
+}
+
+println_v8f32 proc(x v8f32) {
+    print_v8f32(x)
+    printf("\n");
+}
+
+println_v4i32 proc(x v4i32) {
+    print_v4i32(x)
+    printf("\n");
+}
+
+println_v8i32 proc(x v8i32) {
+    print_v8i32(x)
+    printf("\n");
+}
+
+reduce_sum_v4f32 proc(x v4f32) f32 {
+    sums v4f32 = _mm_add_ps(x, _mm_movehl_ps(x, x))
+    shuf v4f32 = _mm_movehdup_ps(sums)
+    return _mm_cvtss_f32(_mm_add_ss(sums, shuf))
+}
+
+reduce_sum_v8f32 proc(x v8f32) f32 {
+    return reduce_sum_v4f32(_mm_add_ps(
+        _mm256_castps256_ps128(x),
+        _mm256_extractf128_ps(x, 1),
+    ))
+}
+
+// https://www.intel.com/content/www/us/en/developer/articles/technical/simd-made-easy-with-intel-ispc.html
+
+vecc_main proc() {
+    sum_lanes v8f32 = _mm256_setzero_ps() // _mm256_set_ps(1, 1, 1, 1, 1, 1, 1, 1)
+    range i : 0 ..< 16 {
+        lanes 1 {
+            printf("%lli\n", i)
+        }
+        mask v8i32 = vecc_i & 1
+        if mask == 0 {
+            sum_lanes += 2.0
+        }
+        // sum_lanes += _mm256_cvtepi32_ps(vecc_i)
+        // sum_lanes *= 2.0
+    }
+    
+    sum_lanes:println_v8f32()
+    printf("reduce sum: %f\n", reduce_sum_v8f32(sum_lanes))
+}
