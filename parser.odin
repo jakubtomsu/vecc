@@ -42,6 +42,9 @@ Ast_Variant :: union {
     Ast_Binary_Expr,
     Ast_Call_Expr,
     Ast_Cast_Expr,
+    
+    Ast_Pointer_Type,
+    Ast_Multi_Pointer_Type,
 }
 
 Ast_Ident :: struct {
@@ -152,6 +155,17 @@ Ast_Cast_Expr :: struct {
     type:   ^Ast,
     value:  ^Ast,
 }
+
+Ast_Pointer_Type :: struct {
+    token:  Token,
+    type:   ^Ast,
+}
+
+Ast_Multi_Pointer_Type :: struct {
+    token:  Token,
+    type:   ^Ast,
+}
+
 
 ast_print :: proc(ast: ^Ast, name: string, depth: int) {
     depth := depth
@@ -631,6 +645,27 @@ parse_block :: proc(p: ^Parser, ignore_begin := false, loc := #caller_location) 
 }
 
 parse_type :: proc(p: ^Parser) -> ^Ast {
+    if allow(p, .Open_Bracket) {
+        tok := expect(p, .Bit_Xor)
+        expect(p, .Close_Bracket)
+        ast := new(Ast)
+        ast.variant = Ast_Multi_Pointer_Type{
+            token = tok,
+            type = parse_ident(p, expect(p, .Ident)),
+        }
+        return ast
+    }
+    
+    if peek(p) == .Mul {
+        tok := expect(p, .Bit_Xor)
+        ast := new(Ast)
+        ast.variant = Ast_Pointer_Type{
+            token = tok,
+            type = parse_ident(p, expect(p, .Ident)),
+        }
+        return ast
+    }
+    
     return parse_ident(p, expect(p, .Ident))
 }
 
