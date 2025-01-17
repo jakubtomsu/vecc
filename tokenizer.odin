@@ -42,6 +42,8 @@ Token_Kind :: enum u8 {
     Else,
     For,
     Range,
+    Break,
+    Continue,
     In,
     Proc,
     Vector,
@@ -50,7 +52,8 @@ Token_Kind :: enum u8 {
     Reinterpret,
     Return,
     Lanes,
-    
+    Private,
+    Export,
 
     Equal,
     Less_Than,
@@ -200,6 +203,8 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         case "else":  result.kind = .Else
         case "for": result.kind = .For
         case "range": result.kind = .Range
+        case "break":  result.kind = .Break
+        case "continue":  result.kind = .Continue
         case "in":  result.kind = .In
         case "proc": result.kind = .Proc
         case "vector": result.kind = .Vector
@@ -208,6 +213,8 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         case "reinterpret": result.kind = .Reinterpret
         case "return": result.kind = .Return
         case "lanes": result.kind = .Lanes
+        case "private": result.kind = .Private
+        case "export": result.kind = .Export
         }
         
     case '@':
@@ -421,7 +428,15 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
     #partial switch result.kind {
     case .Invalid:
         // preserve
-    case .Ident, .Integer, .String, .Float, .Close_Brace, .Close_Paren:
+    case
+        .Ident,
+        .Integer,
+        .String,
+        .Float,
+        .Break,
+        .Continue,
+        .Close_Brace,
+        .Close_Paren:
         t.insert_semicolon = true
     case:
         t.insert_semicolon = false

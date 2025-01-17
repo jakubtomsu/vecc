@@ -35,6 +35,8 @@ Entity_Variable :: struct {
 Scope :: struct {
     ast:        ^Ast,
     parent:     ^Scope,
+    depth:      int,
+    mask:       string,
     entities:   map[string]^Entity,
 }
 
@@ -127,19 +129,31 @@ check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
     
     fmt.sbprint(&c.source, "(")
     
-    #partial switch expr.op.kind {
-    case .Conv:
-        fmt.sbprint(&c.source, "(")
-        check_type(c, expr.type)
-        fmt.sbprint(&c.source, ")")
-        check_expr(c, expr.value)
-    
-    case .Reinterpret:
-        fmt.sbprint(&c.source, "*(")
-        check_type(c, expr.type)
-        fmt.sbprint(&c.source, "*)&")
-        check_expr(c, expr.value)
+    switch c.curr_lanes {
+    case 1:
+        #partial switch expr.op.kind {
+        case .Conv:
+            fmt.sbprint(&c.source, "(")
+            check_type(c, expr.type)
+            fmt.sbprint(&c.source, ")")
+            check_expr(c, expr.value)
+        
+        case .Reinterpret:
+            fmt.sbprint(&c.source, "*(")
+            check_type(c, expr.type)
+            fmt.sbprint(&c.source, "*)&")
+            check_expr(c, expr.value)
 
+        case:
+            assert(false)
+        }
+
+    case 8:
+        #partial switch expr.op.kind {
+        case:
+            assert(false)
+        }
+    
     case:
         assert(false)
     }
@@ -321,7 +335,7 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         gen_indent(c)
         fmt.sbprintf(&c.source, "i64 vecc_{}_end = ", iter)
         check_expr(c, v.end)
-        fmt.sbprintln(&c.source, ";")
+        fmt.sbprintln(&c.source, " - 7;")
 
         gen_indent(c)
         fmt.sbprintf(&c.source, "v8i32 vecc_mask = _mm256_set1_epi32(0xffffffff);\n")
@@ -329,7 +343,7 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         // Main loop
         gen_indent(c)
         fmt.sbprint(&c.source, "for (;")
-        fmt.sbprintf(&c.source, "{} < vecc_{}_end - 7", iter, iter)
+        fmt.sbprintf(&c.source, "{} < vecc_{}_end && !_mm256_testz_si256(vecc_mask, vecc_mask)", iter, iter)
         fmt.sbprint(&c.source, "; ")
         fmt.sbprintf(&c.source, "{} += 8", iter)
         fmt.sbprint(&c.source, ") ")
@@ -383,34 +397,78 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
             fmt.sbprint(&c.source, "if (")
             check_expr(c, v.cond)
             fmt.sbprint(&c.source, ") ")
-            check_block_stmt(c, v.body)
+            check_block_stmt(c, v.if_body)
+            if v.else_body != nil {
+                fmt.sbprint(&c.source, " else ")
+                check_stmt(c, v.else_body)
+            }
         
         case 8:
-            fmt.sbprint(&c.source, "{ // if\n")
-            c.indent += 1
+            // fmt.sbprint(&c.source, "{ // if\n")
+            // c.indent += 1
 
-            gen_indent(c)
-            fmt.sbprint(&c.source, "v8i32 vecc_prevmask = vecc_mask;\n")
+            // gen_indent(c)
+            // fmt.sbprint(&c.source, "v8i32 vecc_prevmask = vecc_mask;\n")
 
-            gen_indent(c)
-            fmt.sbprint(&c.source, "vecc_mask = _mm256_and_si256(vecc_mask, ")
+            // gen_indent(c)
+
+            cond_name := fmt.tprintf("vecc_cond{}", c.curr_scope.depth)
+            fmt.sbprintf(&c.source, "v8i32 {} = _mm256_and_si256(vecc_mask, ", cond_name)
             check_expr(c, v.cond)
             fmt.sbprint(&c.source, ");\n")
-
-            gen_indent(c)
-            check_block_stmt(c, v.body)
-            fmt.sbprint(&c.source, "\n")
             
-            gen_indent(c)
-            fmt.sbprint(&c.source, "vecc_mask = vecc_prevmask;\n")
+            {
+                gen_indent(c)
+                if_prev_scope := check_begin_scope(c, v.if_body.variant.(Ast_Block_Stmt).scope, "if")
+    
+                gen_indent(c)
+                fmt.sbprintf(&c.source, "vecc_mask = _mm256_and_si256(vecc_mask, {});\n", cond_name)
+                
+                check_block_stmt(c, v.if_body, skip_scope = true)
+                
+                check_end_scope(c, if_prev_scope)
+            }
             
-            c.indent -= 1
+            if v.else_body != nil {
+                fmt.sbprint(&c.source, "\n")
+                gen_indent(c)
+                else_prev_scope := check_begin_scope(c, v.else_body.variant.(Ast_Block_Stmt).scope, "else")
+                
+                gen_indent(c)
+                fmt.sbprintf(&c.source, "vecc_mask = _mm256_and_si256(vecc_mask, _mm256_xor_si256({}, _mm256_set1_epi32(0xffffffff)));\n", cond_name)
+                
+                check_block_stmt(c, v.else_body, skip_scope = true)
+                
+                check_end_scope(c, else_prev_scope)
+            }
+            
+            // fmt.sbprint(&c.source, "\n")
+            
+            // gen_indent(c)
+            // fmt.sbprint(&c.source, "vecc_mask = vecc_prevmask;\n")
+            
+            // c.indent -= 1
 
-            gen_indent(c)
-            fmt.sbprint(&c.source, "}\n")
+            // gen_indent(c)
+            // fmt.sbprint(&c.source, "}")
         
         case:
             assert(false)
+        }
+        
+    case Ast_Break_Stmt:
+        switch c.curr_lanes {
+        case 1:
+            fmt.sbprint(&c.source, "break")
+            
+        case 8:
+            fmt.sbprint(&c.source, "vecc_prevmask = _mm256_and_si256(vecc_prevmask, _mm256_xor_si256(vecc_mask, _mm256_set1_epi32(0xffffffff)))")
+        }
+    
+    case Ast_Continue_Stmt:
+        switch c.curr_lanes {
+        case 1:
+            fmt.sbprint(&c.source, "continue")
         }
     
     case Ast_Lanes_Stmt:
@@ -421,17 +479,67 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
     }
 }
 
+check_find_lane_mask_name :: proc(scope: ^Scope) -> string {
+    scope := scope
+    mask: string
+    for ;scope != nil; scope = scope.parent {
+        if scope.mask != "" {
+            return scope.mask
+        }
+    }
+    
+    // "_mm256_set1_epi32(0xffffffff)"
+    return "vecc_mask"
+}
+
+check_begin_scope :: proc(c: ^Checker, scope: ^Scope, debug_name := "") -> ^Scope {
+    prev_scope := c.curr_scope
+    c.curr_scope = scope
+    fmt.sbprint(&c.source, "{")
+    if debug_name != "" {
+        fmt.sbprintf(&c.source, " // {}", debug_name)
+    }
+    fmt.sbprint(&c.source, "\n")
+    c.indent += 1
+    
+    switch c.curr_lanes {
+    case 1:
+    case 8:
+        mask := check_find_lane_mask_name(prev_scope)
+        c.curr_scope.mask = fmt.tprintf("vecc_savemask%i", c.curr_scope.depth)
+
+        gen_indent(c)
+        fmt.sbprintf(&c.source, "v8i32 {} = {};\n", c.curr_scope.mask, mask)
+    }
+    
+    return prev_scope
+}
+
+check_end_scope :: proc(c: ^Checker, prev_scope: ^Scope) {
+    switch c.curr_lanes {
+    case 1:
+    case 8:
+        mask := check_find_lane_mask_name(prev_scope)
+
+        gen_indent(c)
+        fmt.sbprintf(&c.source, "{} = {};\n", mask, c.curr_scope.mask)
+    }
+
+    c.curr_scope = prev_scope
+
+    c.indent -= 1
+    gen_indent(c)
+    fmt.sbprint(&c.source, "}")
+}
+
 check_block_stmt :: proc(c: ^Checker, ast: ^Ast, skip_scope := false) {
     block := ast.variant.(Ast_Block_Stmt)
 
-    this_scope := c.curr_scope
-    defer c.curr_scope = this_scope
+    prev_scope: ^Scope
     if !skip_scope {
-        c.curr_scope = block.scope
-        fmt.sbprintln(&c.source, "{")
-        c.indent += 1
+        prev_scope = check_begin_scope(c, block.scope)
     }
-            
+
     for stmt in block.statements {
         gen_indent(c)
         check_stmt(c, stmt)
@@ -444,11 +552,9 @@ check_block_stmt :: proc(c: ^Checker, ast: ^Ast, skip_scope := false) {
             fmt.sbprint(&c.source, ";\n")
         }
     }
-
+    
     if !skip_scope {
-        c.indent -= 1
-        gen_indent(c)
-        fmt.sbprint(&c.source, "}")
+        check_end_scope(c, prev_scope)
     }
 }
 
@@ -464,8 +570,6 @@ check_lanes_stmt :: proc(c: ^Checker, ast: ^Ast) {
 
 check_proc_type :: proc(c: ^Checker, ast: ^Ast, name: string) {
     type := ast.variant.(Ast_Proc_Type)
-    
-    fmt.sbprintf(&c.source, "static ")
 
     check_type(c, type.result)
 
@@ -483,7 +587,8 @@ check_proc_type :: proc(c: ^Checker, ast: ^Ast, name: string) {
 
 // Check and codegen C
 check_program :: proc(c: ^Checker) {
-    fmt.sbprintfln(&c.source, "#pragma once")
+    fmt.sbprintfln(&c.source, "#ifndef VECC_DEFINED")
+    fmt.sbprintfln(&c.source, "#define VECC_DEFINED 1")
     fmt.sbprintfln(&c.source, "")
     
     fmt.sbprintfln(&c.source, "// WARNING: this file has been generated by the vecc compiler.")
@@ -520,38 +625,82 @@ check_program :: proc(c: ^Checker) {
     for name, ent in c.curr_scope.entities {
         #partial switch _ in ent.variant {
         case Entity_Proc:
-            append(&sorted_entities, Sorted_Entity{name = name, order_index = ent.order_index})
+        case Entity_Variable:
+        case:
+            continue
         }
+        append(&sorted_entities, Sorted_Entity{name = name, order_index = ent.order_index})
     }
     
     slice.sort_by(sorted_entities[:], proc(a, b: Sorted_Entity) -> bool {
         return a.order_index < b.order_index,
     })
     
-    // Now all static...
-    fmt.sbprintfln(&c.source, "\n#ifdef VECC_IMPL")
-    
-    fmt.sbprintfln(&c.source, "\n// VECC function declarations\n")
+    fmt.sbprintfln(&c.source, "\n// VECC exported function declarations\n")
     
     for sorted in sorted_entities {
         ent := c.curr_scope.entities[sorted.name]
-
         #partial switch v in ent.variant {
         case Entity_Proc:
             decl := ent.ast.variant.(Ast_Proc_Decl)
+            if !decl.export do continue
             check_proc_type(c, decl.type, sorted.name)
             fmt.sbprint(&c.source, ";\n")
         }
     }
-        
+    
+    fmt.sbprintfln(&c.source, "\n// VECC exported global variable declarations\n")
+    
+    for sorted in sorted_entities {
+        ent := c.curr_scope.entities[sorted.name]
+        #partial switch v in ent.variant {
+        case Entity_Variable:
+            decl := ent.ast.variant.(Ast_Value_Decl)
+            if decl.export do continue
+        }
+    }
+    
+    fmt.sbprintfln(&c.source, "#endif // VECC_DEFINED\n\n")
+
+    fmt.sbprintfln(&c.source, "\n#ifdef VECC_IMPL")
+    
+    fmt.sbprintfln(&c.source, "\n// VECC private function declarations\n")
+    
+    for sorted in sorted_entities {
+        ent := c.curr_scope.entities[sorted.name]
+        #partial switch v in ent.variant {
+        case Entity_Proc:
+            decl := ent.ast.variant.(Ast_Proc_Decl)
+            if decl.export do continue
+            check_proc_type(c, decl.type, sorted.name)
+            fmt.sbprint(&c.source, ";\n")
+        }
+    }
+    
+    fmt.sbprintfln(&c.source, "\n// VECC private global variable declarations\n")
+    
+    for sorted in sorted_entities {
+        ent := c.curr_scope.entities[sorted.name]
+        #partial switch v in ent.variant {
+        case Entity_Variable:
+            decl := ent.ast.variant.(Ast_Value_Decl)
+            if !decl.export do continue
+        }
+    }
+    
     fmt.sbprintfln(&c.source, "\n// VECC function definitions\n")
     
     for sorted in sorted_entities {
         ent := c.curr_scope.entities[sorted.name]
 
+        ast_print(ent.ast, sorted.name, 0)
+
         #partial switch v in ent.variant {
         case Entity_Proc:
             decl := ent.ast.variant.(Ast_Proc_Decl)
+            if !decl.export {
+                fmt.sbprintf(&c.source, "static ")
+            }
             check_proc_type(c, decl.type, sorted.name)
             fmt.sbprint(&c.source, " ")
             check_block_stmt(c, decl.body)
