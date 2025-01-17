@@ -112,14 +112,14 @@ reduce_sum_v8f32 proc(x v8f32) f32 {
 
 vecc_main proc() {
     sum_lanes v8f32 = _mm256_setzero_ps() // _mm256_set_ps(1, 1, 1, 1, 1, 1, 1, 1)
-    range i : 0 ..< 16 {
+    range i : 0 ..< 8 {
         lanes 1 {
             printf("%lli\n", i)
         }
-        mask v8i32 = vecc_i & 1
-        if mask == 0 {
-            sum_lanes += 2.0
+        if (vecc_i & 1) == 0 {
+            sum_lanes += 1.0
         }
+        sum_lanes += 1.0
         // sum_lanes += _mm256_cvtepi32_ps(vecc_i)
         // sum_lanes *= 2.0
     }

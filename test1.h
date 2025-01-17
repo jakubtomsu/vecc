@@ -112,7 +112,7 @@ static void vecc_main() {
 	v8f32 sum_lanes = _mm256_setzero_ps();
 	{ // range i
 		i64 i = 0;
-		i64 vecc_i_end = 16;
+		i64 vecc_i_end = 8;
 		v8i32 vecc_mask = _mm256_set1_epi32(0xffffffff);
 		for (;i < vecc_i_end - 7; i += 8) {
 			__m256i vecc_i = _mm256_add_epi32(
@@ -121,11 +121,16 @@ static void vecc_main() {
 			{
 				printf("%lli\n", i);
 			};
-			v8i32 mask = _mm256_and_si256(vecc_i, _mm256_set1_epi32(1));
-			vecc_mask = _mm256_and_si256(vecc_mask, _mm256_cmpeq_epi32(mask, _mm256_setzero_si256()));
-			{
-				sum_lanes = _mm256_blendv_ps(sum_lanes, _mm256_add_ps(sum_lanes, _mm256_set1_ps(2.0)), _mm256_castsi256_ps(vecc_mask));
-			};
+			{ // if
+				v8i32 vecc_prevmask = vecc_mask;
+				vecc_mask = _mm256_and_si256(vecc_mask, _mm256_cmpeq_epi32(_mm256_and_si256(vecc_i, _mm256_set1_epi32(1)), _mm256_setzero_si256()));
+				{
+					sum_lanes = _mm256_blendv_ps(sum_lanes, _mm256_add_ps(sum_lanes, _mm256_set1_ps(1.0)), _mm256_castsi256_ps(vecc_mask));
+				}
+				vecc_mask = vecc_prevmask;
+			}
+;
+			sum_lanes = _mm256_blendv_ps(sum_lanes, _mm256_add_ps(sum_lanes, _mm256_set1_ps(1.0)), _mm256_castsi256_ps(vecc_mask));
 		}
 	};
 	println_v8f32(sum_lanes);

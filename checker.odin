@@ -386,11 +386,28 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
             check_block_stmt(c, v.body)
         
         case 8:
+            fmt.sbprint(&c.source, "{ // if\n")
+            c.indent += 1
+
+            gen_indent(c)
+            fmt.sbprint(&c.source, "v8i32 vecc_prevmask = vecc_mask;\n")
+
+            gen_indent(c)
             fmt.sbprint(&c.source, "vecc_mask = _mm256_and_si256(vecc_mask, ")
             check_expr(c, v.cond)
             fmt.sbprint(&c.source, ");\n")
+
             gen_indent(c)
             check_block_stmt(c, v.body)
+            fmt.sbprint(&c.source, "\n")
+            
+            gen_indent(c)
+            fmt.sbprint(&c.source, "vecc_mask = vecc_prevmask;\n")
+            
+            c.indent -= 1
+
+            gen_indent(c)
+            fmt.sbprint(&c.source, "}\n")
         
         case:
             assert(false)

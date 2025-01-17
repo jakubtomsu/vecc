@@ -39,6 +39,7 @@ Token_Kind :: enum u8 {
     Close_Bracket,
     
     If,
+    Else,
     For,
     Range,
     In,
@@ -196,6 +197,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         }
         switch string(t.data[result.offset:t.offset]) {
         case "if":  result.kind = .If
+        case "else":  result.kind = .Else
         case "for": result.kind = .For
         case "range": result.kind = .Range
         case "in":  result.kind = .In
