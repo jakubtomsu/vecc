@@ -548,18 +548,24 @@ parse_stmt :: proc(p: ^Parser) -> ^Ast {
     case .For:
         for_stmt: Ast_For_Stmt
 
+        parse_begin_scope(p)
+
         for_stmt.init = parse_value_decl(p, expect(p, .Ident))
         
         expect(p, .Semicolon)
         for_stmt.cond = parse_expr(p)
         expect(p, .Semicolon)
         for_stmt.post = parse_stmt(p)
-        for_stmt.body = parse_block(p)
+        for_stmt.body = parse_block(p, ignore_scope = true)
+    
+        parse_end_curr_scope(p)
     
         result.variant = for_stmt
         
     case .Range:
         for_stmt: Ast_For_Range_Stmt
+
+        parse_begin_scope(p)
 
         ident_tok := expect(p, .Ident)
         for_stmt.ident = parse_ident(p, ident_tok)
@@ -582,9 +588,11 @@ parse_stmt :: proc(p: ^Parser) -> ^Ast {
         }
         for_stmt.end = parse_expr(p)
 
-        for_stmt.body = parse_block(p)
+        for_stmt.body = parse_block(p, ignore_scope = true)
     
         result.variant = for_stmt
+        
+        parse_end_curr_scope(p)
     
     case .Break:
         result.variant = Ast_Break_Stmt{
@@ -621,25 +629,40 @@ parse_stmt_list :: proc(p: ^Parser, end: Token_Kind) -> []^Ast {
     return result[:]
 }
 
-parse_block :: proc(p: ^Parser, ignore_begin := false, loc := #caller_location) -> ^Ast {
+parse_begin_scope :: proc(p: ^Parser) {
+    scope := new(Scope)
+    scope.parent = p.curr_scope
+    scope.depth = p.curr_scope.depth + 1
+    p.curr_scope = scope
+}
+
+parse_end_curr_scope :: proc(p: ^Parser) {
+    p.curr_scope = p.curr_scope.parent
+}
+
+parse_block :: proc(p: ^Parser, ignore_begin := false, ignore_scope := false, loc := #caller_location) -> ^Ast {
     result := new(Ast)
     this_scope := p.curr_scope
     block_stmt: Ast_Block_Stmt
-    block_stmt.scope = new(Scope)
-    block_stmt.scope.parent = this_scope
-    block_stmt.scope.depth = this_scope.depth + 1
-    p.curr_scope = block_stmt.scope
+
+    if !ignore_scope {
+        parse_begin_scope(p)
+    }
 
     if !ignore_begin {
         expect(p, .Open_Brace)
     }
+
+    block_stmt.scope = p.curr_scope
     
     block_stmt.statements = parse_stmt_list(p, .Close_Brace)
     expect(p, .Close_Brace, loc = loc)
     
     result.variant = block_stmt
     
-    p.curr_scope = this_scope
+    if !ignore_scope {
+        parse_end_curr_scope(p)
+    }
     
     return result
 }

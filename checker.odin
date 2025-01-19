@@ -36,8 +36,10 @@ Scope :: struct {
     ast:        ^Ast,
     parent:     ^Scope,
     depth:      int,
-    mask:       string,
     entities:   map[string]^Entity,
+    // Exec masks here are a HACK
+    mask:       string,
+    loop_mask:  string,
 }
 
 Type :: struct {
@@ -343,7 +345,8 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         // Main loop
         gen_indent(c)
         fmt.sbprint(&c.source, "for (;")
-        fmt.sbprintf(&c.source, "{} < vecc_{}_end && !_mm256_testz_si256(vecc_mask, vecc_mask)", iter, iter)
+        // && !_mm256_testz_si256(vecc_mask, vecc_mask)
+        fmt.sbprintf(&c.source, "{} < vecc_{}_end", iter, iter)
         fmt.sbprint(&c.source, "; ")
         fmt.sbprintf(&c.source, "{} += 8", iter)
         fmt.sbprint(&c.source, ") ")
@@ -372,7 +375,6 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
             c.indent -= 1
             gen_indent(c)
             fmt.sbprint(&c.source, "}")
-            
         }
         fmt.sbprintln(&c.source, "")
         
@@ -462,7 +464,8 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
             fmt.sbprint(&c.source, "break")
             
         case 8:
-            fmt.sbprint(&c.source, "vecc_prevmask = _mm256_and_si256(vecc_prevmask, _mm256_xor_si256(vecc_mask, _mm256_set1_epi32(0xffffffff)))")
+            
+            // fmt.sbprint(&c.source, "vecc_prevmask = _mm256_and_si256(vecc_prevmask, _mm256_xor_si256(vecc_mask, _mm256_set1_epi32(0xffffffff)))")
         }
     
     case Ast_Continue_Stmt:
@@ -505,11 +508,11 @@ check_begin_scope :: proc(c: ^Checker, scope: ^Scope, debug_name := "") -> ^Scop
     switch c.curr_lanes {
     case 1:
     case 8:
-        mask := check_find_lane_mask_name(prev_scope)
+        // mask := check_find_lane_mask_name(prev_scope)
         c.curr_scope.mask = fmt.tprintf("vecc_savemask%i", c.curr_scope.depth)
 
         gen_indent(c)
-        fmt.sbprintf(&c.source, "v8i32 {} = {};\n", c.curr_scope.mask, mask)
+        fmt.sbprintf(&c.source, "v8i32 {} = vecc_mask;\n", c.curr_scope.mask)
     }
     
     return prev_scope
@@ -519,10 +522,10 @@ check_end_scope :: proc(c: ^Checker, prev_scope: ^Scope) {
     switch c.curr_lanes {
     case 1:
     case 8:
-        mask := check_find_lane_mask_name(prev_scope)
+        // mask := check_find_lane_mask_name(prev_scope)
 
         gen_indent(c)
-        fmt.sbprintf(&c.source, "{} = {};\n", mask, c.curr_scope.mask)
+        fmt.sbprintf(&c.source, "vecc_mask = {};\n", c.curr_scope.mask)
     }
 
     c.curr_scope = prev_scope
@@ -662,6 +665,7 @@ check_program :: proc(c: ^Checker) {
     
     fmt.sbprintfln(&c.source, "#endif // VECC_DEFINED\n\n")
 
+    // FIXME: make sure the impl expands only once
     fmt.sbprintfln(&c.source, "\n#ifdef VECC_IMPL")
     
     fmt.sbprintfln(&c.source, "\n// VECC private function declarations\n")
@@ -672,6 +676,7 @@ check_program :: proc(c: ^Checker) {
         case Entity_Proc:
             decl := ent.ast.variant.(Ast_Proc_Decl)
             if decl.export do continue
+            fmt.sbprint(&c.source, "static ")
             check_proc_type(c, decl.type, sorted.name)
             fmt.sbprint(&c.source, ";\n")
         }

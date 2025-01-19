@@ -19,6 +19,7 @@ typedef __m256i v8i32;
 
 // VECC exported function declarations
 
+v8f32 ispc_test();
 void vecc_main();
 
 // VECC exported global variable declarations
@@ -31,16 +32,16 @@ void vecc_main();
 
 // VECC private function declarations
 
-void print_v4f32(v4f32 x);
-void print_v8f32(v8f32 x);
-void print_v4i32(v4i32 x);
-void print_v8i32(v8i32 x);
-void println_v4f32(v4f32 x);
-void println_v8f32(v8f32 x);
-void println_v4i32(v4i32 x);
-void println_v8i32(v8i32 x);
-f32 reduce_sum_v4f32(v4f32 x);
-f32 reduce_sum_v8f32(v8f32 x);
+static void print_v4f32(v4f32 x);
+static void print_v8f32(v8f32 x);
+static void print_v4i32(v4i32 x);
+static void print_v8i32(v8i32 x);
+static void println_v4f32(v4f32 x);
+static void println_v8f32(v8f32 x);
+static void println_v4i32(v4i32 x);
+static void println_v8i32(v8i32 x);
+static f32 reduce_sum_v4f32(v4f32 x);
+static f32 reduce_sum_v8f32(v8f32 x);
 
 // VECC private global variable declarations
 
@@ -121,43 +122,79 @@ static f32 reduce_sum_v8f32(v8f32 x) {
 	return reduce_sum_v4f32(_mm_add_ps(_mm256_castps256_ps128(x), _mm256_extractf128_ps(x, 1)));
 }
 
-void vecc_main() {
-	v8f32 sum_lanes = _mm256_setzero_ps();
+v8f32 ispc_test() {
+	v8f32 a = _mm256_setzero_ps();
 	{ // range i
 		i64 i = 0;
-		i64 vecc_i_end = 16 - 7;
+		i64 vecc_i_end = 4096 - 7;
 		v8i32 vecc_mask = _mm256_set1_epi32(0xffffffff);
-		for (;i < vecc_i_end && !_mm256_testz_si256(vecc_mask, vecc_mask); i += 8) {
+		for (;i < vecc_i_end; i += 8) {
 			__m256i vecc_i = _mm256_add_epi32(
 				_mm256_set1_epi32(i),
 				_mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0));
-			{
-				printf("%lli\n", i);
-			};
+			a = _mm256_blendv_ps(a, _mm256_add_ps(a, _mm256_set1_ps(0.1)), _mm256_castsi256_ps(vecc_mask));
 			v8i32 vecc_cond2 = _mm256_and_si256(vecc_mask, _mm256_cmpeq_epi32(_mm256_and_si256(vecc_i, _mm256_set1_epi32(1)), _mm256_setzero_si256()));
 			{ // if
 				v8i32 vecc_savemask3 = vecc_mask;
 				vecc_mask = _mm256_and_si256(vecc_mask, vecc_cond2);
-				sum_lanes = _mm256_blendv_ps(sum_lanes, _mm256_add_ps(sum_lanes, _mm256_set1_ps(0.1)), _mm256_castsi256_ps(vecc_mask));
+				a = _mm256_blendv_ps(a, _mm256_add_ps(a, _mm256_set1_ps(1.0)), _mm256_castsi256_ps(vecc_mask));
 				v8i32 vecc_cond3 = _mm256_and_si256(vecc_mask, _mm256_cmpeq_epi32(_mm256_and_si256(vecc_i, _mm256_set1_epi32(2)), _mm256_setzero_si256()));
 				{ // if
-					v8i32 vecc_savemask4 = vecc_savemask3;
+					v8i32 vecc_savemask4 = vecc_mask;
 					vecc_mask = _mm256_and_si256(vecc_mask, vecc_cond3);
-					sum_lanes = _mm256_blendv_ps(sum_lanes, _mm256_add_ps(sum_lanes, _mm256_set1_ps(1.0)), _mm256_castsi256_ps(vecc_mask));
-					vecc_savemask3 = vecc_savemask4;
+					a = _mm256_blendv_ps(a, _mm256_add_ps(a, _mm256_set1_ps(10.0)), _mm256_castsi256_ps(vecc_mask));
+					v8i32 vecc_cond4 = _mm256_and_si256(vecc_mask, _mm256_cmpeq_epi32(_mm256_and_si256(vecc_i, _mm256_set1_epi32(3)), _mm256_setzero_si256()));
+					{ // if
+						v8i32 vecc_savemask5 = vecc_mask;
+						vecc_mask = _mm256_and_si256(vecc_mask, vecc_cond4);
+						a = _mm256_blendv_ps(a, _mm256_add_ps(a, _mm256_set1_ps(100.0)), _mm256_castsi256_ps(vecc_mask));
+						vecc_mask = vecc_savemask5;
+					};
+					vecc_mask = vecc_savemask4;
 				};
-				vecc_mask = vecc_savemask3;
-			}
-			{ // else
-				v8i32 vecc_savemask3 = vecc_mask;
-				vecc_mask = _mm256_and_si256(vecc_mask, _mm256_xor_si256(vecc_cond2, _mm256_set1_epi32(0xffffffff)));
-				sum_lanes = _mm256_blendv_ps(sum_lanes, _mm256_sub_ps(sum_lanes, _mm256_set1_ps(0.1)), _mm256_castsi256_ps(vecc_mask));
 				vecc_mask = vecc_savemask3;
 			};
 		}
 	};
-	println_v8f32(sum_lanes);
-	printf("reduce sum: %f\n", reduce_sum_v8f32(sum_lanes));
+	return a;
+}
+
+void vecc_main() {
+	v8f32 a = _mm256_setzero_ps();
+	{ // range i
+		i64 i = 0;
+		i64 vecc_i_end = 16 - 7;
+		v8i32 vecc_mask = _mm256_set1_epi32(0xffffffff);
+		for (;i < vecc_i_end; i += 8) {
+			__m256i vecc_i = _mm256_add_epi32(
+				_mm256_set1_epi32(i),
+				_mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0));
+			a = _mm256_blendv_ps(a, _mm256_add_ps(a, _mm256_set1_ps(0.1)), _mm256_castsi256_ps(vecc_mask));
+			v8i32 vecc_cond2 = _mm256_and_si256(vecc_mask, _mm256_cmpeq_epi32(_mm256_and_si256(vecc_i, _mm256_set1_epi32(1)), _mm256_setzero_si256()));
+			{ // if
+				v8i32 vecc_savemask3 = vecc_mask;
+				vecc_mask = _mm256_and_si256(vecc_mask, vecc_cond2);
+				a = _mm256_blendv_ps(a, _mm256_add_ps(a, _mm256_set1_ps(1.0)), _mm256_castsi256_ps(vecc_mask));
+				v8i32 vecc_cond3 = _mm256_and_si256(vecc_mask, _mm256_cmpeq_epi32(_mm256_and_si256(vecc_i, _mm256_set1_epi32(2)), _mm256_setzero_si256()));
+				{ // if
+					v8i32 vecc_savemask4 = vecc_mask;
+					vecc_mask = _mm256_and_si256(vecc_mask, vecc_cond3);
+					a = _mm256_blendv_ps(a, _mm256_add_ps(a, _mm256_set1_ps(10.0)), _mm256_castsi256_ps(vecc_mask));
+					v8i32 vecc_cond4 = _mm256_and_si256(vecc_mask, _mm256_cmpeq_epi32(_mm256_and_si256(vecc_i, _mm256_set1_epi32(3)), _mm256_setzero_si256()));
+					{ // if
+						v8i32 vecc_savemask5 = vecc_mask;
+						vecc_mask = _mm256_and_si256(vecc_mask, vecc_cond4);
+						a = _mm256_blendv_ps(a, _mm256_add_ps(a, _mm256_set1_ps(100.0)), _mm256_castsi256_ps(vecc_mask));
+						vecc_mask = vecc_savemask5;
+					};
+					vecc_mask = vecc_savemask4;
+				};
+				vecc_mask = vecc_savemask3;
+			};
+		}
+	};
+	println_v8f32(a);
+	printf("vector sum: %f\n", reduce_sum_v8f32(a));
 }
 
 #endif // VECC_IMPL
