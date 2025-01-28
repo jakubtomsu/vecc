@@ -17,27 +17,29 @@ Token :: struct {
 Token_Kind :: enum u8 {
     Invalid = 0,
     EOF,
-    
+
     Ident,
     Builtin,
-    
+
     Integer,
     Float,
     String,
     Char,
-    
+    True,
+    False,
+
     Period,
     Comma,
     Semicolon,
     Colon,
-    
+
     Open_Paren,
     Close_Paren,
     Open_Brace,
     Close_Brace,
     Open_Bracket,
     Close_Bracket,
-    
+
     If,
     Else,
     For,
@@ -68,7 +70,7 @@ Token_Kind :: enum u8 {
     Mul,
     Div,
     Mod,
-    
+
     Bit_And,
     Bit_Or,
     Bit_Xor,
@@ -87,7 +89,7 @@ Token_Kind :: enum u8 {
     Assign_Bit_Xor,
     Assign_Bit_Shift_Left,
     Assign_Bit_Shift_Right,
-    
+
     Range_Excl,
     Range_Incl,
 }
@@ -163,21 +165,21 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
             break loop
         }
     }
-    
+
     result.pos = t.pos
     result.kind = .Invalid
-    
+
     curr_rune := t.curr_rune
     next_rune(t)
-    
+
     block: switch curr_rune {
     case utf8.RUNE_ERROR:
         err = .Illegal_Character
-        
+
     case utf8.RUNE_EOF, '\x00':
         result.kind = .EOF
         err = .EOF
-        
+
     case '\n':
         // If this is reached, treat a newline as if it is a semicolon
         t.insert_semicolon = false
@@ -187,7 +189,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         t.curr_line_offset = t.offset
         t.pos.column = 1
         return
-        
+
     case 'A'..='Z', 'a'..='z', '_':
         result.kind = .Ident
         for t.offset < len(t.data) {
@@ -199,6 +201,8 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
             break
         }
         switch string(t.data[result.offset:t.offset]) {
+        case "true": result.kind = .True
+        case "false": result.kind = .False
         case "if":  result.kind = .If
         case "else":  result.kind = .Else
         case "for": result.kind = .For
@@ -216,7 +220,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         case "private": result.kind = .Private
         case "export": result.kind = .Export
         }
-        
+
     case '@':
         result.kind = .Builtin
         // for t.offset < len(t.data) {
@@ -227,7 +231,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         //     }
         //     break
         // }
-        
+
     case '0'..='9':
         result.kind = .Integer
         if curr_rune == '0' && (t.curr_rune == 'x') {
@@ -258,7 +262,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
             }
             break
         }
-        
+
     case '"':
         result.kind = .String
         for t.offset < len(t.data) {
@@ -268,7 +272,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
                 break
             }
         }
-    
+
     case '\'':
         result.kind = .Char
         num := 0
@@ -308,14 +312,14 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
             next_rune(t)
             result.kind = .Assign_Sub
         }
-        
+
     case '*':
         result.kind = .Mul
         if t.curr_rune == '=' {
             next_rune(t)
             result.kind = .Assign_Mul
         }
-        
+
     case '%':
         result.kind = .Mod
         if t.curr_rune == '=' {
@@ -329,24 +333,24 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
             next_rune(t)
             result.kind = .Assign_Bit_And
         }
-        
+
     case '|':
         result.kind = .Bit_Or
         if t.curr_rune == '=' {
             next_rune(t)
             result.kind = .Assign_Bit_Or
         }
-        
+
     case '^':
         result.kind = .Bit_Xor
         if t.curr_rune == '=' {
             next_rune(t)
             result.kind = .Assign_Bit_Xor
         }
-        
+
     case '~':
         result.kind = .Bit_Not
-        
+
     case '.':
         result.kind = .Period
         if t.curr_rune == '.' {
@@ -371,7 +375,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
     case ')': result.kind = .Close_Paren
     case '[': result.kind = .Open_Bracket
     case ']': result.kind = .Close_Bracket
-    
+
     case '<':
         result.kind = .Less_Than
         switch t.curr_rune {
@@ -385,7 +389,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
                 result.kind = .Assign_Bit_Shift_Left
             }
         }
-        
+
     case '>':
         result.kind = .Greater_Than
         switch t.curr_rune {
@@ -420,11 +424,11 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
             }
             return get_token(t)
         }
-        
+
     case:
         err = .Illegal_Character
     }
-    
+
     #partial switch result.kind {
     case .Invalid:
         // preserve
