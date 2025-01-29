@@ -112,10 +112,11 @@ Ast_If_Stmt :: struct {
 }
 
 Ast_For_Stmt :: struct {
-    init: ^Ast,
-    cond: ^Ast,
-    post: ^Ast,
-    body: ^Ast,
+    scope:  ^Scope, // Scope of the persistent values, not the body
+    init:   ^Ast,
+    cond:   ^Ast,
+    post:   ^Ast,
+    body:   ^Ast,
 }
 
 Ast_For_Range_Stmt :: struct {
@@ -559,6 +560,7 @@ parse_stmt :: proc(p: ^Parser) -> ^Ast {
         for_stmt: Ast_For_Stmt
 
         parse_begin_scope(p)
+        for_stmt.scope = p.curr_scope
 
         for_stmt.init = parse_value_decl(p, expect(p, .Ident))
 
@@ -566,7 +568,7 @@ parse_stmt :: proc(p: ^Parser) -> ^Ast {
         for_stmt.cond = parse_expr(p)
         expect(p, .Semicolon)
         for_stmt.post = parse_stmt(p)
-        for_stmt.body = parse_block(p, ignore_scope = true)
+        for_stmt.body = parse_block(p)
 
         parse_end_curr_scope(p)
 
@@ -706,9 +708,25 @@ register_value_entity :: proc(p: ^Parser, ident_tok: Token, name: ^Ast, type: ^A
     entity.variant = Entity_Variable{}
     p.curr_scope.entities[name] = entity
 
-
     result.variant = value_decl
     return result
+}
+
+register_entity :: proc(p: ^Parser, ast: ^Ast, variant: Entity_Variant, name: string) {
+    if strings.has_prefix(name, "vecc_") {
+        parser_error(p, p.curr_token, "'vecc_' prefix is reserved for the compiler.")
+    }
+
+    if _, ok := find_entity(p.curr_scope, name).?; ok {
+        parser_error(p, p.curr_token, "Duplicate entity name: {}", name)
+    }
+
+    entity := new(Entity)
+    entity.ast = ast
+    entity.order_index = g_entity_order_counter
+    g_entity_order_counter += 1
+    entity.variant = Entity_Variable{}
+    p.curr_scope.entities[name] = entity
 }
 
 parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
@@ -793,7 +811,8 @@ parse_value_decl :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
 
 parse_field :: proc(p: ^Parser) -> ^Ast {
     ast := new(Ast)
-    name := parse_ident(p, expect(p, .Ident))
+    ident_tok := expect(p, .Ident)
+    name := parse_ident(p, ident_tok)
     type := parse_type(p)
     value: ^Ast
     if allow(p, .Assign) {
@@ -805,6 +824,9 @@ parse_field :: proc(p: ^Parser) -> ^Ast {
         type = type,
         value = value,
     }
+
+    register_entity(p, ast, Entity_Variable{}, ident_tok.text)
+
     return ast
 }
 
@@ -859,12 +881,16 @@ parse_proc_decl :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
     entity.variant = Entity_Proc{}
 
     p.curr_scope.entities[name] = entity
+
+    parse_begin_scope(p)
+
     proc_decl.entity = entity
     proc_decl.scope = p.curr_scope
-
     proc_decl.type = parse_proc_type(p)
+    proc_decl.body = parse_block(p, ignore_scope = true)
 
-    proc_decl.body = parse_block(p)
+    parse_end_curr_scope(p)
+
     allow(p, .Semicolon)
 
     result.variant = proc_decl

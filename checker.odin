@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:strings"
 import "core:strconv"
 import "core:slice"
+import "core:os"
 
 Checker :: struct {
     filename:           string,
@@ -45,11 +46,11 @@ Entity_Alias :: struct {
 }
 
 Scope :: struct {
-    ast:        ^Ast,
-    parent:     ^Scope,
-    children:   [dynamic]^Scope,
-    depth:      int,
-    entities:   map[string]^Entity,
+    ast:            ^Ast,
+    parent:         ^Scope,
+    children:       [dynamic]^Scope,
+    depth:          int,
+    entities:       map[string]^Entity,
 }
 
 Type :: struct {
@@ -115,13 +116,20 @@ Type_Struct_Field :: struct {
     type:   ^Type,
 }
 
+checker_error :: proc(c: ^Checker, format: string, args: ..any) {
+    // fmt.eprintf("[{}] %s(%d:%d) ", loc, p.filename, pos.line, pos.column)
+	fmt.eprintf(format, ..args)
+	fmt.eprintln()
+	os.exit(1)
+}
+
 check_ident :: proc(c: ^Checker, ast: ^Ast) {
     ident := ast.variant.(Ast_Ident)
     name := ident.token.text
     if ent, ok := find_entity(c.curr_scope, name).?; ok {
         ast.type = ent.ast.type
     } else {
-        assert(false, "Ident not found")
+        checker_error(c, "Ident not found: {}", name)
     }
 }
 
@@ -156,7 +164,7 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
             case .False:
                 ast.value = false
             case:
-                assert(false)
+                checker_error(c, "Invalid boolean literal")
             }
 
         case .I8,
@@ -206,7 +214,6 @@ check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
     check_expr(c, expr.value)
 
     ast.type = expr.type.type
-
 }
 
 check_urnary_op :: proc(c: ^Checker, ast: ^Ast, op: Token_Kind) {
@@ -218,7 +225,7 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
     check_expr(c, right)
 
     if left.type != right.type {
-        assert(false)
+        checker_error(c, "Types in binary expression don't match")
     }
 
     return left.type
@@ -300,7 +307,7 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
     if decl.value != nil {
         check_expr(c, decl.value)
         if decl.type.type != decl.value.type {
-            assert(false)
+            checker_error(c, "Initializer value type doesn't match")
         }
     }
     ast.type = decl.type.type
@@ -335,7 +342,7 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         case .Assign:
             check_expr(c, v.right)
             if v.left.type != v.right.type {
-                assert(false)
+                checker_error(c, "Assign statement types don't match")
             }
             return
         case:
@@ -352,10 +359,12 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         check_call_expr(c, ast)
 
     case Ast_For_Stmt:
+        check_begin_scope(c, v.scope)
         check_value_decl(c, v.init)
         check_expr(c, v.cond)
         check_stmt(c, v.post)
         check_block_stmt(c, v.body)
+        check_end_scope(c)
 
     case Ast_For_Range_Stmt:
         iter := v.ident.variant.(Ast_Ident).token.text
@@ -376,21 +385,23 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
     }
 }
 
-check_block_stmt :: proc(c: ^Checker, ast: ^Ast, skip_scope := false) {
+check_block_stmt :: proc(c: ^Checker, ast: ^Ast) {
     block := ast.variant.(Ast_Block_Stmt)
 
-    prev_scope: ^Scope
-    if !skip_scope {
-        prev_scope = check_begin_scope(c, block.scope)
-    }
+    check_begin_scope(c, block.scope)
 
-    for stmt in block.statements {
+    for stmt, i in block.statements {
         check_stmt(c, stmt)
+        #partial switch v in stmt.variant {
+        case Ast_Return_Stmt:
+            if i != len(block.statements) - 1 {
+                assert(false)
+                checker_error(c, "Statements after return statement will never get executed")
+            }
+        }
     }
 
-    if !skip_scope {
-        check_end_scope(c, prev_scope)
-    }
+    check_end_scope(c)
 }
 
 check_return_stmt :: proc(c: ^Checker, ast: ^Ast) {
@@ -399,18 +410,19 @@ check_return_stmt :: proc(c: ^Checker, ast: ^Ast) {
     proc_decl := c.curr_entity.ast.variant.(Ast_Proc_Decl)
     proc_type := proc_decl.type.variant.(Ast_Proc_Type)
     if stmt.value.type != proc_type.result.type {
-        assert(false)
+        checker_error(c, "Invalid return type")
     }
 }
 
-check_begin_scope :: proc(c: ^Checker, scope: ^Scope, name := "") -> ^Scope {
+check_begin_scope :: proc(c: ^Checker, scope: ^Scope) -> ^Scope {
+    assert(scope.parent == c.curr_scope)
     prev_scope := c.curr_scope
     c.curr_scope = scope
     return prev_scope
 }
 
-check_end_scope :: proc(c: ^Checker, prev_scope: ^Scope) {
-    c.curr_scope = prev_scope
+check_end_scope :: proc(c: ^Checker) {
+    c.curr_scope = c.curr_scope.parent
 }
 
 check_proc_type :: proc(c: ^Checker, ast: ^Ast, name: string) {
@@ -524,9 +536,21 @@ create_type_entity :: proc(scope: ^Scope, id: string, type: ^Type, ast: ^Ast) ->
 
 // Check and codegen C
 check_program :: proc(c: ^Checker) {
-    // HACK
+    create_type_entity(c.curr_file_scope, "bool",new_clone(Type{size = 4, variant = Type_Basic{kind = .B8 }}), nil)
+    create_type_entity(c.curr_file_scope, "b8" , new_clone(Type{size = 4, variant = Type_Basic{kind = .B8 }}), nil)
+    create_type_entity(c.curr_file_scope, "b16", new_clone(Type{size = 4, variant = Type_Basic{kind = .B16}}), nil)
+    create_type_entity(c.curr_file_scope, "b32", new_clone(Type{size = 4, variant = Type_Basic{kind = .B32}}), nil)
+    create_type_entity(c.curr_file_scope, "b64", new_clone(Type{size = 4, variant = Type_Basic{kind = .B64}}), nil)
+    create_type_entity(c.curr_file_scope, "i8" , new_clone(Type{size = 4, variant = Type_Basic{kind = .I8 }}), nil)
+    create_type_entity(c.curr_file_scope, "i16", new_clone(Type{size = 4, variant = Type_Basic{kind = .I16}}), nil)
     create_type_entity(c.curr_file_scope, "i32", new_clone(Type{size = 4, variant = Type_Basic{kind = .I32}}), nil)
+    create_type_entity(c.curr_file_scope, "i64", new_clone(Type{size = 4, variant = Type_Basic{kind = .I64}}), nil)
+    create_type_entity(c.curr_file_scope, "u8" , new_clone(Type{size = 4, variant = Type_Basic{kind = .U8 }}), nil)
+    create_type_entity(c.curr_file_scope, "u16", new_clone(Type{size = 4, variant = Type_Basic{kind = .U16}}), nil)
+    create_type_entity(c.curr_file_scope, "u32", new_clone(Type{size = 4, variant = Type_Basic{kind = .U32}}), nil)
+    create_type_entity(c.curr_file_scope, "u64", new_clone(Type{size = 4, variant = Type_Basic{kind = .U64}}), nil)
     create_type_entity(c.curr_file_scope, "f32", new_clone(Type{size = 4, variant = Type_Basic{kind = .F32}}), nil)
+    create_type_entity(c.curr_file_scope, "f64", new_clone(Type{size = 4, variant = Type_Basic{kind = .F64}}), nil)
 
     // 1. check all types
     // 2. check all entity declarations

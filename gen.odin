@@ -4,6 +4,7 @@ package vecc
 import "core:fmt"
 import "core:strings"
 import "core:slice"
+import "core:math"
 
 Gen :: struct {
     source:             strings.Builder,
@@ -11,23 +12,31 @@ Gen :: struct {
     curr_file_scope:    ^Scope,
     curr_entity:        ^Entity,
     depth:              int,
+    indent:             int,
 }
 
 gen_indent :: proc(g: ^Gen) {
     ind := "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t"
-    fmt.sbprint(&g.source, ind[:clamp(g.depth, 0, len(ind) - 1)])
+    fmt.sbprint(&g.source, ind[:clamp(g.indent, 0, len(ind) - 1)])
 }
 
-gen_begin_scope :: proc(g: ^Gen, scope: ^Scope) {
+gen_begin_scope :: proc(g: ^Gen, scope: ^Scope, visible := true) {
     assert(scope.parent == g.curr_scope)
     g.depth += 1
     g.curr_scope = scope
-    gen_print(g, "{\n")
+    if visible {
+        g.indent += 1
+        gen_print(g, "{\n")
+    }
 }
 
-gen_end_scope :: proc(g: ^Gen) {
-    gen_print(g, "}\n")
+gen_end_scope :: proc(g: ^Gen, visible := true) {
     g.depth -= 1
+    if visible {
+        g.indent -= 1
+        gen_indent(g)
+        gen_print(g, "}")
+    }
     g.curr_scope = g.curr_scope.parent
 }
 
@@ -76,7 +85,7 @@ gen_call_expr :: proc(g: ^Gen, ast: ^Ast) {
     gen_print(g, "(")
 
     for arg, i in call_expr.args {
-        gen_expr(g, arg)
+        gen_expr(g, arg, top_level = true)
         if i + 1 < len(call_expr.args) {
             gen_print(g, ", ")
         }
@@ -92,10 +101,13 @@ gen_urnary_expr :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_cast_expr :: proc(g: ^Gen, ast: ^Ast) {
     expr := ast.variant.(Ast_Cast_Expr)
-    unimplemented()
+    gen_print(g, "(")
+    gen_type(g, expr.type.type)
+    gen_print(g, ")")
+    gen_expr(g, expr.value)
 }
 
-gen_expr :: proc(g: ^Gen, ast: ^Ast) {
+gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     #partial switch v in ast.variant {
     case Ast_Basic_Literal:
         gen_basic_literal(g, ast)
@@ -113,16 +125,54 @@ gen_expr :: proc(g: ^Gen, ast: ^Ast) {
         gen_urnary_expr(g, ast)
 
     case Ast_Binary_Expr:
-        gen_binary_expr(g, ast)
+        gen_binary_expr(g, ast, top_level = top_level)
 
     case:
         assert(false)
     }
 }
 
-gen_binary_expr :: proc(g: ^Gen, ast: ^Ast) {
+gen_binary_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     expr := ast.variant.(Ast_Binary_Expr)
-    unimplemented()
+
+    if !top_level {
+        gen_print(g, "(")
+    }
+
+    #partial switch v in ast.type.variant {
+    case Type_Basic:
+        op := ""
+        #partial switch expr.op.kind {
+        case .Equal:                op = "=="
+        case .Less_Than:            op = "<"
+        case .Less_Than_Equal:      op = "<="
+        case .Greater_Than:         op = ">"
+        case .Greater_Than_Equal:   op = ">="
+        case .Not_Equal:            op = "!="
+
+        case .Add: op = "+"
+        case .Sub: op = "-"
+        case .Mul: op = "*"
+        case .Div: op = "/"
+        case .Mod: op = "%"
+
+        case .Bit_And:          op = "&"
+        case .Bit_Or:           op = "|"
+        case .Bit_Xor:          op = "^"
+        case .Bit_Shift_Left:   op = "<<"
+        case .Bit_Shift_Right:  op = ">>"
+        }
+        gen_expr(g, expr.left)
+        gen_printf(g, " {} ", op)
+        gen_expr(g, expr.right)
+
+    case:
+        unimplemented()
+    }
+
+    if !top_level {
+        gen_print(g, ")")
+    }
 }
 
 gen_proc_param_field :: proc(g: ^Gen, ast: ^Ast) {
@@ -165,15 +215,53 @@ gen_type :: proc(g: ^Gen, type: ^Type) {
     }
 }
 
+
 gen_type_decl :: proc(g: ^Gen, type: ^Type) {
     #partial switch v in type.variant {
     case Type_Basic, Type_Pointer:
         // Nothing
 
     case Type_Array:
-        gen_printf(g, "typedef struct {} {{", type.cname)
-        gen_printf(g, "\t{} data[{}],\n", v.type.cname, v.len)
-        gen_printf(g, "}} {};", type.cname)
+        switch v.kind {
+        case .Vector:
+            gen_printf(g, "typedef struct {} {{ ", type.cname)
+            assert(math.is_power_of_two(v.len))
+            basic := v.type.variant.(Type_Basic)
+
+            elem_bytes := 0
+            switch basic.kind {
+            case .B8 : elem_bytes = 1
+            case .B16: elem_bytes = 2
+            case .B32: elem_bytes = 4
+            case .B64: elem_bytes = 8
+
+            case .I8 : elem_bytes = 1
+            case .I16: elem_bytes = 2
+            case .I32: elem_bytes = 4
+            case .I64: elem_bytes = 8
+
+            case .U8 : elem_bytes = 1
+            case .U16: elem_bytes = 2
+            case .U32: elem_bytes = 4
+            case .U64: elem_bytes = 8
+
+            case .F32: elem_bytes = 4
+            case .F64: elem_bytes = 8
+            }
+
+            // simd_len :=
+
+            num_simds := v.len / (128 / 8)
+            if num_simds <= 0 do num_simds = 1
+            simd_type_name := "__m128i"
+            gen_printf(g, "{} data[{}] ", simd_type_name, num_simds)
+            gen_printf(g, "}} {};\n", type.cname)
+
+        case .Fixed_Array:
+            gen_printf(g, "typedef struct {} {{ ", type.cname)
+            gen_printf(g, "{} data[{}] ", v.type.cname, v.len)
+            gen_printf(g, "}} {};", type.cname)
+        }
     }
 }
 
@@ -231,7 +319,7 @@ gen_value_decl :: proc(g: ^Gen, ast: ^Ast) {
     gen_print(g, " ")
     if decl.value != nil {
         gen_print(g, "= ")
-        gen_expr(g, decl.value)
+        gen_expr(g, decl.value, top_level = true)
     } else {
         gen_print(g, "= ")
         #partial switch v in decl.type.type.variant {
@@ -261,7 +349,7 @@ gen_value_decl :: proc(g: ^Gen, ast: ^Ast) {
             }
 
         case:
-            gen_print(g, "= {}")
+            gen_print(g, "{}")
         }
     }
 }
@@ -295,18 +383,38 @@ gen_block_stmt :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_if_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_If_Stmt)
+    gen_print(g, "if (")
+    gen_expr(g, stmt.cond, top_level = true)
+    gen_print(g, ") ")
+    gen_block_stmt(g, stmt.if_body)
+    if stmt.else_body != nil {
+        gen_print(g, " else ")
+        gen_block_stmt(g, stmt.else_body)
+    }
 }
 
 gen_for_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_For_Stmt)
+    gen_begin_scope(g, stmt.scope, visible = false)
+    defer gen_end_scope(g, visible = false)
+    gen_print(g, "for (")
+    gen_value_decl(g, stmt.init)
+    gen_print(g, "; ")
+    gen_expr(g, stmt.cond, top_level = true)
+    gen_print(g, "; ")
+    gen_stmt(g, stmt.post)
+    gen_print(g, ") ")
+    gen_block_stmt(g, stmt.body)
 }
 
 gen_break_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_Break_Stmt)
+    gen_print(g, "break")
 }
 
 gen_continue_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_Continue_Stmt)
+    gen_print(g, "continue")
 }
 
 gen_for_range_stmt :: proc(g: ^Gen, ast: ^Ast) {
@@ -338,7 +446,7 @@ gen_return_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_Return_Stmt)
     gen_print(g, "return")
     gen_print(g, " ")
-    gen_expr(g, stmt.value)
+    gen_expr(g, stmt.value, top_level = true)
 }
 
 

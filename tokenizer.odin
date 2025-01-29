@@ -62,7 +62,6 @@ Token_Kind :: enum u8 {
     Less_Than_Equal,
     Greater_Than,
     Greater_Than_Equal,
-    Not,
     Not_Equal,
 
     Add,
@@ -74,9 +73,11 @@ Token_Kind :: enum u8 {
     Bit_And,
     Bit_Or,
     Bit_Xor,
-    Bit_Not,
     Bit_Shift_Left,
     Bit_Shift_Right,
+
+    Bit_Not,
+    Not,
 
     Assign,
     Assign_Add,

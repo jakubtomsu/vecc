@@ -12,10 +12,9 @@ typedef int8_t bool8_t;
 typedef int16_t bool16_t;
 typedef int32_t bool32_t;
 typedef int64_t bool64_t;
-typedef struct Vec8_float {	float data[8],
-} Vec8_float;
+
 // VECC exported function declarations
-float bar(int32_t a);
+int32_t bar(int32_t a);
 void vecc_main();
 
 // VECC exported global variable declarations
@@ -28,13 +27,20 @@ void vecc_main();
 // VECC private global variable declarations
 
 // VECC function definitions
-float bar(int32_t a) {
+int32_t bar(int32_t a) {
+	for (int64_t i = 0; i < (int64_t)16; i += (int64_t)1) {
+		a += (int32_t)i;
+	};
+	if (a > 100) {
+		a += 2;
+	} else {
+		int32_t b = a / 2;
+		return a + b;
+	};
+	return a;
 }
-
 
 void vecc_main() {
-	Vec8_float foo = = {};
 }
-
 
 #endif // VECC_IMPL
