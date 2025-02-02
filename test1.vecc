@@ -116,6 +116,13 @@ bar export proc(a i32) i32 {
         a += conv(i32, i)
     }
 
+    x bool = false
+    x = !x
+
+    if x {
+        a = -a + 1
+    }
+
     if a > 100 {
         a += 2
     } else {
@@ -125,5 +132,14 @@ bar export proc(a i32) i32 {
     return a
 }
 
+Enemy struct {
+    health  f32
+    ammo    i32
+}
+
 vecc_main export proc() {
+    x i32 = bar(bar(1))
+    c [8]f32
+    d [8]f32
+    e [8]f32 = c + d
 }

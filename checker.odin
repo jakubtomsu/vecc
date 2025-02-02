@@ -6,6 +6,7 @@ import "core:strings"
 import "core:strconv"
 import "core:slice"
 import "core:os"
+import "core:reflect"
 
 Checker :: struct {
     filename:           string,
@@ -51,69 +52,6 @@ Scope :: struct {
     children:       [dynamic]^Scope,
     depth:          int,
     entities:       map[string]^Entity,
-}
-
-Type :: struct {
-    size:       int,
-    variant:    Type_Variant,
-    cname:      string,
-}
-
-Type_Variant :: union {
-    Type_Basic,
-    Type_Array,
-    Type_Pointer,
-}
-
-Type_Basic :: struct {
-    kind:   Type_Basic_Kind,
-}
-
-Type_Basic_Kind :: enum u8 {
-    B8,
-    B16,
-    B32,
-    B64,
-    I8,
-    I16,
-    I32,
-    I64,
-    U8,
-    U16,
-    U32,
-    U64,
-    F32,
-    F64,
-}
-
-Type_Array :: struct {
-    kind:   Type_Array_Kind,
-    len:    int,
-    type:   ^Type,
-}
-
-Type_Array_Kind :: enum u8 {
-    Fixed_Array = 0,
-    Vector,
-}
-
-Type_Pointer :: struct {
-    kind:   Type_Pointer_Kind,
-    type:   ^Type,
-}
-
-Type_Pointer_Kind :: enum u8 {
-    Single = 0,
-    Multi,
-}
-
-Type_Struct :: struct {
-    fields: [dynamic]Type_Struct_Field,
-}
-
-Type_Struct_Field :: struct {
-    name:   string,
-    type:   ^Type,
 }
 
 checker_error :: proc(c: ^Checker, format: string, args: ..any) {
@@ -200,11 +138,19 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
 
     check_ident(c, call_expr.procedure)
 
+    // HACK
+    procedure := find_entity(c.curr_scope, call_expr.procedure.variant.(Ast_Ident).token.text).?
+    proc_decl := procedure.ast.variant.(Ast_Proc_Decl)
+    proc_type := proc_decl.type.variant.(Ast_Proc_Type)
+
     for arg, i in call_expr.args {
         check_expr(c, arg)
+        if arg.type != proc_type.params[i].type {
+            checker_error(c, "Invalid argument type")
+        }
     }
 
-    // ast.type = call_expr.procedure.type
+    ast.type = proc_type.result.type
 }
 
 check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
@@ -216,8 +162,28 @@ check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
     ast.type = expr.type.type
 }
 
-check_urnary_op :: proc(c: ^Checker, ast: ^Ast, op: Token_Kind) {
+check_urnary_expr :: proc(c: ^Checker, ast: ^Ast) {
+    expr := ast.variant.(Ast_Unary_Expr)
+    #partial switch expr.op.kind {
+    case .Sub:
+        check_expr(c, expr.expr)
+        ast.type = expr.expr.type
 
+        if !type_is_numeric(expr.expr.type) {
+            checker_error(c, "Unary 'Not' operator can be only applied to numeric values")
+        }
+
+    case .Not:
+        check_expr(c, expr.expr)
+        ast.type = expr.expr.type
+
+        if !type_is_boolean(expr.expr.type) {
+            checker_error(c, "Unary 'Not' operator can be only applied to boolean values")
+        }
+
+    case:
+        checker_error(c, "Invalid unary operator: ", expr.op)
+    }
 }
 
 check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) -> ^Type {
@@ -225,10 +191,46 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
     check_expr(c, right)
 
     if left.type != right.type {
-        checker_error(c, "Types in binary expression don't match")
+        fmt.printfln("%p", left.type)
+        fmt.printfln("%p", right.type)
+        checker_error(c, "Types in binary expression don't match: {} vs {}",
+            type_to_string(left.type), type_to_string(right.type))
     }
 
-    return left.type
+    type := left.type
+
+    #partial switch op {
+    case .Equal,
+         .Less_Than,
+         .Less_Than_Equal,
+         .Greater_Than,
+         .Greater_Than_Equal,
+         .Not_Equal:
+        // HACK
+        type = find_entity(c.curr_file_scope, "bool").?.variant.(Entity_Type).type
+
+        if !type_is_numeric(left.type) {
+            checker_error(c, "{} operator can be only applied to numeric values", op)
+        }
+
+    case .Add,
+         .Sub,
+         .Mul,
+         .Div:
+
+        if !type_is_numeric(left.type) {
+            checker_error(c, "{} operator can be only applied to numeric values", op)
+        }
+
+    case .Bit_And,
+         .Bit_Or,
+         .Bit_Xor,
+         .Bit_Shift_Left,
+         .Bit_Shift_Right,
+         .Mod:
+    }
+
+    return type
 }
 
 // check_type_internal, check_type, add_type_info_internal, check_ident
@@ -248,7 +250,7 @@ check_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
         check_call_expr(c, ast)
 
     case Ast_Unary_Expr:
-        check_urnary_op(c, v.expr, v.op.kind)
+        check_urnary_expr(c, ast)
 
     case Ast_Cast_Expr:
         check_cast_expr(c, ast)
@@ -370,11 +372,7 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         iter := v.ident.variant.(Ast_Ident).token.text
 
     case Ast_If_Stmt:
-        check_expr(c, v.cond)
-        check_block_stmt(c, v.if_body)
-        if v.else_body != nil {
-            check_stmt(c, v.else_body)
-        }
+        check_if_stmt(c, ast)
 
     case Ast_Break_Stmt:
 
@@ -402,6 +400,20 @@ check_block_stmt :: proc(c: ^Checker, ast: ^Ast) {
     }
 
     check_end_scope(c)
+}
+
+check_if_stmt :: proc(c: ^Checker, ast: ^Ast) {
+    stmt := ast.variant.(Ast_If_Stmt)
+    check_expr(c, stmt.cond)
+
+    if !type_is_boolean(stmt.cond.type) {
+        checker_error(c, "Condition in an if statement must have boolean type")
+    }
+
+    check_block_stmt(c, stmt.if_body)
+    if stmt.else_body != nil {
+        check_stmt(c, stmt.else_body)
+    }
 }
 
 check_return_stmt :: proc(c: ^Checker, ast: ^Ast) {
@@ -439,7 +451,8 @@ check_proc_type :: proc(c: ^Checker, ast: ^Ast, name: string) {
 }
 
 
-// Note: the name is used for comparing if types are the same so it has to be unique
+// Note: the name is used for comparing if types are the same so it has to be unique.
+// There is probably a better way to generate an unique type ID but this is good enough for now.
 ast_type_to_id :: proc(c: ^Checker, ast: ^Ast) -> string {
     #partial switch v in ast.variant {
     case Ast_Ident:
@@ -458,13 +471,26 @@ ast_type_to_id :: proc(c: ^Checker, ast: ^Ast) -> string {
         }
 
     case Ast_Array_Type:
-        return fmt.tprintf("{}[{}]{}", v.kind, v.len, ast_type_to_id(c, v.type))
+        return fmt.tprintf("{}[{}]{}", v.kind, v.len.value.(i128), ast_type_to_id(c, v.type))
 
     case Ast_Pointer_Type:
         return fmt.tprintf("^{}", ast_type_to_id(c, v.type))
 
     case Ast_Multi_Pointer_Type:
         return fmt.tprintf("[^]{}", ast_type_to_id(c, v.type))
+
+    case Ast_Struct_Decl:
+        return ast_type_to_id(c, v.type)
+
+    case Ast_Struct_Type:
+        fields := make([]string, len(v.fields))
+        for field, i in v.fields {
+            fields[i] = strings.concatenate({ast_type_to_id(c, field), ";"})
+        }
+        return fmt.tprintf("struct{{{}}}", strings.concatenate(fields))
+
+    case Ast_Field:
+        return fmt.tprintf("{}.{}", ast_type_to_id(c, v.name), ast_type_to_id(c, v.type))
 
     case:
         assert(false, "AST is not a valid type")
@@ -502,6 +528,19 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
             type = find_or_create_type_entity(c, v.type),
         }
 
+    case Ast_Struct_Type:
+        result = new(Type)
+        str: Type_Struct
+        str.fields = make([]Type_Struct_Field, len(v.fields))
+        for field, i in v.fields {
+            f := field.variant.(Ast_Field)
+            str.fields[i] = {
+                name = f.name.variant.(Ast_Ident).token.text,
+                type = find_or_create_type_entity(c, f.type),
+            }
+        }
+        result.variant = str
+
     case:
         assert(false, "AST is not a valid type")
     }
@@ -511,6 +550,8 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
 
 find_or_create_type_entity :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) -> ^Type {
     id := ast_type_to_id(c, ast)
+
+    fmt.println("find or create type:", id)
 
     if ent, ok := find_entity(c.curr_scope, id).?; ok {
         return ent.variant.(Entity_Type).type
@@ -534,10 +575,14 @@ create_type_entity :: proc(scope: ^Scope, id: string, type: ^Type, ast: ^Ast) ->
     return ent
 }
 
+check_type_decl :: proc(c: ^Checker, ast: ^Ast, name: string) {
+
+}
+
 // Check and codegen C
 check_program :: proc(c: ^Checker) {
-    create_type_entity(c.curr_file_scope, "bool",new_clone(Type{size = 4, variant = Type_Basic{kind = .B8 }}), nil)
-    create_type_entity(c.curr_file_scope, "b8" , new_clone(Type{size = 4, variant = Type_Basic{kind = .B8 }}), nil)
+    create_type_entity(c.curr_file_scope, "bool",new_clone(Type{size = 1, variant = Type_Basic{kind = .B8 }}), nil)
+    create_type_entity(c.curr_file_scope, "b8" , new_clone(Type{size = 1, variant = Type_Basic{kind = .B8 }}), nil)
     create_type_entity(c.curr_file_scope, "b16", new_clone(Type{size = 4, variant = Type_Basic{kind = .B16}}), nil)
     create_type_entity(c.curr_file_scope, "b32", new_clone(Type{size = 4, variant = Type_Basic{kind = .B32}}), nil)
     create_type_entity(c.curr_file_scope, "b64", new_clone(Type{size = 4, variant = Type_Basic{kind = .B64}}), nil)
@@ -555,6 +600,20 @@ check_program :: proc(c: ^Checker) {
     // 1. check all types
     // 2. check all entity declarations
     // 3. check procedure bodies - needs proc declarations for checking
+
+    for name, ent in c.curr_scope.entities {
+        ast_print(ent.ast, name, 0)
+        c.curr_entity = ent
+
+        #partial switch &v in ent.variant {
+        case Entity_Type:
+            if ent.ast == nil do break
+            decl := ent.ast.variant.(Ast_Struct_Decl) or_break
+            check_type(c, decl.type)
+            ent.ast.type = decl.type.type
+            v.type = decl.type.type
+        }
+    }
 
     for name, ent in c.curr_scope.entities {
         ast_print(ent.ast, name, 0)

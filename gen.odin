@@ -82,6 +82,7 @@ gen_ident :: proc(g: ^Gen, ast: ^Ast) {
 gen_call_expr :: proc(g: ^Gen, ast: ^Ast) {
     call_expr := ast.variant.(Ast_Call_Expr)
 
+    gen_print(g, call_expr.procedure.variant.(Ast_Ident).token.text)
     gen_print(g, "(")
 
     for arg, i in call_expr.args {
@@ -96,7 +97,18 @@ gen_call_expr :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_urnary_expr :: proc(g: ^Gen, ast: ^Ast) {
     expr := ast.variant.(Ast_Unary_Expr)
-    unimplemented()
+    #partial switch expr.op.kind {
+    case .Sub:
+        gen_print(g, "-")
+
+    case .Not:
+        gen_print(g, "!")
+
+    case:
+        assert(false)
+    }
+
+    gen_expr(g, expr.expr)
 }
 
 gen_cast_expr :: proc(g: ^Gen, ast: ^Ast) {
@@ -166,6 +178,35 @@ gen_binary_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
         gen_printf(g, " {} ", op)
         gen_expr(g, expr.right)
 
+    case Type_Array:
+        op_name := ""
+        #partial switch expr.op.kind {
+        case .Equal:                op_name = "eq"
+        case .Less_Than:            op_name = "lt"
+        case .Less_Than_Equal:      op_name = "le"
+        case .Greater_Than:         op_name = "gt"
+        case .Greater_Than_Equal:   op_name = "ge"
+        case .Not_Equal:            op_name = "neq"
+
+        case .Add: op_name = "add"
+        case .Sub: op_name = "sub"
+        case .Mul: op_name = "mul"
+        case .Div: op_name = "div"
+        case .Mod: op_name = "mod"
+
+        case .Bit_And:          op_name = "and"
+        case .Bit_Or:           op_name = "or"
+        case .Bit_Xor:          op_name = "xor"
+        case .Bit_Shift_Left:   op_name = "shl"
+        case .Bit_Shift_Right:  op_name = "shr"
+        }
+        gen_printf(g, "%s_%s", ast.type.cname_lower, op_name)
+        gen_print(g, "(")
+        gen_expr(g, expr.left)
+        gen_print(g, ", ")
+        gen_expr(g, expr.right)
+        gen_print(g, ")")
+
     case:
         unimplemented()
     }
@@ -215,7 +256,6 @@ gen_type :: proc(g: ^Gen, type: ^Type) {
     }
 }
 
-
 gen_type_decl :: proc(g: ^Gen, type: ^Type) {
     #partial switch v in type.variant {
     case Type_Basic, Type_Pointer:
@@ -254,18 +294,104 @@ gen_type_decl :: proc(g: ^Gen, type: ^Type) {
             num_simds := v.len / (128 / 8)
             if num_simds <= 0 do num_simds = 1
             simd_type_name := "__m128i"
-            gen_printf(g, "{} data[{}] ", simd_type_name, num_simds)
+            gen_printf(g, "{} data[{}]; ", simd_type_name, num_simds)
             gen_printf(g, "}} {};\n", type.cname)
 
         case .Fixed_Array:
             gen_printf(g, "typedef struct {} {{ ", type.cname)
-            gen_printf(g, "{} data[{}] ", v.type.cname, v.len)
-            gen_printf(g, "}} {};", type.cname)
+            gen_printf(g, "{} data[{}]; ", v.type.cname, v.len)
+            gen_printf(g, "}} {};\n", type.cname)
+        }
+
+    case Type_Struct:
+        gen_printf(g, "typedef struct {} {{\n", type.cname)
+        for field in v.fields {
+            gen_printf(g, "\t{} {};\n", field.type.cname, field.name)
+        }
+        gen_printf(g, "}} {};\n", type.cname)
+    }
+}
+
+_Gen_Named_Op_Proc :: struct {
+    name:       string,
+    op:         string,
+    boolean:    bool, // HACK
+    integer:    bool, // HACK
+}
+
+@(rodata)
+_gen_named_binary_ops := #partial[Token_Kind]_Gen_Named_Op_Proc{
+    .Equal              = {name = "eq" , op = "==", boolean = true},
+    .Less_Than          = {name = "lt" , op = "<",  boolean = true},
+    .Less_Than_Equal    = {name = "le" , op = "<=", boolean = true},
+    .Greater_Than       = {name = "gt" , op = ">",  boolean = true},
+    .Greater_Than_Equal = {name = "ge" , op = ">=", boolean = true},
+    .Not_Equal          = {name = "neq", op = "!=", boolean = true},
+    .Add                = {name = "add", op = "+"},
+    .Sub                = {name = "sub", op = "-"},
+    .Mul                = {name = "mul", op = "*"},
+    .Div                = {name = "div", op = "/"},
+    .Mod                = {name = "mod", op = "%",  integer = true},
+    .Bit_And            = {name = "and", op = "&",  integer = true},
+    .Bit_Or             = {name = "or" , op = "|",  integer = true},
+    .Bit_Xor            = {name = "xor", op = "^",  integer = true},
+    .Bit_Shift_Left     = {name = "shl", op = "<<", integer = true},
+    .Bit_Shift_Right    = {name = "shr", op = ">>", integer = true},
+}
+
+@(rodata)
+_gen_named_unary_ops := #partial[Token_Kind]_Gen_Named_Op_Proc{
+    .Not = {name = "not", op = "!", boolean = true},
+    .Sub = {name = "neg", op = "-"},
+}
+
+gen_type_procs_decls :: proc(g: ^Gen, type: ^Type) {
+    #partial switch v in type.variant {
+    case Type_Array:
+        for op in _gen_named_binary_ops {
+            if op.name == "" do continue
+            if type_is_boolean(v.type) != op.boolean do continue
+            if type_is_integer(v.type) != op.integer do continue
+            gen_printf(g, "static {0} {1}_{2}({0} a, {0} b);\n", type.cname, type.cname_lower, op.name)
+        }
+        for op in _gen_named_unary_ops {
+            if op.name == "" do continue
+            if type_is_boolean(v.type) != op.boolean do continue
+            if type_is_integer(v.type) != op.integer do continue
+            gen_printf(g, "static {0} {1}_{2}({0} a);\n", type.cname, type.cname_lower, op.name)
         }
     }
 }
 
-gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
+gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
+    #partial switch v in type.variant {
+    case Type_Array:
+        for op in _gen_named_binary_ops {
+            if op.name == "" do continue
+            if type_is_boolean(v.type) != op.boolean do continue
+            if type_is_integer(v.type) != op.integer do continue
+            gen_printf(g, "static {0} {1}_{2}({0} a, {0} b) {{\n", type.cname, type.cname_lower, op.name)
+            gen_printf(g, "\t{0} result;\n", type.cname)
+            for i in 0..<v.len {
+                gen_printf(g, "\tresult.data[{0}] = a.data[{0}] {1} b.data[{0}];\n", i, op.op)
+            }
+            gen_printf(g, "\treturn result;\n")
+            gen_printf(g, "}}\n")
+        }
+        for op in _gen_named_unary_ops {
+            if op.name == "" do continue
+            if type_is_boolean(v.type) != op.boolean do continue
+            if type_is_integer(v.type) != op.integer do continue
+            gen_printf(g, "static {0} {1}_{2}({0} a) {{\n", type.cname, type.cname_lower, op.name)
+            for i in 0..<v.len {
+                gen_printf(g, "\ta.data[{0}] = {1}a.data[{0}];\n", i, op.op)
+            }
+            gen_printf(g, "}}\n")
+        }
+    }
+}
+
+gen_type_generate_cname :: proc(g: ^Gen, type: ^Type, ent_name := "") -> string {
     #partial switch v in type.variant {
     case Type_Basic:
         switch v.kind {
@@ -303,6 +429,9 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
         case .Multi:
             return fmt.tprintf("{}[]", name)
         }
+
+    case Type_Struct:
+        return ent_name // HACK
     }
     assert(false)
     return ""
@@ -349,7 +478,7 @@ gen_value_decl :: proc(g: ^Gen, ast: ^Ast) {
             }
 
         case:
-            gen_print(g, "{}")
+            gen_print(g, "{0}")
         }
     }
 }
@@ -365,6 +494,7 @@ gen_stmt :: proc(g: ^Gen, ast: ^Ast) {
     case Ast_Assign_Stmt:       gen_assign_stmt(g, ast)
     case Ast_Return_Stmt:       gen_return_stmt(g, ast)
     case Ast_Value_Decl:        gen_value_decl(g, ast)
+    case Ast_Call_Expr:         gen_call_expr(g, ast)
     }
 }
 
@@ -439,7 +569,7 @@ gen_assign_stmt :: proc(g: ^Gen, ast: ^Ast) {
     case .Assign:
         gen_print(g, " = ")
     }
-    gen_expr(g, stmt.right)
+    gen_expr(g, stmt.right, top_level = true)
 }
 
 gen_return_stmt :: proc(g: ^Gen, ast: ^Ast) {
@@ -485,8 +615,14 @@ gen_program :: proc(g: ^Gen) {
         return a.order_index < b.order_index,
     })
 
-    fmt.println(sorted_entities)
 
+    for e in sorted_entities do fmt.println(e)
+
+    gen_print(g, "#ifdef __cplusplus\n")
+    gen_print(g, "#else // __cplusplus\n")
+    gen_print(g, "#define false 0\n")
+    gen_print(g, "#define true 1\n")
+    gen_print(g, "#endif // __cplusplus\n")
 
     gen_print(g, "\n// VECC type definitions\n")
 
@@ -498,7 +634,8 @@ gen_program :: proc(g: ^Gen) {
     for name, ent in g.curr_file_scope.entities {
         #partial switch v in ent.variant {
         case Entity_Type:
-            v.type.cname = gen_type_generate_cname(g, v.type)
+            v.type.cname = gen_type_generate_cname(g, v.type, name)
+            v.type.cname_lower = strings.to_lower(v.type.cname)
         }
     }
 
@@ -506,6 +643,7 @@ gen_program :: proc(g: ^Gen) {
         #partial switch v in sorted.entity.variant {
         case Entity_Type:
             gen_type_decl(g, v.type)
+            gen_type_procs_decls(g, v.type)
         }
     }
 
@@ -537,6 +675,13 @@ gen_program :: proc(g: ^Gen) {
     gen_print(g, "\n#ifdef VECC_IMPL")
 
     gen_print(g, "\n// VECC private function declarations\n")
+
+    for sorted in sorted_entities {
+        #partial switch v in sorted.entity.variant {
+        case Entity_Type:
+            gen_type_procs_defs(g, v.type)
+        }
+    }
 
     for sorted in sorted_entities {
         #partial switch v in sorted.entity.variant {
