@@ -18,15 +18,10 @@ typedef int16_t bool16_t;
 typedef int32_t bool32_t;
 typedef int64_t bool64_t;
 typedef struct Aos2_float { float data[2]; } Aos2_float;
-static Aos2_float aos2_float_add(Aos2_float a, Aos2_float b);
-static Aos2_float aos2_float_sub(Aos2_float a, Aos2_float b);
-static Aos2_float aos2_float_mul(Aos2_float a, Aos2_float b);
-static Aos2_float aos2_float_div(Aos2_float a, Aos2_float b);
-static Aos2_float aos2_float_neg(Aos2_float a);
 typedef struct Enemy {
+	Aos2_float pos;
 	float health;
 	int32_t ammo;
-	Aos2_float foo;
 } Enemy;
 
 // VECC exported function declarations
@@ -36,35 +31,8 @@ void main_vecc();
 
 #ifdef VECC_IMPL
 // VECC private function declarations
-static Aos2_float aos2_float_add(Aos2_float a, Aos2_float b) {
-	Aos2_float result;
-	result.data[0] = a.data[0] + b.data[0];
-	result.data[1] = a.data[1] + b.data[1];
-	return result;
-}
-static Aos2_float aos2_float_sub(Aos2_float a, Aos2_float b) {
-	Aos2_float result;
-	result.data[0] = a.data[0] - b.data[0];
-	result.data[1] = a.data[1] - b.data[1];
-	return result;
-}
-static Aos2_float aos2_float_mul(Aos2_float a, Aos2_float b) {
-	Aos2_float result;
-	result.data[0] = a.data[0] * b.data[0];
-	result.data[1] = a.data[1] * b.data[1];
-	return result;
-}
-static Aos2_float aos2_float_div(Aos2_float a, Aos2_float b) {
-	Aos2_float result;
-	result.data[0] = a.data[0] / b.data[0];
-	result.data[1] = a.data[1] / b.data[1];
-	return result;
-}
-static Aos2_float aos2_float_neg(Aos2_float a) {
-	a.data[0] = -a.data[0];
-	a.data[1] = -a.data[1];
-}
 static int32_t bar(int32_t a);
+static void deal_damage(Enemy* enemy, float damage);
 
 // VECC global variable declarations
 
@@ -87,11 +55,16 @@ static int32_t bar(int32_t a) {
 	return a;
 }
 
+static void deal_damage(Enemy* enemy, float damage) {
+	enemy->health -= damage;
+}
+
 void main_vecc() {
 	Enemy enemy = {0};
 	enemy.health = 2.0f;
-	enemy.foo[0] = 123.0f;
-	enemy.foo[1] = 66.0f;
+	enemy.pos[0] = 123.0f;
+	enemy.pos[1] = 1.0f;
+	deal_damage(&enemy, 2.0f);
 }
 
 #endif // VECC_IMPL

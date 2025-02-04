@@ -145,6 +145,16 @@ gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     case Ast_Index_Expr:
         gen_index_expr(g, ast)
 
+    case Ast_Address_Expr:
+        expr := ast.variant.(Ast_Address_Expr)
+        gen_print(g, "&")
+        gen_expr(g, expr.expr)
+
+    case Ast_Deref_Expr:
+        expr := ast.variant.(Ast_Deref_Expr)
+        gen_print(g, "*")
+        gen_expr(g, expr.expr)
+
     case:
         assert(false)
     }
@@ -243,6 +253,11 @@ gen_selector_expr :: proc(g: ^Gen, ast: ^Ast) {
         gen_print(g, "[")
         gen_print(g, index)
         gen_print(g, "]")
+
+    case Type_Pointer:
+        // TODO: pointers to pointers etc
+        gen_print(g, "->")
+        gen_expr(g, expr.right)
 
     case:
         gen_print(g, ".")
@@ -434,6 +449,10 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
 }
 
 gen_type_generate_cname :: proc(g: ^Gen, type: ^Type, ent_name := "") -> string {
+    if type.cname != "" {
+        return type.cname
+    }
+
     #partial switch v in type.variant {
     case Type_Basic:
         switch v.kind {
@@ -456,7 +475,7 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type, ent_name := "") -> string 
     case Type_Array:
         name := gen_type_generate_cname(g, v.type)
 
-        #partial switch v.kind {
+        switch v.kind {
         case .Vector:
             return fmt.tprintf("Vec{}_{}", v.len, name)
         case .Fixed_Array:
@@ -465,16 +484,15 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type, ent_name := "") -> string 
 
     case Type_Pointer:
         name := gen_type_generate_cname(g, v.type)
-        #partial switch v.kind {
-        case .Single:
+        switch v.kind {
+        case .Single, .Multi:
             return fmt.tprintf("{}*", name)
-        case .Multi:
-            return fmt.tprintf("{}[]", name)
         }
 
     case Type_Struct:
         return ent_name // HACK
     }
+
     assert(false)
     return ""
 }
@@ -725,7 +743,7 @@ gen_program :: proc(g: ^Gen) {
         #partial switch v in sorted.entity.variant {
         case Entity_Type:
             gen_type_decl(g, v.type)
-            gen_type_procs_decls(g, v.type)
+            // gen_type_procs_decls(g, v.type)
         }
     }
 
@@ -751,7 +769,7 @@ gen_program :: proc(g: ^Gen) {
     for sorted in sorted_entities {
         #partial switch v in sorted.entity.variant {
         case Entity_Type:
-            gen_type_procs_defs(g, v.type)
+            // gen_type_procs_defs(g, v.type)
         }
     }
 

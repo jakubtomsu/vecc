@@ -133,9 +133,16 @@ procedure bar (mut a i32) i32 {
 }
 
 struct Enemy {
+    pos     [2]f32
     health  f32
     ammo    i32
-    foo     [2]f32
+}
+
+procedure deal_damage (
+    immut enemy ^Enemy
+    immut damage f32 = 1.0
+) {
+    enemy.health -= damage
 }
 
 procedure export main_vecc () {
@@ -145,8 +152,12 @@ procedure export main_vecc () {
     // mut [8]f32 c = a + b
     mut enemy Enemy
     enemy.health = 2.0
-    enemy.foo[0] = 123.0
-    enemy.foo.y = 66.0
+    enemy.pos.x = 123.0
+    enemy.pos.y = 1.0
+
+    deal_damage(&enemy, 2.0)
+
+    // enemy.foo.y = 66.0
     // enemy.health = 1.0
     // a[1][2][3] = 123
     // // index:3

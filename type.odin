@@ -101,9 +101,6 @@ type_is_integer :: proc(t: ^Type) -> bool {
             return false
         }
 
-    case Type_Array:
-        return type_is_numeric(v.type)
-
     case:
         return false
     }
@@ -120,9 +117,6 @@ type_is_float :: proc(t: ^Type) -> bool {
         case:
             return false
         }
-
-    case Type_Array:
-        return type_is_numeric(v.type)
 
     case:
         return false
@@ -148,9 +142,6 @@ type_is_numeric :: proc(t: ^Type) -> bool {
         case:
             return false
         }
-
-    case Type_Array:
-        return type_is_numeric(v.type)
 
     case:
         return false

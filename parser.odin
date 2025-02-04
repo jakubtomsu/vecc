@@ -499,6 +499,22 @@ parse_index_expr :: proc(p: ^Parser, left: ^Ast) -> ^Ast {
     return ast
 }
 
+parse_address_expr :: proc(p: ^Parser) -> ^Ast {
+    ast := new(Ast)
+    ast.variant = Ast_Address_Expr{
+        expr = parse_factor(p),
+    }
+    return ast
+}
+
+parse_deref_expr :: proc(p: ^Parser) -> ^Ast {
+    ast := new(Ast)
+    ast.variant = Ast_Deref_Expr{
+        expr = parse_factor(p),
+    }
+    return ast
+}
+
 parse_factor :: proc(p: ^Parser, loc := #caller_location) -> ^Ast {
     tok := next(p)
     #partial switch tok.kind {
@@ -530,6 +546,12 @@ parse_factor :: proc(p: ^Parser, loc := #caller_location) -> ^Ast {
 
     case .Conv, .Reinterpret:
         return parse_cast_expr(p, tok)
+
+    case .Bit_And:
+        return parse_address_expr(p)
+
+    case .Mul:
+        return parse_deref_expr(p)
 
     case .Open_Paren:
         result := parse_expr(p)
@@ -875,7 +897,7 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
             }
             result = ast
 
-        case .Close_Brace:
+        case .Close_Bracket:
             unimplemented("slice")
 
         case:
