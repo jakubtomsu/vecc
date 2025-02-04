@@ -45,6 +45,9 @@ Token_Kind :: enum u8 {
     For,
     Range,
     Break,
+    Mut,
+    Immut,
+    Const,
     Continue,
     Struct,
     In,
@@ -212,8 +215,11 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         case "break":  result.kind = .Break
         case "continue":  result.kind = .Continue
         case "struct":  result.kind = .Struct
+        case "mut": result.kind = .Mut
+        case "immut": result.kind = .Immut
+        case "const": result.kind = .Const
         case "in":  result.kind = .In
-        case "proc": result.kind = .Proc
+        case "procedure": result.kind = .Proc
         case "vector": result.kind = .Vector
         case "scalar": result.kind = .Scalar
         case "conv": result.kind = .Conv

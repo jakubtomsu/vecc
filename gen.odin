@@ -139,6 +139,12 @@ gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     case Ast_Binary_Expr:
         gen_binary_expr(g, ast, top_level = top_level)
 
+    case Ast_Selector_Expr:
+        gen_selector_expr(g, ast)
+
+    case Ast_Index_Expr:
+        gen_index_expr(g, ast)
+
     case:
         assert(false)
     }
@@ -216,11 +222,47 @@ gen_binary_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     }
 }
 
+gen_selector_expr :: proc(g: ^Gen, ast: ^Ast) {
+    expr := ast.variant.(Ast_Selector_Expr)
+    gen_expr(g, expr.left)
+    #partial switch v in expr.left.type.variant {
+    case Type_Array:
+        name := expr.right.variant.(Ast_Ident).token.text
+
+        assert(len(name) == 1)
+        index := -1
+        switch name[0] {
+        case 'x': index = 0
+        case 'y': index = 1
+        case 'z': index = 2
+        case 'w': index = 3
+        }
+
+        assert(index >= 0)
+
+        gen_print(g, "[")
+        gen_print(g, index)
+        gen_print(g, "]")
+
+    case:
+        gen_print(g, ".")
+        gen_expr(g, expr.right)
+    }
+}
+
+gen_index_expr :: proc(g: ^Gen, ast: ^Ast) {
+    expr := ast.variant.(Ast_Index_Expr)
+    gen_expr(g, expr.left)
+    gen_print(g, "[")
+    gen_expr(g, expr.index)
+    gen_print(g, "]")
+}
+
 gen_proc_param_field :: proc(g: ^Gen, ast: ^Ast) {
-    field := ast.variant.(Ast_Field)
-    gen_ast_type(g, field.type)
+    decl := ast.variant.(Ast_Value_Decl)
+    gen_ast_type(g, decl.type)
     gen_print(g, " ")
-    gen_ident(g, field.name)
+    gen_ident(g, decl.name)
 }
 
 gen_proc_type :: proc(g: ^Gen, ast: ^Ast, name: string) {
@@ -439,9 +481,16 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type, ent_name := "") -> string 
 
 gen_value_decl :: proc(g: ^Gen, ast: ^Ast) {
     decl := ast.variant.(Ast_Value_Decl)
-    if decl.const {
+
+    switch decl.mut {
+    case .Invalid:
+        assert(false)
+    // TODO: generate macro defines for compile time constants? What about shadowing?
+    case .Constant, .Immutable:
         gen_print(g, "const ")
+    case .Mutable:
     }
+
     gen_ast_type(g, decl.type)
     gen_print(g, " ")
     gen_ident(g, decl.name)
@@ -493,8 +542,11 @@ gen_stmt :: proc(g: ^Gen, ast: ^Ast) {
     case Ast_For_Range_Stmt:    gen_for_range_stmt(g, ast)
     case Ast_Assign_Stmt:       gen_assign_stmt(g, ast)
     case Ast_Return_Stmt:       gen_return_stmt(g, ast)
-    case Ast_Value_Decl:        gen_value_decl(g, ast)
     case Ast_Call_Expr:         gen_call_expr(g, ast)
+
+    case Ast_Value_Decl:        gen_value_decl(g, ast)
+    case Ast_Struct_Decl:       gen_struct_decl(g, ast)
+    // case Ast_Proc_Decl:         gen_proc_decl(g, ast)
     }
 }
 
@@ -553,7 +605,7 @@ gen_for_range_stmt :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_assign_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_Assign_Stmt)
-    gen_ident(g, stmt.left)
+    gen_expr(g, stmt.left)
     #partial switch stmt.op.kind {
     case .Assign_Add:               gen_print(g, " += ")
     case .Assign_Sub:               gen_print(g, " -= ")
@@ -580,6 +632,21 @@ gen_return_stmt :: proc(g: ^Gen, ast: ^Ast) {
 }
 
 
+
+gen_proc_decl :: proc(g: ^Gen, ast: ^Ast) {
+    decl := ast.variant.(Ast_Proc_Decl)
+    // gen_proc_type(g, decl.type, sorted.name)
+    // gen_print(g, " ")
+    // gen_block_stmt(g, decl.body)
+    // gen_print(g, "\n\n")
+}
+
+gen_struct_decl :: proc(g: ^Gen, ast: ^Ast) {
+    decl := ast.variant.(Ast_Struct_Decl)
+}
+
+
+
 gen_program :: proc(g: ^Gen) {
     gen_print(g, "#ifndef VECC_DEFINED\n")
     gen_print(g, "#define VECC_DEFINED 1\n")
@@ -597,6 +664,9 @@ gen_program :: proc(g: ^Gen) {
         name:           string,
         entity:         ^Entity,
     }
+
+    // Flatten scope hierarchy.
+    // Ignore local variables, gen only nested procs.
 
     // only some!
     sorted_entities: [dynamic]Sorted_Entity
@@ -631,9 +701,21 @@ gen_program :: proc(g: ^Gen) {
     gen_print(g, "typedef int32_t bool32_t;\n")
     gen_print(g, "typedef int64_t bool64_t;\n")
 
+    // HACK, set struct cnames to one of the associated entities.
+    // Two exact same structs are rare but possible
+    for name, ent in g.curr_file_scope.entities {
+        #partial switch v in ent.variant {
+        case Entity_Struct:
+            v.type.cname = name
+        }
+    }
+
     for name, ent in g.curr_file_scope.entities {
         #partial switch v in ent.variant {
         case Entity_Type:
+            if v.type.cname != "" {
+                break
+            }
             v.type.cname = gen_type_generate_cname(g, v.type, name)
             v.type.cname_lower = strings.to_lower(v.type.cname)
         }
@@ -656,16 +738,6 @@ gen_program :: proc(g: ^Gen) {
             if !decl.export do continue
             gen_proc_type(g, decl.type, sorted.name)
             gen_print(g, ";\n")
-        }
-    }
-
-    gen_print(g, "\n// VECC exported global variable declarations\n")
-
-    for sorted in sorted_entities {
-        #partial switch v in sorted.entity.variant {
-        case Entity_Variable:
-            decl := sorted.entity.ast.variant.(Ast_Value_Decl)
-            if decl.export do continue
         }
     }
 
@@ -694,20 +766,19 @@ gen_program :: proc(g: ^Gen) {
         }
     }
 
-    gen_print(g, "\n// VECC private global variable declarations\n")
+    gen_print(g, "\n// VECC global variable declarations\n")
 
     for sorted in sorted_entities {
         #partial switch v in sorted.entity.variant {
         case Entity_Variable:
             decl := sorted.entity.ast.variant.(Ast_Value_Decl)
-            if !decl.export do continue
         }
     }
 
     gen_print(g, "\n// VECC function definitions\n")
 
     for sorted in sorted_entities {
-        ast_print(sorted.entity.ast, sorted.name, 0)
+        // ast_print(sorted.entity.ast, sorted.name, 0)
 
         #partial switch v in sorted.entity.variant {
         case Entity_Proc:

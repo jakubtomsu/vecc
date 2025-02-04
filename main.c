@@ -2,7 +2,7 @@
 
 void main() {
     printf("Entered main\n");
-    vecc_main();
+    main_vecc();
 }
 
 // Note: this is down here only to make sure none of the private procs get used

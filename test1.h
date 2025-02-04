@@ -17,94 +17,59 @@ typedef int8_t bool8_t;
 typedef int16_t bool16_t;
 typedef int32_t bool32_t;
 typedef int64_t bool64_t;
-typedef struct struct{health.f32;ammo.i32;} {
+typedef struct Aos2_float { float data[2]; } Aos2_float;
+static Aos2_float aos2_float_add(Aos2_float a, Aos2_float b);
+static Aos2_float aos2_float_sub(Aos2_float a, Aos2_float b);
+static Aos2_float aos2_float_mul(Aos2_float a, Aos2_float b);
+static Aos2_float aos2_float_div(Aos2_float a, Aos2_float b);
+static Aos2_float aos2_float_neg(Aos2_float a);
+typedef struct Enemy {
 	float health;
 	int32_t ammo;
-} struct{health.f32;ammo.i32;};
-typedef struct struct{health.f32;ammo.i32;} {
-	float health;
-	int32_t ammo;
-} struct{health.f32;ammo.i32;};
-typedef struct Aos8_float { float data[8]; } Aos8_float;
-static Aos8_float aos8_float_add(Aos8_float a, Aos8_float b);
-static Aos8_float aos8_float_sub(Aos8_float a, Aos8_float b);
-static Aos8_float aos8_float_mul(Aos8_float a, Aos8_float b);
-static Aos8_float aos8_float_div(Aos8_float a, Aos8_float b);
-static Aos8_float aos8_float_neg(Aos8_float a);
+	Aos2_float foo;
+} Enemy;
 
 // VECC exported function declarations
-int32_t bar(int32_t a);
-void vecc_main();
-
-// VECC exported global variable declarations
+void main_vecc();
 #endif // VECC_DEFINED
 
 
 #ifdef VECC_IMPL
 // VECC private function declarations
-static Aos8_float aos8_float_add(Aos8_float a, Aos8_float b) {
-	Aos8_float result;
+static Aos2_float aos2_float_add(Aos2_float a, Aos2_float b) {
+	Aos2_float result;
 	result.data[0] = a.data[0] + b.data[0];
 	result.data[1] = a.data[1] + b.data[1];
-	result.data[2] = a.data[2] + b.data[2];
-	result.data[3] = a.data[3] + b.data[3];
-	result.data[4] = a.data[4] + b.data[4];
-	result.data[5] = a.data[5] + b.data[5];
-	result.data[6] = a.data[6] + b.data[6];
-	result.data[7] = a.data[7] + b.data[7];
 	return result;
 }
-static Aos8_float aos8_float_sub(Aos8_float a, Aos8_float b) {
-	Aos8_float result;
+static Aos2_float aos2_float_sub(Aos2_float a, Aos2_float b) {
+	Aos2_float result;
 	result.data[0] = a.data[0] - b.data[0];
 	result.data[1] = a.data[1] - b.data[1];
-	result.data[2] = a.data[2] - b.data[2];
-	result.data[3] = a.data[3] - b.data[3];
-	result.data[4] = a.data[4] - b.data[4];
-	result.data[5] = a.data[5] - b.data[5];
-	result.data[6] = a.data[6] - b.data[6];
-	result.data[7] = a.data[7] - b.data[7];
 	return result;
 }
-static Aos8_float aos8_float_mul(Aos8_float a, Aos8_float b) {
-	Aos8_float result;
+static Aos2_float aos2_float_mul(Aos2_float a, Aos2_float b) {
+	Aos2_float result;
 	result.data[0] = a.data[0] * b.data[0];
 	result.data[1] = a.data[1] * b.data[1];
-	result.data[2] = a.data[2] * b.data[2];
-	result.data[3] = a.data[3] * b.data[3];
-	result.data[4] = a.data[4] * b.data[4];
-	result.data[5] = a.data[5] * b.data[5];
-	result.data[6] = a.data[6] * b.data[6];
-	result.data[7] = a.data[7] * b.data[7];
 	return result;
 }
-static Aos8_float aos8_float_div(Aos8_float a, Aos8_float b) {
-	Aos8_float result;
+static Aos2_float aos2_float_div(Aos2_float a, Aos2_float b) {
+	Aos2_float result;
 	result.data[0] = a.data[0] / b.data[0];
 	result.data[1] = a.data[1] / b.data[1];
-	result.data[2] = a.data[2] / b.data[2];
-	result.data[3] = a.data[3] / b.data[3];
-	result.data[4] = a.data[4] / b.data[4];
-	result.data[5] = a.data[5] / b.data[5];
-	result.data[6] = a.data[6] / b.data[6];
-	result.data[7] = a.data[7] / b.data[7];
 	return result;
 }
-static Aos8_float aos8_float_neg(Aos8_float a) {
+static Aos2_float aos2_float_neg(Aos2_float a) {
 	a.data[0] = -a.data[0];
 	a.data[1] = -a.data[1];
-	a.data[2] = -a.data[2];
-	a.data[3] = -a.data[3];
-	a.data[4] = -a.data[4];
-	a.data[5] = -a.data[5];
-	a.data[6] = -a.data[6];
-	a.data[7] = -a.data[7];
 }
+static int32_t bar(int32_t a);
 
-// VECC private global variable declarations
+// VECC global variable declarations
 
 // VECC function definitions
-int32_t bar(int32_t a) {
+static int32_t bar(int32_t a) {
 	for (int64_t i = 0; i < (int64_t)16; i += (int64_t)1) {
 		a += (int32_t)i;
 	};
@@ -116,17 +81,17 @@ int32_t bar(int32_t a) {
 	if (a > 100) {
 		a += 2;
 	} else {
-		int32_t b = a / 2;
+		const int32_t b = a / 2;
 		return a + b;
 	};
 	return a;
 }
 
-void vecc_main() {
-	int32_t x = bar(bar(1));
-	Aos8_float c = {0};
-	Aos8_float d = {0};
-	Aos8_float e = aos8_float_add(c, d);
+void main_vecc() {
+	Enemy enemy = {0};
+	enemy.health = 2.0f;
+	enemy.foo[0] = 123.0f;
+	enemy.foo[1] = 66.0f;
 }
 
 #endif // VECC_IMPL

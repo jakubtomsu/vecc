@@ -53,6 +53,10 @@ Ast_Variant :: union {
     Ast_Binary_Expr,
     Ast_Call_Expr,
     Ast_Cast_Expr,
+    Ast_Selector_Expr,
+    Ast_Index_Expr,
+    Ast_Address_Expr,
+    Ast_Deref_Expr,
 
     Ast_Proc_Type,
     Ast_Struct_Type,
@@ -71,14 +75,29 @@ Ast_Basic_Literal :: struct {
 }
 
 Ast_Value_Decl :: struct {
-    export:     bool,
     private:    bool,
-    const:      bool,
+    mut:        Value_Mutablity,
     scope:      ^Scope,
     entity:     ^Entity,
     name:       ^Ast,
     type:       ^Ast,
     value:      ^Ast,
+}
+
+Value_Mutablity :: enum u8 {
+    Invalid = 0,
+    Mutable,
+    Immutable,
+    Constant, // compile-time
+}
+
+value_mutability_from_token :: proc(tok: Token_Kind) -> (Value_Mutablity, bool) #optional_ok {
+    #partial switch tok {
+    case .Mut:      return .Mutable, true
+    case .Immut:    return .Immutable, true
+    case .Const:    return .Constant, true
+    }
+    return .Mutable, false
 }
 
 Ast_Proc_Decl :: struct {
@@ -99,6 +118,11 @@ Ast_Field :: struct {
 Ast_Proc_Type :: struct {
     params: []^Ast,
     result: ^Ast,
+}
+
+Ast_Struct_Decl :: struct {
+    entity: ^Entity,
+    type:   ^Ast,
 }
 
 Ast_Block_Stmt :: struct {
@@ -168,10 +192,24 @@ Ast_Cast_Expr :: struct {
     value:  ^Ast,
 }
 
-Ast_Struct_Decl :: struct {
-    entity: ^Entity,
-    type:   ^Ast,
+Ast_Selector_Expr :: struct {
+    left:   ^Ast,
+    right:  ^Ast,
 }
+
+Ast_Index_Expr :: struct {
+    left:   ^Ast,
+    index:  ^Ast,
+}
+
+Ast_Address_Expr :: struct {
+    expr:  ^Ast,
+}
+
+Ast_Deref_Expr :: struct {
+    expr:  ^Ast,
+}
+
 
 Ast_Struct_Type :: struct {
     fields: [dynamic]^Ast,
@@ -230,7 +268,7 @@ ast_print :: proc(ast: ^Ast, name: string, depth: int) {
     case Ast_Cast_Expr:     fmt.print(" :", v.op.text)
     case Ast_Break_Stmt:    fmt.print(" :", v.token.text)
     case Ast_Continue_Stmt: fmt.print(" :", v.token.text)
-    case Ast_Value_Decl:    fmt.printf(" : export={} private={}", v.export, v.private)
+    case Ast_Value_Decl:    fmt.printf(" : mut={} private={}", v.mut, v.private)
     case Ast_Proc_Decl:     fmt.printf(" : export={} private={}", v.export, v.private)
     case Ast_Array_Type:    fmt.printf(" : kind={}", v.kind)
     }
@@ -314,7 +352,10 @@ next :: proc(p: ^Parser) -> Token {
     if err != nil && token.kind != .EOF {
         parser_error(p, token.pos, "Found invalid token: {}", err)
     }
+
+    // Print every token. Very useful for parser debugging
     fmt.println(token)
+
     p.prev_token, p.curr_token = p.curr_token, token
     return p.prev_token
 }
@@ -369,14 +410,14 @@ parse_call_args :: proc(p: ^Parser, args: ^[dynamic]^Ast) {
     }
 }
 
-parse_call_expr :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
+parse_call_expr :: proc(p: ^Parser, procedure: ^Ast) -> ^Ast {
     expect(p, .Open_Paren)
     allow(p, .Semicolon)
 
     result := new(Ast)
 
     call_expr: Ast_Call_Expr
-    call_expr.procedure = parse_ident(p, ident_tok)
+    call_expr.procedure = procedure
 
     args: [dynamic]^Ast
     parse_call_args(p, &args)
@@ -388,7 +429,7 @@ parse_call_expr :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
     return result
 }
 
-parse_self_call_expr :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
+parse_self_call_expr :: proc(p: ^Parser, self_ast: ^Ast) -> ^Ast {
     result := new(Ast)
 
     expect(p, .Colon)
@@ -398,11 +439,7 @@ parse_self_call_expr :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
 
     args: [dynamic]^Ast
 
-    self := new(Ast)
-    self.variant = Ast_Ident{
-        token = ident_tok,
-    }
-    append(&args, self)
+    append(&args, self_ast)
 
     if allow(p, .Open_Paren) {
         parse_call_args(p, &args)
@@ -432,19 +469,61 @@ parse_cast_expr :: proc(p: ^Parser, op: Token) -> ^Ast {
     return ast
 }
 
+parse_selector_expr :: proc(p: ^Parser, left: ^Ast) -> ^Ast {
+    expect(p, .Period)
+
+    right := parse_ident(p, expect(p, .Ident))
+
+    ast := new(Ast)
+    ast.variant = Ast_Selector_Expr{
+        left    = left,
+        right   = right,
+    }
+
+    return ast
+}
+
+parse_index_expr :: proc(p: ^Parser, left: ^Ast) -> ^Ast {
+    expect(p, .Open_Bracket)
+
+    index := parse_expr(p)
+
+    ast := new(Ast)
+    ast.variant = Ast_Index_Expr{
+        left    = left,
+        index   = index,
+    }
+
+    expect(p, .Close_Bracket)
+
+    return ast
+}
 
 parse_factor :: proc(p: ^Parser, loc := #caller_location) -> ^Ast {
     tok := next(p)
     #partial switch tok.kind {
     case .Ident:
-        #partial switch peek(p) {
-        case .Open_Paren:
-            return parse_call_expr(p, tok)
-        case .Colon:
-            return parse_self_call_expr(p, tok)
-        case:
-            return parse_ident(p, tok)
+        ident := parse_ident(p, tok)
+
+        curr_ast := ident
+
+        // NOTE: the tree here is inverted, index/selector exprs on the right side are parents.
+
+        loop: for {
+            #partial switch peek(p) {
+            case .Open_Paren:
+                curr_ast = parse_call_expr(p, curr_ast)
+            case .Colon:
+                curr_ast = parse_self_call_expr(p, curr_ast)
+            case .Period:
+                curr_ast = parse_selector_expr(p, curr_ast)
+            case .Open_Bracket:
+                curr_ast = parse_index_expr(p, curr_ast)
+            case:
+                break loop
+            }
         }
+        return curr_ast
 
     case .Integer, .Float, .String, .False, .True:
         return parse_basic_literal(p, tok)
@@ -532,14 +611,56 @@ parse_expr :: proc(p: ^Parser) -> ^Ast {
 }
 
 parse_stmt :: proc(p: ^Parser) -> ^Ast {
-    result := new(Ast)
-    first := next(p)
-    #partial switch first.kind {
-    case .Ident:
-        #partial switch peek(p) {
-        case .Ident, .Bit_Xor, .Open_Bracket, .Vector:
-            result = parse_value_decl(p, first)
+    result: ^Ast
 
+    #partial switch peek(p) {
+    case .Return:
+        result = parse_return_stmt(p)
+
+    case .If:
+        result = parse_if_stmt(p)
+
+    case .For:
+        result = parse_for_stmt(p)
+
+    case .Range:
+        result = parse_range_stmt(p)
+
+    case .Break:
+        result = new(Ast)
+        result.variant = Ast_Break_Stmt{
+            token = expect(p, .Break),
+        }
+
+    case .Continue:
+        result = new(Ast)
+        result.variant = Ast_Continue_Stmt{
+            token = expect(p, .Continue),
+        }
+
+    case .Open_Brace:
+        result = parse_block(p)
+
+    case .Mut, .Immut, .Const:
+        mut, mut_ok := value_mutability_from_token(next(p).kind)
+        if !mut_ok {
+            parser_error(p, p.curr_token, "Invalid variable declaration, expected mutability keyword")
+        }
+        result = parse_value_decl(p, mut = mut)
+
+    case .Proc:
+        result = parse_proc_decl(p)
+
+    case .Struct:
+        result = parse_struct_decl(p)
+
+    case .Semicolon:
+        return nil
+
+    case:
+        result = parse_factor(p)
+
+        #partial switch peek(p) {
         case
             .Assign,
             .Assign_Add,
@@ -556,97 +677,104 @@ parse_stmt :: proc(p: ^Parser) -> ^Ast {
             assign_stmt: Ast_Assign_Stmt
             assign_stmt.op = next(p)
 
-            assign_stmt.left = parse_ident(p, first)
+            assign_stmt.left = result
             assign_stmt.right = parse_expr(p)
 
+            result = new(Ast)
             result.variant = assign_stmt
-
-        case .Open_Paren:
-            result = parse_call_expr(p, first)
-
-        case .Colon:
-            result = parse_self_call_expr(p, first)
         }
-
-    case .Return:
-        return_stmt: Ast_Return_Stmt
-        return_stmt.value = parse_expr(p)
-        result.variant = return_stmt
-
-    case .If:
-        if_stmt: Ast_If_Stmt
-        if_stmt.cond = parse_expr(p)
-        if_stmt.if_body = parse_block(p)
-        if allow(p, .Else) {
-            if_stmt.else_body = parse_stmt(p)
-        }
-        result.variant = if_stmt
-
-    case .For:
-        for_stmt: Ast_For_Stmt
-
-        parse_begin_scope(p)
-        for_stmt.scope = p.curr_scope
-
-        for_stmt.init = parse_value_decl(p, expect(p, .Ident))
-
-        expect(p, .Semicolon)
-        for_stmt.cond = parse_expr(p)
-        expect(p, .Semicolon)
-        for_stmt.post = parse_stmt(p)
-        for_stmt.body = parse_block(p)
-
-        parse_end_curr_scope(p)
-
-        result.variant = for_stmt
-
-    case .Range:
-        for_stmt: Ast_For_Range_Stmt
-
-        parse_begin_scope(p)
-
-        ident_tok := expect(p, .Ident)
-        for_stmt.ident = parse_ident(p, ident_tok)
-
-        type := new(Ast)
-        type.variant = Ast_Ident{token = {text = "i64"}}
-        register_value_entity(p, ident_tok, for_stmt.ident, type, nil)
-
-        expect(p, .Colon)
-
-        for_stmt.start = parse_expr(p)
-        for_stmt.range = p.curr_token
-        #partial switch peek(p) {
-        case .Range_Incl:
-            expect(p, .Range_Incl)
-        case .Range_Excl:
-            expect(p, .Range_Excl)
-        case:
-            parser_error(p, p.curr_token, "Invalid range")
-        }
-        for_stmt.end = parse_expr(p)
-
-        for_stmt.body = parse_block(p, ignore_scope = true)
-
-        result.variant = for_stmt
-
-        parse_end_curr_scope(p)
-
-    case .Break:
-        result.variant = Ast_Break_Stmt{
-            token = first,
-        }
-
-    case .Continue:
-        result.variant = Ast_Continue_Stmt{
-            token = first,
-        }
-
-    case .Open_Brace:
-        result = parse_block(p, ignore_begin = true)
     }
 
     return result
+}
+
+parse_return_stmt :: proc(p: ^Parser) -> ^Ast {
+    expect(p, .Return)
+
+    ast := new(Ast)
+    return_stmt: Ast_Return_Stmt
+    return_stmt.value = parse_expr(p)
+    ast.variant = return_stmt
+    return ast
+}
+
+parse_if_stmt :: proc(p: ^Parser) -> ^Ast {
+    expect(p, .If)
+
+    ast := new(Ast)
+    if_stmt: Ast_If_Stmt
+    if_stmt.cond = parse_expr(p)
+    if_stmt.if_body = parse_block(p)
+    if allow(p, .Else) {
+        if_stmt.else_body = parse_stmt(p)
+    }
+    ast.variant = if_stmt
+    return ast
+}
+
+parse_for_stmt :: proc(p: ^Parser) -> ^Ast {
+    expect(p, .For)
+
+    ast := new(Ast)
+    for_stmt: Ast_For_Stmt
+
+    parse_begin_scope(p)
+    for_stmt.scope = p.curr_scope
+
+    for_stmt.init = parse_value_decl(p, .Mutable)
+
+    expect(p, .Semicolon)
+    for_stmt.cond = parse_expr(p)
+    expect(p, .Semicolon)
+    for_stmt.post = parse_stmt(p)
+    for_stmt.body = parse_block(p)
+
+    parse_end_curr_scope(p)
+
+    ast.variant = for_stmt
+    return ast
+}
+
+parse_range_stmt :: proc(p: ^Parser) -> ^Ast {
+    expect(p, .Range)
+
+    ast := new(Ast)
+    for_stmt: Ast_For_Range_Stmt
+
+    parse_begin_scope(p)
+
+    ident_tok := expect(p, .Ident)
+    for_stmt.ident = parse_ident(p, ident_tok)
+
+    type := new(Ast)
+    type.variant = Ast_Ident{token = {text = "i64"}}
+    register_value_entity(p,
+        mut = .Mutable,
+        ident_tok = ident_tok,
+        name = for_stmt.ident,
+        type = type,
+        value = nil)
+
+    expect(p, .Colon)
+
+    for_stmt.start = parse_expr(p)
+    for_stmt.range = p.curr_token
+    #partial switch peek(p) {
+    case .Range_Incl:
+        expect(p, .Range_Incl)
+    case .Range_Excl:
+        expect(p, .Range_Excl)
+    case:
+        parser_error(p, p.curr_token, "Invalid range")
+    }
+    for_stmt.end = parse_expr(p)
+
+    for_stmt.body = parse_block(p, ignore_scope = true)
+
+    ast.variant = for_stmt
+
+    parse_end_curr_scope(p)
+    return ast
 }
 
 parse_stmt_list :: proc(p: ^Parser, end: Token_Kind) -> []^Ast {
@@ -673,7 +801,7 @@ parse_end_curr_scope :: proc(p: ^Parser) {
     p.curr_scope = p.curr_scope.parent
 }
 
-parse_block :: proc(p: ^Parser, ignore_begin := false, ignore_scope := false) -> ^Ast {
+parse_block :: proc(p: ^Parser, ignore_scope := false) -> ^Ast {
     result := new(Ast)
     this_scope := p.curr_scope
     block_stmt: Ast_Block_Stmt
@@ -682,9 +810,7 @@ parse_block :: proc(p: ^Parser, ignore_begin := false, ignore_scope := false) ->
         parse_begin_scope(p)
     }
 
-    if !ignore_begin {
-        expect(p, .Open_Brace)
-    }
+    expect(p, .Open_Brace)
 
     block_stmt.scope = p.curr_scope
 
@@ -700,16 +826,12 @@ parse_block :: proc(p: ^Parser, ignore_begin := false, ignore_scope := false) ->
     return result
 }
 
-register_value_entity :: proc(p: ^Parser, ident_tok: Token, name: ^Ast, type: ^Ast, value: ^Ast) -> ^Ast {
-    result := new(Ast)
+register_value_entity :: proc(p: ^Parser, mut: Value_Mutablity, ident_tok: Token, name: ^Ast, type: ^Ast, value: ^Ast) -> ^Ast {
+    ast := new(Ast)
     value_decl: Ast_Value_Decl
 
-    value_decl.export = allow(p, .Export)
+    value_decl.mut = mut
     value_decl.private = allow(p, .Private)
-
-    if value_decl.export && value_decl.private {
-        parser_error(p, p.prev_token, "Export and Private qualifiers cannot be used both at once")
-    }
 
     value_decl.scope = p.curr_scope
 
@@ -727,32 +849,14 @@ register_value_entity :: proc(p: ^Parser, ident_tok: Token, name: ^Ast, type: ^A
         parser_error(p, ident_tok, "Duplicate entity name: {}", name)
     }
 
-    entity := new(Entity)
-    entity.ast = result
-    entity.order_index = g_entity_order_counter
-    g_entity_order_counter += 1
-    entity.variant = Entity_Variable{}
-    p.curr_scope.entities[name] = entity
+    entity := create_entity(p.curr_scope,
+        name = name,
+        ast = ast,
+        variant = Entity_Variable{},
+    )
 
-    result.variant = value_decl
-    return result
-}
-
-register_entity :: proc(p: ^Parser, ast: ^Ast, variant: Entity_Variant, name: string) {
-    if strings.has_prefix(name, "vecc_") {
-        parser_error(p, p.curr_token, "'vecc_' prefix is reserved for the compiler.")
-    }
-
-    if _, ok := find_entity(p.curr_scope, name).?; ok {
-        parser_error(p, p.curr_token, "Duplicate entity name: {}", name)
-    }
-
-    entity := new(Entity)
-    entity.ast = ast
-    entity.order_index = g_entity_order_counter
-    g_entity_order_counter += 1
-    entity.variant = Entity_Variable{}
-    p.curr_scope.entities[name] = entity
+    ast.variant = value_decl
+    return ast
 }
 
 parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
@@ -819,7 +923,8 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
     return result
 }
 
-parse_value_decl :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
+parse_value_decl :: proc(p: ^Parser, mut: Value_Mutablity) -> ^Ast {
+    ident_tok := next(p)
     name := parse_ident(p, ident_tok)
     type := parse_type(p)
     value: ^Ast
@@ -828,6 +933,7 @@ parse_value_decl :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
     }
 
     return register_value_entity(p,
+        mut         = mut,
         ident_tok   = ident_tok,
         name        = name,
         type        = type,
@@ -851,7 +957,12 @@ parse_field :: proc(p: ^Parser) -> ^Ast {
         value = value,
     }
 
-    register_entity(p, ast, Entity_Variable{}, ident_tok.text)
+    register_entity(p,
+        scope = p.curr_scope,
+        name = ident_tok.text,
+        ast = ast,
+        variant = Entity_Struct_Field{},
+    )
 
     return ast
 }
@@ -871,12 +982,20 @@ parse_field_list :: proc(p: ^Parser, end: Token_Kind) -> [dynamic]^Ast {
 parse_proc_type :: proc(p: ^Parser) -> ^Ast {
     ast := new(Ast)
     proc_type: Ast_Proc_Type
-    expect(p, .Proc)
     expect(p, .Open_Paren)
-    proc_type.params = parse_field_list(p, .Close_Paren)[:]
+    params: [dynamic]^Ast
+    for peek(p) != .Close_Paren {
+        mut := value_mutability_from_token(next(p).kind) or_break
+        field := parse_value_decl(p, mut = mut)
+        append(&params, field)
+        if !allow(p, .Semicolon) {
+            break
+        }
+    }
+    proc_type.params = params[:]
     expect(p, .Close_Paren)
 
-    if peek(p) == .Ident {
+    if peek(p) != .Open_Brace {
         proc_type.result = parse_type(p)
     }
 
@@ -884,9 +1003,11 @@ parse_proc_type :: proc(p: ^Parser) -> ^Ast {
     return ast
 }
 
-parse_proc_decl :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
-    result := new(Ast)
+parse_proc_decl :: proc(p: ^Parser) -> ^Ast {
+    ast := new(Ast)
     proc_decl: Ast_Proc_Decl
+
+    expect(p, .Proc)
 
     proc_decl.export = allow(p, .Export)
     proc_decl.private = allow(p, .Private)
@@ -895,18 +1016,19 @@ parse_proc_decl :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
         parser_error(p, p.prev_token, "Export and Private qualifiers cannot be used both at once")
     }
 
+    ident_tok := expect(p, .Ident)
+
+    fmt.println("PARSE PROC DECL", ident_tok)
+
+
     name := ident_tok.text
-    if _, ok := find_entity(p.curr_scope, name).?; ok {
-        parser_error(p, ident_tok, "Duplicate entity name: {}", name)
-    }
 
-    entity := new(Entity)
-    entity.ast = result
-    entity.order_index = g_entity_order_counter
-    g_entity_order_counter += 1
-    entity.variant = Entity_Proc{}
-
-    p.curr_scope.entities[name] = entity
+    entity := register_entity(p,
+        scope = p.curr_scope,
+        name = name,
+        ast = ast,
+        variant = Entity_Proc{},
+    )
 
     parse_begin_scope(p)
 
@@ -919,33 +1041,78 @@ parse_proc_decl :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
 
     allow(p, .Semicolon)
 
-    result.variant = proc_decl
-    return result
+    ast.variant = proc_decl
+    return ast
 }
 
-parse_struct_decl :: proc(p: ^Parser, ident_tok: Token) -> ^Ast {
+parse_struct_decl :: proc(p: ^Parser) -> ^Ast {
+    expect(p, .Struct)
+
     ast := new(Ast)
 
+    ident_tok := expect(p, .Ident)
     name := ident_tok.text
 
-    entity := new(Entity)
-    entity.ast = ast
-    entity.order_index = g_entity_order_counter
-    g_entity_order_counter += 1
-    entity.variant = Entity_Type{}
-
-    p.curr_scope.entities[name] = entity
+    entity := register_entity(p,
+        scope = p.curr_scope,
+        name = name,
+        ast = ast,
+        variant = Entity_Struct{},
+    )
 
     ast.variant = Ast_Struct_Decl{
+        entity = entity,
         type = parse_struct_type(p),
     }
+
+    allow(p, .Semicolon)
 
     return ast
 }
 
+
+register_entity :: proc(
+    p: ^Parser,
+    scope: ^Scope,
+    name: string,
+    ast: ^Ast,
+    variant: Entity_Variant,
+) -> ^Entity {
+    if strings.has_prefix(name, "vecc_") {
+        parser_error(p, p.curr_token, "'vecc_' identifier prefix is reserved for the compiler.")
+    }
+
+    if _, ok := find_entity(scope, name).?; ok {
+        parser_error(p, p.curr_token, "Duplicate entity name: {}", name)
+    }
+
+    entity := create_entity(
+        scope = scope,
+        name = name,
+        ast = ast,
+        variant = variant
+    )
+
+    return entity
+}
+
+create_entity :: proc(scope: ^Scope, name: string, ast: ^Ast, variant: Entity_Variant) -> ^Entity {
+    entity := new(Entity)
+
+    entity.ast = ast
+    entity.name = name
+    entity.variant = variant
+
+    entity.order_index = g_entity_order_counter
+    g_entity_order_counter += 1
+
+    scope.entities[name] = entity
+
+    return entity
+}
+
 parse_struct_type :: proc(p: ^Parser) -> ^Ast {
     ast := new(Ast)
-    expect(p, .Struct)
     expect(p, .Open_Brace)
     parse_begin_scope(p)
     ast.variant = Ast_Struct_Type{
@@ -963,23 +1130,20 @@ parse_file :: proc(p: ^Parser) {
     defer assert(p.curr_scope == p.file_scope)
 
     for peek(p) != .EOF {
-        ast: ^Ast
+        curr := p.curr_token
 
-        ident_tok := expect(p, .Ident)
-        #partial switch peek(p) {
-        case .Proc, .Export:
-            ast = parse_proc_decl(p, ident_tok)
+        stmt := parse_stmt(p)
 
-        case .Ident:
-            ast = parse_value_decl(p, ident_tok)
-
-        case .Struct:
-            ast = parse_struct_decl(p, ident_tok)
-
+        #partial switch _ in stmt.variant {
+        case Ast_Value_Decl, Ast_Proc_Decl, Ast_Struct_Decl:
+        // case nil:
+        //     break
         case:
-            parser_error(p, p.curr_token, "Invalid declaration token: {}", p.curr_token.kind)
+            parser_error(p, curr, "Invalid top level declaration, expected value/procedure/struct, got: {}", stmt.variant)
         }
 
-        allow(p, .Semicolon)
+        // if !allow(p, .Semicolon) {
+        //     break
+        // }
     }
 }

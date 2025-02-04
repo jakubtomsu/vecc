@@ -18,6 +18,7 @@ Checker :: struct {
 
 Entity :: struct {
     ast:            ^Ast,
+    name:           string,
     order_index:    int,
     variant:        Entity_Variant,
     depends:        map[string]struct{}, // identifiers
@@ -28,6 +29,8 @@ Entity_Variant :: union {
     Entity_Variable,
     Entity_Type,
     Entity_Alias,
+    Entity_Struct,
+    Entity_Struct_Field,
 }
 
 Entity_Proc :: struct {
@@ -39,7 +42,14 @@ Entity_Variable :: struct {
 }
 
 Entity_Type :: struct {
-    type: ^Type,
+    type:   ^Type,
+}
+
+Entity_Struct :: struct {
+    type:   ^Type,
+}
+
+Entity_Struct_Field :: struct {
 }
 
 Entity_Alias :: struct {
@@ -81,6 +91,12 @@ check_type :: proc(c: ^Checker, ast: ^Ast) {
             assert(l > 0)
         case:
             assert(false)
+        }
+
+    case Ast_Struct_Type:
+        for field in v.fields {
+            field := field.variant.(Ast_Field)
+            check_type(c, field.type)
         }
     }
     ast.type = find_or_create_type_entity(c, ast)
@@ -258,10 +274,94 @@ check_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     case Ast_Binary_Expr:
         check_binary_expr(c, ast)
 
+    case Ast_Selector_Expr:
+        check_selector_expr(c, ast)
+
+    case Ast_Index_Expr:
+        check_index_expr(c, ast)
+
     case:
         assert(false)
     }
 }
+
+check_selector_expr :: proc(c: ^Checker, ast: ^Ast) {
+    expr := ast.variant.(Ast_Selector_Expr)
+    check_expr(c, expr.left)
+
+    {
+        ident := expr.right.variant.(Ast_Ident)
+        name := ident.token.text
+
+        #partial switch v in expr.left.type.variant {
+        case Type_Struct:
+            for field in v.fields {
+                if ident.token.text == field.name {
+                    expr.right.type = field.type
+                    break
+                }
+            }
+
+        case Type_Array:
+            // Swizzling later?
+            if v.len > 4 {
+                break
+            }
+            all_fields := "xyzw"
+            fields := all_fields[:v.len]
+
+            if len(name) != 1 {
+                break
+            }
+
+            for field in transmute([]u8)fields {
+                if field != name[0] {
+                    continue
+                }
+
+                expr.right.type = v.type
+            }
+        }
+
+        if expr.right.type == nil {
+            checker_error(c, "Invalid field")
+        }
+    }
+
+    ast.type = expr.right.type
+}
+
+check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
+    expr := ast.variant.(Ast_Index_Expr)
+    check_expr(c, expr.left)
+    check_expr(c, expr.index)
+
+    if !type_is_integer(expr.index.type) {
+        checker_error(c, "Index must be of integer type, got", type_to_string(expr.index.type))
+    }
+
+    #partial switch v in expr.left.type.variant {
+    case Type_Array:
+        ast.type = v.type
+
+    case:
+        assert(false)
+    }
+
+    #partial switch v in expr.index.value {
+    case i128:
+        arr := expr.left.type.variant.(Type_Array)
+        if v < 0 || int(v) > arr.len {
+            checker_error(c, "Constant index is out of bounds")
+        }
+
+    case nil:
+        break
+    case:
+        assert(false)
+    }
+}
+
 
 check_binary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     expr := ast.variant.(Ast_Binary_Expr)
@@ -316,9 +416,9 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
 }
 
 check_proc_param_field :: proc(c: ^Checker, ast: ^Ast) {
-    field := ast.variant.(Ast_Field)
-    check_type(c, field.type)
-    ast.type = field.type.type
+    decl := ast.variant.(Ast_Value_Decl)
+    check_type(c, decl.type)
+    ast.type = decl.type.type
 }
 
 check_stmt :: proc(c: ^Checker, ast: ^Ast) {
@@ -327,7 +427,7 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         check_value_decl(c, ast)
 
     case Ast_Assign_Stmt:
-        check_ident(c, v.left)
+        check_expr(c, v.left)
 
         op: Token_Kind
         #partial switch v.op.kind {
@@ -541,6 +641,9 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
         }
         result.variant = str
 
+    case Ast_Field:
+        result = find_or_create_type_entity(c, v.type)
+
     case:
         assert(false, "AST is not a valid type")
     }
@@ -554,7 +657,16 @@ find_or_create_type_entity :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = ni
     fmt.println("find or create type:", id)
 
     if ent, ok := find_entity(c.curr_scope, id).?; ok {
-        return ent.variant.(Entity_Type).type
+        #partial switch v in ent.variant {
+        case Entity_Type:
+            return v.type
+
+        case Entity_Struct:
+            return v.type
+
+        case:
+            assert(false)
+        }
     }
 
     type := create_new_type_from_ast(c, id, ast)
@@ -564,6 +676,7 @@ find_or_create_type_entity :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = ni
 }
 
 create_type_entity :: proc(scope: ^Scope, id: string, type: ^Type, ast: ^Ast) -> ^Entity {
+    fmt.println("create type:", id)
     ent := new(Entity)
     ent.ast = ast
     ent.order_index = g_entity_order_counter
@@ -602,11 +715,10 @@ check_program :: proc(c: ^Checker) {
     // 3. check procedure bodies - needs proc declarations for checking
 
     for name, ent in c.curr_scope.entities {
-        ast_print(ent.ast, name, 0)
         c.curr_entity = ent
 
         #partial switch &v in ent.variant {
-        case Entity_Type:
+        case Entity_Struct:
             if ent.ast == nil do break
             decl := ent.ast.variant.(Ast_Struct_Decl) or_break
             check_type(c, decl.type)
@@ -616,7 +728,6 @@ check_program :: proc(c: ^Checker) {
     }
 
     for name, ent in c.curr_scope.entities {
-        ast_print(ent.ast, name, 0)
         c.curr_entity = ent
 
         #partial switch v in ent.variant {
@@ -628,7 +739,6 @@ check_program :: proc(c: ^Checker) {
     }
 
     for name, ent in c.curr_scope.entities {
-        ast_print(ent.ast, name, 0)
         c.curr_entity = ent
 
         #partial switch v in ent.variant {
