@@ -30,30 +30,17 @@ void main_vecc();
 
 
 #ifdef VECC_IMPL
+
 // VECC private function declarations
-static int32_t bar(int32_t a);
+
 static void deal_damage(Enemy* enemy, float damage);
 
 // VECC global variable declarations
 
+const int32_t CONSTANT = 123
+const float FOO = 1.2f
+
 // VECC function definitions
-static int32_t bar(int32_t a) {
-	for (int64_t i = 0; i < (int64_t)16; i += (int64_t)1) {
-		a += (int32_t)i;
-	};
-	bool8_t x = false;
-	x = !x;
-	if (x) {
-		a = -a + 1;
-	};
-	if (a > 100) {
-		a += 2;
-	} else {
-		const int32_t b = a / 2;
-		return a + b;
-	};
-	return a;
-}
 
 static void deal_damage(Enemy* enemy, float damage) {
 	enemy->health -= damage;
@@ -61,9 +48,10 @@ static void deal_damage(Enemy* enemy, float damage) {
 
 void main_vecc() {
 	Enemy enemy = {0};
-	enemy.health = 2.0f;
-	enemy.pos[0] = 123.0f;
-	enemy.pos[1] = 1.0f;
+	enemy.health = FOO;
+	enemy.ammo = 1;
+	enemy.pos.data[0] = 123.0f;
+	enemy.pos.data[1] = 1.0f;
 	deal_damage(&enemy, 2.0f);
 }
 
