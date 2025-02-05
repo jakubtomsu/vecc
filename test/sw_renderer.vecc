@@ -1,0 +1,26 @@
+procedure export compute_frame (
+    immut framebuffer   [^][4]u8
+    immut resolution    [2]i32
+    immut time          f32
+    immut delta         f32
+    immut frame         i32
+) {
+    for x i32; x < resolution.x; x += 1 {
+        for y i32; y < resolution.y; y += 1 {
+            immut index i32 = x + (y * resolution.x)
+
+            mut col [4]f32
+            col.r = (sin((conv(f32, x) * 0.05) + time) * 0.5) + 0.5
+            col.g = 1.0
+            col.w = 1.0
+
+            mut col8 [4]u8
+            col8.x = conv(u8, col.x * 255.0) & conv(u8, 0xff)
+            col8.y = conv(u8, col.y * 255.0) & conv(u8, 0xff)
+            col8.z = conv(u8, col.z * 255.0) & conv(u8, 0xff)
+            col8.w = conv(u8, col.w * 255.0) & conv(u8, 0xff)
+
+            framebuffer[index] = col8
+        }
+    }
+}

@@ -904,7 +904,7 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
             expect(p, .Close_Bracket)
             ast.variant = Ast_Multi_Pointer_Type{
                 token = tok,
-                type = parse_ident(p, expect(p, .Ident)),
+                type = parse_type(p),
             }
             result = ast
 
@@ -929,7 +929,7 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
         ast := create_ast()
         ast.variant = Ast_Pointer_Type{
             token = tok,
-            type = parse_ident(p, expect(p, .Ident)),
+            type = parse_type(p),
         }
         result = ast
 

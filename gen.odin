@@ -254,10 +254,10 @@ gen_selector_expr :: proc(g: ^Gen, ast: ^Ast) {
         assert(len(name) == 1)
         index := -1
         switch name[0] {
-        case 'x': index = 0
-        case 'y': index = 1
-        case 'z': index = 2
-        case 'w': index = 3
+        case 'x', 'r': index = 0
+        case 'y', 'g': index = 1
+        case 'z', 'b': index = 2
+        case 'w', 'a': index = 3
         }
 
         assert(index >= 0)

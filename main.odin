@@ -58,7 +58,10 @@ main :: proc() {
 
     gen_program(&gen)
 
-    dst_source := fmt.tprintf("{}.h", filepath.short_stem(src_file))
+    dst_dir, dst_file := filepath.split(src_file)
+
+    dst_source := fmt.tprintf("{}{}.h", dst_dir, filepath.stem(dst_file))
+    fmt.println("WRITING", dst_source)
 
     os.write_entire_file(dst_source, gen.source.buf[:])
     fmt.println("DONE")

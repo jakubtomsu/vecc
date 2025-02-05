@@ -37,8 +37,8 @@ static void deal_damage(Enemy* enemy, float damage);
 
 // VECC global variable declarations
 
-const int32_t CONSTANT = 123
-const float FOO = 1.2f
+const int32_t CONSTANT = 123;
+const float FOO = 1.2f;
 
 // VECC function definitions
 

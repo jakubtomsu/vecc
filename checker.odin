@@ -64,24 +64,27 @@ Scope :: struct {
     entities:       map[string]^Entity,
 }
 
-checker_error :: proc(c: ^Checker, format: string, args: ..any) {
+checker_error :: proc(c: ^Checker, format: string, args: ..any) -> ! {
     // fmt.eprintf("[{}] %s(%d:%d) ", loc, p.filename, pos.line, pos.column)
 	fmt.eprintf(format, ..args)
 	fmt.eprintln()
 	os.exit(1)
 }
 
-check_ident :: proc(c: ^Checker, ast: ^Ast) {
+check_ident :: proc(c: ^Checker, ast: ^Ast) -> ^Entity {
     ident := ast.variant.(Ast_Ident)
     name := ident.token.text
+
     if ent, scope, ok := find_entity(c.curr_scope, name); ok {
         ast.type = ent.ast.type
         if scope.parent != nil && ast.order_index < ent.ast.order_index {
             checker_error(c, "Entity is used before declaration: {}", name)
         }
-    } else {
-        checker_error(c, "Ident not found: {}", name)
+
+        return ent
     }
+
+    checker_error(c, "Ident not found: {}", name)
 }
 
 check_type :: proc(c: ^Checker, ast: ^Ast) {
@@ -105,6 +108,12 @@ check_type :: proc(c: ^Checker, ast: ^Ast) {
             field := field.variant.(Ast_Field)
             check_type(c, field.type)
         }
+
+    case Ast_Pointer_Type:
+        check_type(c, v.type)
+
+    case Ast_Multi_Pointer_Type:
+        check_type(c, v.type)
     }
     ast.type = find_or_create_type_entity(c, ast)
 }
@@ -159,12 +168,13 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
     call_expr := ast.variant.(Ast_Call_Expr)
 
-    check_ident(c, call_expr.procedure)
+    ent := check_ident(c, call_expr.procedure)
 
-    // HACK
-    procedure, _, ok := find_entity(c.curr_scope, call_expr.procedure.variant.(Ast_Ident).token.text)
-    assert(ok)
-    proc_decl := procedure.ast.variant.(Ast_Proc_Decl)
+    if _, ok := ent.variant.(Entity_Proc); !ok {
+        checker_error(c, "Invalid call entity")
+    }
+
+    proc_decl := ent.ast.variant.(Ast_Proc_Decl)
     proc_type := proc_decl.type.variant.(Ast_Proc_Type)
 
     for arg, i in call_expr.args {
@@ -336,19 +346,26 @@ check_selector_expr :: proc(c: ^Checker, ast: ^Ast) {
             if v.len > 4 {
                 break
             }
-            all_fields := "xyzw"
+
+            all_fields := [?][2]u8 {
+                0 = {'x', 'r'},
+                1 = {'y', 'g'},
+                2 = {'z', 'b'},
+                3 = {'w', 'a'},
+            }
             fields := all_fields[:v.len]
 
             if len(name) != 1 {
                 break
             }
 
-            for field in transmute([]u8)fields {
-                if field != name[0] {
-                    continue
+            field_loop: for field in fields {
+                for ch in field {
+                    if ch == name[0] {
+                        expr.right.type = v.type
+                        break field_loop
+                    }
                 }
-
-                expr.right.type = v.type
             }
         }
 
@@ -790,7 +807,7 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
 find_or_create_type_entity :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) -> ^Type {
     id := ast_type_to_id(c, ast)
 
-    // fmt.println("find or create type:", id)
+    fmt.println("find or create type:", id)
 
     if ent, _, ok := find_entity(c.curr_scope, id); ok {
         #partial switch v in ent.variant {
@@ -838,17 +855,14 @@ find_or_create_type_entity_from_type :: proc(c: ^Checker, type: ^Type) -> ^Type 
 }
 
 create_type_entity :: proc(scope: ^Scope, id: string, type: ^Type, ast: ^Ast) -> ^Entity {
-    // fmt.println("create type:", id)
-
-    ent := new(Entity)
-    ent.ast = ast
-    ent.order_index = g_entity_order_counter
-    g_entity_order_counter += 1
-    ent.variant = Entity_Type{
-        type = type,
-    }
-    scope.entities[id] = ent
-    return ent
+    return create_entity(
+        scope = scope,
+        name = id,
+        ast = ast,
+        variant = Entity_Type{
+            type = type,
+        },
+    )
 }
 
 check_type_decl :: proc(c: ^Checker, ast: ^Ast, name: string) {
@@ -915,6 +929,8 @@ check_program :: proc(c: ^Checker) {
     create_type_entity(c.curr_file_scope, "u64", new_clone(Type{size = 4, variant = Type_Basic{kind = .U64}}), nil)
     create_type_entity(c.curr_file_scope, "f32", new_clone(Type{size = 4, variant = Type_Basic{kind = .F32}}), nil)
     create_type_entity(c.curr_file_scope, "f64", new_clone(Type{size = 4, variant = Type_Basic{kind = .F64}}), nil)
+
+    create_entity(c.curr_file_scope, "sin", ast = nil, variant = Entity_Proc{})
 
     // 1. check all types
     // 2. check all entity declarations

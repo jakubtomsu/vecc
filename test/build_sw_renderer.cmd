@@ -1,0 +1,1 @@
+odin run . -- test/sw_renderer.vecc && cl test/sw_renderer.cpp /O2
