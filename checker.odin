@@ -21,7 +21,7 @@ Entity :: struct {
     name:           string,
     order_index:    int,
     variant:        Entity_Variant,
-    depends:        map[string]struct{}, // identifiers
+    // depends:        map[string]struct{}, // identifiers
 }
 
 Entity_Variant :: union {
@@ -74,14 +74,21 @@ checker_error :: proc(c: ^Checker, format: string, args: ..any) {
 check_ident :: proc(c: ^Checker, ast: ^Ast) {
     ident := ast.variant.(Ast_Ident)
     name := ident.token.text
-    if ent, ok := find_entity(c.curr_scope, name).?; ok {
+    if ent, scope, ok := find_entity(c.curr_scope, name); ok {
         ast.type = ent.ast.type
+        if scope.parent != nil && ast.order_index < ent.ast.order_index {
+            checker_error(c, "Entity is used before declaration: {}", name)
+        }
     } else {
         checker_error(c, "Ident not found: {}", name)
     }
 }
 
 check_type :: proc(c: ^Checker, ast: ^Ast) {
+    if ast.type != nil {
+        return
+    }
+
     #partial switch v in ast.variant {
     case Ast_Array_Type:
         check_expr(c, v.len)
@@ -155,7 +162,8 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
     check_ident(c, call_expr.procedure)
 
     // HACK
-    procedure := find_entity(c.curr_scope, call_expr.procedure.variant.(Ast_Ident).token.text).?
+    procedure, _, ok := find_entity(c.curr_scope, call_expr.procedure.variant.(Ast_Ident).token.text)
+    assert(ok)
     proc_decl := procedure.ast.variant.(Ast_Proc_Decl)
     proc_type := proc_decl.type.variant.(Ast_Proc_Type)
 
@@ -225,7 +233,8 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
          .Greater_Than_Equal,
          .Not_Equal:
         // HACK
-        type = find_entity(c.curr_file_scope, "bool").?.variant.(Entity_Type).type
+        ent, _ := find_entity(c.curr_file_scope, "bool") or_break
+        type := ent.variant.(Entity_Type).type
 
         if !type_is_numeric(left.type) {
             checker_error(c, "{} operator can be only applied to numeric values", op)
@@ -626,7 +635,7 @@ ast_type_to_id :: proc(c: ^Checker, ast: ^Ast) -> string {
         case "f64": return "f64"
         }
 
-        ent, ok := find_entity(c.curr_scope, v.token.text).?
+        ent, _, ok := find_entity(c.curr_scope, v.token.text)
         if !ok {
             checker_error(c, "Unknown entity: {}", v.token.text)
         }
@@ -781,9 +790,9 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
 find_or_create_type_entity :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) -> ^Type {
     id := ast_type_to_id(c, ast)
 
-    fmt.println("find or create type:", id)
+    // fmt.println("find or create type:", id)
 
-    if ent, ok := find_entity(c.curr_scope, id).?; ok {
+    if ent, _, ok := find_entity(c.curr_scope, id); ok {
         #partial switch v in ent.variant {
         case Entity_Type:
             return v.type
@@ -810,7 +819,7 @@ find_or_create_type_entity :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = ni
 find_or_create_type_entity_from_type :: proc(c: ^Checker, type: ^Type) -> ^Type {
     id := type_to_id(c, type)
 
-    if ent, ok := find_entity(c.curr_scope, id).?; ok {
+    if ent, _, ok := find_entity(c.curr_scope, id); ok {
         #partial switch v in ent.variant {
         case Entity_Type:
             return v.type
@@ -829,7 +838,8 @@ find_or_create_type_entity_from_type :: proc(c: ^Checker, type: ^Type) -> ^Type 
 }
 
 create_type_entity :: proc(scope: ^Scope, id: string, type: ^Type, ast: ^Ast) -> ^Entity {
-    fmt.println("create type:", id)
+    // fmt.println("create type:", id)
+
     ent := new(Entity)
     ent.ast = ast
     ent.order_index = g_entity_order_counter
@@ -843,6 +853,48 @@ create_type_entity :: proc(scope: ^Scope, id: string, type: ^Type, ast: ^Ast) ->
 
 check_type_decl :: proc(c: ^Checker, ast: ^Ast, name: string) {
 
+}
+
+check_scope_structs_recursive :: proc(c: ^Checker, scope: ^Scope) {
+    for name, ent in scope.entities {
+        c.curr_entity = ent
+
+        #partial switch &v in ent.variant {
+        case Entity_Struct:
+            if ent.ast == nil do break
+            decl := ent.ast.variant.(Ast_Struct_Decl) or_break
+            check_type(c, decl.type)
+            ent.ast.type = decl.type.type
+            v.type = decl.type.type
+        }
+    }
+
+    for child in scope.children {
+        c.curr_scope = child
+        check_scope_structs_recursive(c, child)
+        c.curr_scope = c.curr_scope.parent
+    }
+}
+
+check_scope_procedures_recursive :: proc(c: ^Checker, scope: ^Scope) {
+    for name, ent in scope.entities {
+        c.curr_entity = ent
+
+        ast_print(ent.ast, "", 0)
+
+        #partial switch v in ent.variant {
+        case Entity_Proc:
+            decl := ent.ast.variant.(Ast_Proc_Decl)
+            check_proc_type(c, decl.type, name)
+            ent.ast.type = decl.type.type
+        }
+    }
+
+    for child in scope.children {
+        c.curr_scope = child
+        check_scope_procedures_recursive(c, child)
+        c.curr_scope = c.curr_scope.parent
+    }
 }
 
 // Check and codegen C
@@ -868,31 +920,24 @@ check_program :: proc(c: ^Checker) {
     // 2. check all entity declarations
     // 3. check procedure bodies - needs proc declarations for checking
 
-    for name, ent in c.curr_scope.entities {
+    check_scope_structs_recursive(c, c.curr_file_scope)
+
+    for name, ent in c.curr_file_scope.entities {
         c.curr_entity = ent
 
-        #partial switch &v in ent.variant {
-        case Entity_Struct:
-            if ent.ast == nil do break
-            decl := ent.ast.variant.(Ast_Struct_Decl) or_break
-            check_type(c, decl.type)
-            ent.ast.type = decl.type.type
-            v.type = decl.type.type
-        }
-    }
-
-    for name, ent in c.curr_scope.entities {
-        c.curr_entity = ent
+        ast_print(ent.ast, "", 0)
 
         #partial switch v in ent.variant {
-        case Entity_Proc:
-            decl := ent.ast.variant.(Ast_Proc_Decl)
-            check_proc_type(c, decl.type, name)
+        case Entity_Variable:
+            decl := ent.ast.variant.(Ast_Value_Decl)
+            check_value_decl(c, ent.ast)
             ent.ast.type = decl.type.type
         }
     }
 
-    for name, ent in c.curr_scope.entities {
+    check_scope_procedures_recursive(c, c.curr_file_scope)
+
+    for name, ent in c.curr_file_scope.entities {
         c.curr_entity = ent
 
         #partial switch v in ent.variant {

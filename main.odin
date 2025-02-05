@@ -66,12 +66,12 @@ main :: proc() {
 
 
 
-find_entity :: proc(scope: ^Scope, name: string) -> Maybe(^Entity) {
+find_entity :: proc(scope: ^Scope, name: string) -> (^Entity, ^Scope, bool) {
     for s := scope; s != nil; s = s.parent {
         ent := s.entities[name] or_continue
-        return ent
+        return ent, s, true
     }
-    return nil
+    return nil, nil, false
 }
 
 // Ensure the integer can be safely cast into 'Dst'

@@ -58,12 +58,24 @@ gen_basic_literal :: proc(g: ^Gen, ast: ^Ast) {
         gen_print(g, v)
 
     case f64:
-        gen_print(g, v)
-        #partial switch v in ast.type.variant {
+        #partial switch tv in ast.type.variant {
         case Type_Basic:
-            #partial switch v.kind {
+            #partial switch tv.kind {
             case .F32:
-                gen_print(g, ".0f") // TEMP HACK
+                val := fmt.tprint(f32(v))
+                gen_printf(g, val)
+                // HACK this is silly
+                if slice.contains(transmute([]u8)val, '.') {
+                    gen_print(g, "f")
+                } else {
+                    gen_print(g, ".0f")
+                }
+
+            case .F64:
+                gen_print(g, v)
+
+            case:
+                assert(false)
             }
         case:
             assert(false)
@@ -250,7 +262,7 @@ gen_selector_expr :: proc(g: ^Gen, ast: ^Ast) {
 
         assert(index >= 0)
 
-        gen_print(g, "[")
+        gen_print(g, ".data[")
         gen_print(g, index)
         gen_print(g, "]")
 
@@ -575,9 +587,13 @@ gen_block_stmt :: proc(g: ^Gen, ast: ^Ast) {
     defer gen_end_scope(g)
 
     for s in stmt.statements {
-        gen_indent(g)
-        gen_stmt(g, s)
-        gen_print(g, ";\n")
+        #partial switch _ in s.variant {
+        case Ast_Proc_Decl, Ast_Struct_Decl:
+        case:
+            gen_indent(g)
+            gen_stmt(g, s)
+            gen_print(g, ";\n")
+        }
     }
 }
 
@@ -663,7 +679,38 @@ gen_struct_decl :: proc(g: ^Gen, ast: ^Ast) {
     decl := ast.variant.(Ast_Struct_Decl)
 }
 
+// HACK, set struct cnames to one of the associated entities.
+// Two exact same structs are rare but possible
+gen_struct_entity_cnames_recursive :: proc(g: ^Gen, scope: ^Scope) {
+    for name, ent in scope.entities {
+        #partial switch v in ent.variant {
+        case Entity_Struct:
+            v.type.cname = name
+        }
+    }
 
+    for child in scope.children {
+        g.curr_scope = child
+        gen_struct_entity_cnames_recursive(g, child)
+        g.curr_scope = g.curr_scope.parent
+    }
+}
+
+gen_type_entity_cnames_recursive :: proc(g: ^Gen, scope: ^Scope) {
+    for name, ent in scope.entities {
+        #partial switch v in ent.variant {
+        case Entity_Type:
+            v.type.cname = gen_type_generate_cname(g, v.type, name)
+            v.type.cname_lower = strings.to_lower(v.type.cname)
+        }
+    }
+
+    for child in scope.children {
+        g.curr_scope = child
+        gen_type_entity_cnames_recursive(g, child)
+        g.curr_scope = g.curr_scope.parent
+    }
+}
 
 gen_program :: proc(g: ^Gen) {
     gen_print(g, "#ifndef VECC_DEFINED\n")
@@ -719,25 +766,9 @@ gen_program :: proc(g: ^Gen) {
     gen_print(g, "typedef int32_t bool32_t;\n")
     gen_print(g, "typedef int64_t bool64_t;\n")
 
-    // HACK, set struct cnames to one of the associated entities.
-    // Two exact same structs are rare but possible
-    for name, ent in g.curr_file_scope.entities {
-        #partial switch v in ent.variant {
-        case Entity_Struct:
-            v.type.cname = name
-        }
-    }
+    gen_struct_entity_cnames_recursive(g, g.curr_file_scope)
 
-    for name, ent in g.curr_file_scope.entities {
-        #partial switch v in ent.variant {
-        case Entity_Type:
-            if v.type.cname != "" {
-                break
-            }
-            v.type.cname = gen_type_generate_cname(g, v.type, name)
-            v.type.cname_lower = strings.to_lower(v.type.cname)
-        }
-    }
+    gen_type_entity_cnames_recursive(g, g.curr_file_scope)
 
     for sorted in sorted_entities {
         #partial switch v in sorted.entity.variant {
@@ -762,9 +793,9 @@ gen_program :: proc(g: ^Gen) {
     gen_print(g, "#endif // VECC_DEFINED\n\n")
 
     // FIXME: make sure the impl expands only once
-    gen_print(g, "\n#ifdef VECC_IMPL")
+    gen_print(g, "\n#ifdef VECC_IMPL\n")
 
-    gen_print(g, "\n// VECC private function declarations\n")
+    gen_print(g, "\n// VECC private function declarations\n\n")
 
     for sorted in sorted_entities {
         #partial switch v in sorted.entity.variant {
@@ -784,16 +815,18 @@ gen_program :: proc(g: ^Gen) {
         }
     }
 
-    gen_print(g, "\n// VECC global variable declarations\n")
+    gen_print(g, "\n// VECC global variable declarations\n\n")
 
     for sorted in sorted_entities {
         #partial switch v in sorted.entity.variant {
         case Entity_Variable:
             decl := sorted.entity.ast.variant.(Ast_Value_Decl)
+            gen_value_decl(g, sorted.entity.ast)
+            gen_print(g, ";\n")
         }
     }
 
-    gen_print(g, "\n// VECC function definitions\n")
+    gen_print(g, "\n// VECC function definitions\n\n")
 
     for sorted in sorted_entities {
         // ast_print(sorted.entity.ast, sorted.name, 0)
@@ -811,5 +844,5 @@ gen_program :: proc(g: ^Gen) {
         }
     }
 
-    gen_print(g, "#endif // VECC_IMPL")
+    gen_print(g, "#endif // VECC_IMPL\n")
 }
