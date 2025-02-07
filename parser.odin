@@ -31,6 +31,8 @@ Value :: union {
     bool,
     i128,
     f64,
+    [8]i32, // HACK
+    [8]f32
 }
 
 Ast_Variant :: union {
@@ -78,6 +80,7 @@ Ast_Basic_Literal :: struct {
 
 Ast_Value_Decl :: struct {
     private:    bool,
+    vector:     bool,
     mut:        Value_Mutablity,
     scope:      ^Scope,
     entity:     ^Entity,
@@ -270,7 +273,7 @@ ast_print :: proc(ast: ^Ast, name: string, depth: int) {
     case Ast_Cast_Expr:     fmt.print(" :", v.op.text)
     case Ast_Break_Stmt:    fmt.print(" :", v.token.text)
     case Ast_Continue_Stmt: fmt.print(" :", v.token.text)
-    case Ast_Value_Decl:    fmt.printf(" : mut={} private={}", v.mut, v.private)
+    case Ast_Value_Decl:    fmt.printf(" : {} vector={} private={}", v.mut, v.vector, v.private)
     case Ast_Proc_Decl:     fmt.printf(" : export={} private={}", v.export, v.private)
     case Ast_Array_Type:    fmt.printf(" : kind={}", v.kind)
     }
@@ -775,10 +778,13 @@ parse_range_stmt :: proc(p: ^Parser) -> ^Ast {
     type.variant = Ast_Ident{token = {text = "i64"}}
     register_value_entity(p,
         mut = .Mutable,
+        vector = false,
+        private = false,
         ident_tok = ident_tok,
         name = for_stmt.ident,
         type = type,
-        value = nil)
+        value = nil,
+    )
 
     expect(p, .Colon)
 
@@ -853,28 +859,28 @@ parse_block :: proc(p: ^Parser, ignore_scope := false) -> ^Ast {
     return result
 }
 
-register_value_entity :: proc(p: ^Parser, mut: Value_Mutablity, ident_tok: Token, name: ^Ast, type: ^Ast, value: ^Ast) -> ^Ast {
+register_value_entity :: proc(
+    p:          ^Parser,
+    mut:        Value_Mutablity,
+    vector:     bool,
+    private:    bool,
+    ident_tok:  Token,
+    name:       ^Ast,
+    type:       ^Ast,
+    value:      ^Ast,
+) -> ^Ast {
     ast := create_ast()
     value_decl: Ast_Value_Decl
 
     value_decl.mut = mut
-    value_decl.private = allow(p, .Private)
-
+    value_decl.private = private
+    value_decl.vector = vector
     value_decl.scope = p.curr_scope
-
     value_decl.name = name
     value_decl.type = type
     value_decl.value = value
 
     name := ident_tok.text
-
-    if strings.has_prefix(name, "vecc_") {
-        parser_error(p, ident_tok, "'vecc_' prefix is reserved for the compiler.")
-    }
-
-    if _, _, ok := find_entity(p.curr_scope, name); ok {
-        parser_error(p, ident_tok, "Duplicate entity name: {}", name)
-    }
 
     switch mut {
     case .Constant:
@@ -882,9 +888,10 @@ register_value_entity :: proc(p: ^Parser, mut: Value_Mutablity, ident_tok: Token
     case .Invalid, .Mutable, .Immutable:
     }
 
-    entity := create_entity(value_decl.scope,
-        name = name,
-        ast = ast,
+    entity := register_entity(p,
+        scope   = value_decl.scope,
+        name    = name,
+        ast     = ast,
         variant = Entity_Variable{},
     )
 
@@ -957,6 +964,9 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
 }
 
 parse_value_decl :: proc(p: ^Parser, mut: Value_Mutablity) -> ^Ast {
+    private := allow(p, .Private)
+    vector := allow(p, .Vector)
+
     ident_tok := next(p)
     name := parse_ident(p, ident_tok)
     type := parse_type(p)
@@ -967,6 +977,8 @@ parse_value_decl :: proc(p: ^Parser, mut: Value_Mutablity) -> ^Ast {
 
     return register_value_entity(p,
         mut         = mut,
+        vector      = vector,
+        private     = private,
         ident_tok   = ident_tok,
         name        = name,
         type        = type,

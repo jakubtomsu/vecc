@@ -1,3 +1,7 @@
+// const vector INDEX i32 = vector_index
+
+const W i32 = 8
+
 procedure export compute_frame (
     immut framebuffer   [^][4]u8
     immut resolution    [2]i32
@@ -5,22 +9,29 @@ procedure export compute_frame (
     immut delta         f32
     immut frame         i32
 ) {
-    for x i32; x < resolution.x; x += 1 {
-        for y i32; y < resolution.y; y += 1 {
-            immut index i32 = x + (y * resolution.x)
+    for y i32; y < resolution.y; y += 1 {
+        for x i32; x < resolution.x; x += vector_width {
+            immut index i32 = (x + (y * resolution.x))
 
-            mut col [4]f32
-            col.r = (sin((conv(f32, x) * 0.05) + time) * 0.5) + 0.5
-            col.g = 1.0
-            col.w = 1.0
+            mut vector uv [2]f32
+            // uv.x = conv(f32, x) / conv(f32, resolution.x)
+            // uv.y = conv(f32, y) / conv(f32, resolution.y)
 
-            mut col8 [4]u8
-            col8.x = conv(u8, col.x * 255.0) & conv(u8, 0xff)
-            col8.y = conv(u8, col.y * 255.0) & conv(u8, 0xff)
-            col8.z = conv(u8, col.z * 255.0) & conv(u8, 0xff)
-            col8.w = conv(u8, col.w * 255.0) & conv(u8, 0xff)
+            // mut vector col [4]f32
+            // // col.r = (sin((conv(f32, x) * 0.05) + time) * 0.5) + 0.5
+            // col.r = uv.x
+            // col.g = uv.y
+            // col.w = 1.0
 
-            framebuffer[index] = col8
+            // mut vector col8 [4]u8
+            // col8.b = conv(u8, col.r * 255.0) & conv(u8, 0xff)
+            // col8.g = conv(u8, col.g * 255.0) & conv(u8, 0xff)
+            // col8.r = conv(u8, col.b * 255.0) & conv(u8, 0xff)
+            // col8.a = conv(u8, col.a * 255.0) & conv(u8, 0xff)
+
+            // for i i32; i < vector_width; i += 1 {
+            //     framebuffer[base_index + i] = col8[i]
+            // }
         }
     }
 }

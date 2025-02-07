@@ -21,7 +21,8 @@ Entity :: struct {
     name:           string,
     order_index:    int,
     variant:        Entity_Variant,
-    // depends:        map[string]struct{}, // identifiers
+    // TODO
+    depends:        map[string]struct{},
 }
 
 Entity_Variant :: union {
@@ -31,6 +32,7 @@ Entity_Variant :: union {
     Entity_Alias,
     Entity_Struct,
     Entity_Struct_Field,
+    Entity_Builtin,
 }
 
 Entity_Proc :: struct {
@@ -39,6 +41,16 @@ Entity_Proc :: struct {
 
 Entity_Variable :: struct {
 
+}
+
+Entity_Builtin :: struct {
+    kind:   Entity_Builtin_Kind,
+    type:   ^Type,
+    value:  Value,
+}
+
+Entity_Builtin_Kind :: enum u8 {
+    Vector_Index,
 }
 
 Entity_Type :: struct {
@@ -76,9 +88,17 @@ check_ident :: proc(c: ^Checker, ast: ^Ast) -> ^Entity {
     name := ident.token.text
 
     if ent, scope, ok := find_entity(c.curr_scope, name); ok {
-        ast.type = ent.ast.type
-        if scope.parent != nil && ast.order_index < ent.ast.order_index {
-            checker_error(c, "Entity is used before declaration: {}", name)
+        #partial switch v in ent.variant {
+        case Entity_Builtin:
+            ast.type = v.type
+            ast.value = v.value
+
+        case:
+            ast.type = ent.ast.type
+            ast.value = ent.ast.value
+            if scope.parent != nil && ast.order_index < ent.ast.order_index {
+                checker_error(c, "Entity is used before declaration: {}", name)
+            }
         }
 
         return ent
@@ -115,6 +135,7 @@ check_type :: proc(c: ^Checker, ast: ^Ast) {
     case Ast_Multi_Pointer_Type:
         check_type(c, v.type)
     }
+
     ast.type = find_or_create_type_entity(c, ast)
 }
 
@@ -484,11 +505,18 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
     check_type(c, decl.type)
     // check_ident(c, value.name)
 
+    if decl.vector {
+        // NOTE: things like this could be cached on the scalar type, but idgaf for now
+        vec := type_vectorize(decl.type.type)
+        decl.type.type = find_or_create_type_entity_from_type(c, vec)
+    }
+
     if decl.value != nil {
         check_expr(c, decl.value)
         if decl.type.type != decl.value.type {
             checker_error(c, "Initializer value type doesn't match, expected {}, got {}", type_to_string(decl.type.type), type_to_string(decl.value.type))
         }
+        ast.value = decl.value.value
     }
     ast.type = decl.type.type
 }
@@ -553,6 +581,8 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         check_if_stmt(c, ast)
 
     case Ast_Break_Stmt:
+        // for s := c.curr_scope; s != nil; s = s.parent {
+        // }
 
     case Ast_Continue_Stmt:
 
@@ -913,24 +943,46 @@ check_scope_procedures_recursive :: proc(c: ^Checker, scope: ^Scope) {
 
 // Check and codegen C
 check_program :: proc(c: ^Checker) {
-    b8_type := new_clone(Type{size = 1, variant = Type_Basic{kind = .B8}})
-    create_type_entity(c.curr_file_scope, "bool", b8_type, nil)
-    create_type_entity(c.curr_file_scope, "b8" ,  b8_type, nil)
-    create_type_entity(c.curr_file_scope, "b16", new_clone(Type{size = 4, variant = Type_Basic{kind = .B16}}), nil)
-    create_type_entity(c.curr_file_scope, "b32", new_clone(Type{size = 4, variant = Type_Basic{kind = .B32}}), nil)
-    create_type_entity(c.curr_file_scope, "b64", new_clone(Type{size = 4, variant = Type_Basic{kind = .B64}}), nil)
-    create_type_entity(c.curr_file_scope, "i8" , new_clone(Type{size = 4, variant = Type_Basic{kind = .I8 }}), nil)
-    create_type_entity(c.curr_file_scope, "i16", new_clone(Type{size = 4, variant = Type_Basic{kind = .I16}}), nil)
-    create_type_entity(c.curr_file_scope, "i32", new_clone(Type{size = 4, variant = Type_Basic{kind = .I32}}), nil)
-    create_type_entity(c.curr_file_scope, "i64", new_clone(Type{size = 4, variant = Type_Basic{kind = .I64}}), nil)
-    create_type_entity(c.curr_file_scope, "u8" , new_clone(Type{size = 4, variant = Type_Basic{kind = .U8 }}), nil)
-    create_type_entity(c.curr_file_scope, "u16", new_clone(Type{size = 4, variant = Type_Basic{kind = .U16}}), nil)
-    create_type_entity(c.curr_file_scope, "u32", new_clone(Type{size = 4, variant = Type_Basic{kind = .U32}}), nil)
-    create_type_entity(c.curr_file_scope, "u64", new_clone(Type{size = 4, variant = Type_Basic{kind = .U64}}), nil)
-    create_type_entity(c.curr_file_scope, "f32", new_clone(Type{size = 4, variant = Type_Basic{kind = .F32}}), nil)
-    create_type_entity(c.curr_file_scope, "f64", new_clone(Type{size = 4, variant = Type_Basic{kind = .F64}}), nil)
+    basic_types := [Type_Basic_Kind]^Type{
+        .B8  = new_clone(Type{size = 1, variant = Type_Basic{kind = .B8 }}),
+        .B16 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B16}}),
+        .B32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B32}}),
+        .B64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B64}}),
+        .I8  = new_clone(Type{size = 4, variant = Type_Basic{kind = .I8 }}),
+        .I16 = new_clone(Type{size = 4, variant = Type_Basic{kind = .I16}}),
+        .I32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .I32}}),
+        .I64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .I64}}),
+        .U8  = new_clone(Type{size = 4, variant = Type_Basic{kind = .U8 }}),
+        .U16 = new_clone(Type{size = 4, variant = Type_Basic{kind = .U16}}),
+        .U32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .U32}}),
+        .U64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .U64}}),
+        .F32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .F32}}),
+        .F64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .F64}}),
+    }
 
-    create_entity(c.curr_file_scope, "sin", ast = nil, variant = Entity_Proc{})
+    create_type_entity(c.curr_file_scope, "bool",basic_types[.B8 ], nil)
+    create_type_entity(c.curr_file_scope, "b8" , basic_types[.B8 ], nil)
+    create_type_entity(c.curr_file_scope, "b16", basic_types[.B16], nil)
+    create_type_entity(c.curr_file_scope, "b32", basic_types[.B32], nil)
+    create_type_entity(c.curr_file_scope, "b64", basic_types[.B64], nil)
+    create_type_entity(c.curr_file_scope, "i8" , basic_types[.I8 ], nil)
+    create_type_entity(c.curr_file_scope, "i16", basic_types[.I16], nil)
+    create_type_entity(c.curr_file_scope, "i32", basic_types[.I32], nil)
+    create_type_entity(c.curr_file_scope, "i64", basic_types[.I64], nil)
+    create_type_entity(c.curr_file_scope, "u8" , basic_types[.U8 ], nil)
+    create_type_entity(c.curr_file_scope, "u16", basic_types[.U16], nil)
+    create_type_entity(c.curr_file_scope, "u32", basic_types[.U32], nil)
+    create_type_entity(c.curr_file_scope, "u64", basic_types[.U64], nil)
+    create_type_entity(c.curr_file_scope, "f32", basic_types[.F32], nil)
+    create_type_entity(c.curr_file_scope, "f64", basic_types[.F64], nil)
+
+    v8i32_type := find_or_create_type_entity_from_type(c, new_clone(Type{variant = Type_Array{
+        kind = .Vector, len = 8, type = basic_types[.I32],
+    }}))
+
+    create_entity(c.curr_file_scope, "vector_width", nil, Entity_Builtin{kind = .Vector_Index, value = VECTOR_WIDTH, type = basic_types[.I32]})
+    create_entity(c.curr_file_scope, "vector_index", nil, Entity_Builtin{
+        kind = .Vector_Index, value = [8]i32{0, 1, 2, 3, 4, 5, 6, 7}, type = v8i32_type})
 
     // 1. check all types
     // 2. check all entity declarations

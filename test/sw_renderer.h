@@ -19,7 +19,8 @@ typedef int32_t bool32_t;
 typedef int64_t bool64_t;
 typedef struct Aos4_uint8_t { uint8_t data[4]; } Aos4_uint8_t;
 typedef struct Aos2_int32_t { int32_t data[2]; } Aos2_int32_t;
-typedef struct Aos4_float { float data[4]; } Aos4_float;
+typedef struct Aos2_float { float data[2]; } Aos2_float;
+typedef struct Aos2___m256 {  data[2]; } Aos2___m256;
 
 // VECC exported function declarations
 void compute_frame(Aos4_uint8_t* framebuffer, Aos2_int32_t resolution, float time, float delta, int32_t frame);
@@ -33,23 +34,17 @@ void compute_frame(Aos4_uint8_t* framebuffer, Aos2_int32_t resolution, float tim
 
 // VECC global variable declarations
 
+const int32_t W = 8;
+const int32_t vector_width = 8;
+const __m256i vector_index = _mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0);
 
 // VECC function definitions
 
 void compute_frame(Aos4_uint8_t* framebuffer, Aos2_int32_t resolution, float time, float delta, int32_t frame) {
-	for (int32_t x = 0; x < resolution.data[0]; x += 1) {
-		for (int32_t y = 0; y < resolution.data[1]; y += 1) {
+	for (int32_t y = 0; y < resolution.data[1]; y += 1) {
+		for (int32_t x = 0; x < resolution.data[0]; x += vector_width) {
 			const int32_t index = x + (y * resolution.data[0]);
-			Aos4_float col = {0};
-			col.data[0] = ((float)x * 0.05f) + time;
-			col.data[1] = 1.0f;
-			col.data[3] = 1.0f;
-			Aos4_uint8_t col8 = {0};
-			col8.data[0] = (uint8_t)(col.data[0] * 255.0f) & (uint8_t)255;
-			col8.data[1] = (uint8_t)(col.data[1] * 255.0f) & (uint8_t)255;
-			col8.data[2] = (uint8_t)(col.data[2] * 255.0f) & (uint8_t)255;
-			col8.data[3] = (uint8_t)(col.data[3] * 255.0f) & (uint8_t)255;
-			framebuffer[index] = col8;
+			Aos2___m256 uv = {0};
 		};
 	};
 }

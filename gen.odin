@@ -48,9 +48,8 @@ gen_printf :: proc(g: ^Gen, format: string, args: ..any) {
     fmt.sbprintf(&g.source, fmt = format, args = args)
 }
 
-gen_basic_literal :: proc(g: ^Gen, ast: ^Ast) {
-    lit := ast.variant.(Ast_Basic_Literal)
-    switch v in ast.value {
+gen_value :: proc(g: ^Gen, value: Value, type: ^Type) {
+    switch v in value {
     case bool:
         gen_print(g, v)
 
@@ -58,7 +57,7 @@ gen_basic_literal :: proc(g: ^Gen, ast: ^Ast) {
         gen_print(g, v)
 
     case f64:
-        #partial switch tv in ast.type.variant {
+        #partial switch tv in type.variant {
         case Type_Basic:
             #partial switch tv.kind {
             case .F32:
@@ -81,9 +80,38 @@ gen_basic_literal :: proc(g: ^Gen, ast: ^Ast) {
             assert(false)
         }
 
+    case [8]i32:
+        gen_printf(g, "_mm256_set_epi32(%i, %i, %i, %i, %i, %i, %i, %i)",
+            v[7],
+            v[6],
+            v[5],
+            v[4],
+            v[3],
+            v[2],
+            v[1],
+            v[0],
+        )
+
+    case [8]f32:
+    gen_printf(g, "_mm256_set_ps(%i, %i, %i, %i, %i, %i, %i, %i)",
+            v[7],
+            v[6],
+            v[5],
+            v[4],
+            v[3],
+            v[2],
+            v[1],
+            v[0],
+        )
+
     case nil:
         assert(false)
     }
+}
+
+gen_basic_literal :: proc(g: ^Gen, ast: ^Ast) {
+    lit := ast.variant.(Ast_Basic_Literal)
+    gen_value(g, ast.value, ast.type)
 }
 
 gen_ident :: proc(g: ^Gen, ast: ^Ast) {
@@ -333,38 +361,38 @@ gen_type_decl :: proc(g: ^Gen, type: ^Type) {
     case Type_Array:
         switch v.kind {
         case .Vector:
-            gen_printf(g, "typedef struct {} {{ ", type.cname)
-            assert(math.is_power_of_two(v.len))
-            basic := v.type.variant.(Type_Basic)
+            // gen_printf(g, "typedef struct {} {{ ", type.cname)
+            // assert(math.is_power_of_two(v.len))
+            // basic := v.type.variant.(Type_Basic)
 
-            elem_bytes := 0
-            switch basic.kind {
-            case .B8 : elem_bytes = 1
-            case .B16: elem_bytes = 2
-            case .B32: elem_bytes = 4
-            case .B64: elem_bytes = 8
+            // elem_bytes := 0
+            // switch basic.kind {
+            // case .B8 : elem_bytes = 1
+            // case .B16: elem_bytes = 2
+            // case .B32: elem_bytes = 4
+            // case .B64: elem_bytes = 8
 
-            case .I8 : elem_bytes = 1
-            case .I16: elem_bytes = 2
-            case .I32: elem_bytes = 4
-            case .I64: elem_bytes = 8
+            // case .I8 : elem_bytes = 1
+            // case .I16: elem_bytes = 2
+            // case .I32: elem_bytes = 4
+            // case .I64: elem_bytes = 8
 
-            case .U8 : elem_bytes = 1
-            case .U16: elem_bytes = 2
-            case .U32: elem_bytes = 4
-            case .U64: elem_bytes = 8
+            // case .U8 : elem_bytes = 1
+            // case .U16: elem_bytes = 2
+            // case .U32: elem_bytes = 4
+            // case .U64: elem_bytes = 8
 
-            case .F32: elem_bytes = 4
-            case .F64: elem_bytes = 8
-            }
+            // case .F32: elem_bytes = 4
+            // case .F64: elem_bytes = 8
+            // }
 
-            // simd_len :=
+            // // simd_len :=
 
-            num_simds := v.len / (128 / 8)
-            if num_simds <= 0 do num_simds = 1
-            simd_type_name := "__m128i"
-            gen_printf(g, "{} data[{}]; ", simd_type_name, num_simds)
-            gen_printf(g, "}} {};\n", type.cname)
+            // num_simds := v.len / (128 / 8)
+            // if num_simds <= 0 do num_simds = 1
+            // simd_type_name := "__m128i"
+            // gen_printf(g, "{} data[{}]; ", simd_type_name, num_simds)
+            // gen_printf(g, "}} {};\n", type.cname)
 
         case .Fixed_Array:
             gen_printf(g, "typedef struct {} {{ ", type.cname)
@@ -485,13 +513,41 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type, ent_name := "") -> string 
         }
 
     case Type_Array:
-        name := gen_type_generate_cname(g, v.type)
-
         switch v.kind {
         case .Vector:
-            return fmt.tprintf("Vec{}_{}", v.len, name)
+            fmt.println(type_to_string(type))
+            elem := v.type.variant.(Type_Basic)
+
+            backing: string
+            switch v.len {
+            case 8:
+                #partial switch elem.kind {
+                case .B8 : backing = "__m128i"
+                case .B16: backing = "__m128i"
+                case .B32: backing = "__m256i"
+                case .I8 : backing = "__m128i"
+                case .I16: backing = "__m128i"
+                case .I32: backing = "__m256i"
+                case .U8 : backing = "__m128i"
+                case .U16: backing = "__m128i"
+                case .U32: backing = "__m256i"
+                case .F32: backing = "__m256"
+                case:
+                    assert(false)
+                }
+            }
+
+            return backing
+
         case .Fixed_Array:
-            return fmt.tprintf("Aos{}_{}", v.len, name)
+            name := gen_type_generate_cname(g, v.type)
+
+            switch v.kind {
+            case .Vector:
+                return fmt.tprintf("Vec{}_{}", v.len, name)
+            case .Fixed_Array:
+                return fmt.tprintf("Aos{}_{}", v.len, name)
+            }
         }
 
     case Type_Pointer:
@@ -740,6 +796,7 @@ gen_program :: proc(g: ^Gen) {
         case Entity_Proc:
         case Entity_Variable:
         case Entity_Type:
+        case Entity_Builtin:
         case:
             continue
         }
@@ -822,6 +879,16 @@ gen_program :: proc(g: ^Gen) {
         case Entity_Variable:
             decl := sorted.entity.ast.variant.(Ast_Value_Decl)
             gen_value_decl(g, sorted.entity.ast)
+            gen_print(g, ";\n")
+
+        case Entity_Builtin:
+            gen_print(g, "const")
+            gen_print(g, " ")
+            gen_type(g, v.type)
+            gen_print(g, " ")
+            gen_print(g, sorted.name)
+            gen_print(g, " = ")
+            gen_value(g, v.value, v.type)
             gen_print(g, ";\n")
         }
     }
