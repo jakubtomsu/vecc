@@ -9,3 +9,11 @@ https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/lectures/07_gpucore.p
     - exec mask vs active lane unordered array
 - first parameter overloading and self call expressions
 - combined vs underlying (native) vector types
+
+# Features
+- procedural code
+- strong static type checking
+    - type hint system for inferring literal types
+- constant folding
+- type vectorization
+- C codegen backend
