@@ -460,3 +460,106 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
     result.text = string(t.data[result.offset:t.offset])
     return result, err
 }
+
+token_normalize_assign_op :: proc(kind: Token_Kind) -> (Token_Kind, bool) {
+    #partial switch kind {
+    case .Assign_Add:               return .Add, true
+    case .Assign_Sub:               return .Sub, true
+    case .Assign_Mul:               return .Mul, true
+    case .Assign_Div:               return .Div, true
+    case .Assign_Mod:               return .Mod, true
+    case .Assign_Bit_And:           return .Bit_And, true
+    case .Assign_Bit_Or:            return .Bit_Or, true
+    case .Assign_Bit_Xor:           return .Bit_Xor, true
+    case .Assign_Bit_Shift_Left:    return .Bit_Shift_Left, true
+    case .Assign_Bit_Shift_Right:   return .Bit_Shift_Right, true
+    case .Assign:                   return .Assign, true
+    }
+    return kind, false
+}
+
+@(rodata)
+_token_str := [Token_Kind]string{
+    .Invalid = "INVALID",
+    .EOF = "EOF",
+
+    .Ident = "Ident",
+    .Builtin = "@",
+
+    .Integer = "Integer",
+    .Float = "Float",
+    .String = "String",
+    .Char = "Char",
+    .True = "True",
+    .False = "False",
+
+    .Period = ".",
+    .Comma = ",",
+    .Semicolon = ";",
+    .Colon = ":",
+
+    .Open_Paren = "(",
+    .Close_Paren = ")",
+    .Open_Brace = "{",
+    .Close_Brace = "}",
+    .Open_Bracket = "[",
+    .Close_Bracket = "]",
+
+    .If = "if",
+    .Else = "else",
+    .For = "for",
+    .Range = "range",
+    .Break = "break",
+    .Mut = "mut",
+    .Immut = "immut",
+    .Const = "const",
+    .Continue = "continue",
+    .Struct = "struct",
+    .In = "in",
+    .Proc = "proc",
+    .Vector = "vector",
+    .Scalar = "scalar",
+    .Conv = "conv",
+    .Reinterpret = "reinterpret",
+    .Return = "return",
+    .Lanes = "lanes",
+    .Private = "private",
+    .Export = "export",
+
+    .Equal = "==",
+    .Less_Than = "<",
+    .Less_Than_Equal = "<=",
+    .Greater_Than = ">",
+    .Greater_Than_Equal = ">=",
+    .Not_Equal = "!=",
+
+    .Add = "+",
+    .Sub = "-",
+    .Mul = "*",
+    .Div = "/",
+    .Mod = "%",
+
+    .Bit_And = "&",
+    .Bit_Or = "|",
+    .Bit_Xor = "^",
+    .Bit_Shift_Left = "<<",
+    .Bit_Shift_Right = ">>",
+
+    .Bit_Not = "~",
+    .Not     = "!",
+
+    .Assign                 = "=",
+    .Assign_Add             = "+=",
+    .Assign_Sub             = "-=",
+    .Assign_Mul             = "*=",
+    .Assign_Div             = "/=",
+    .Assign_Mod             = "%=",
+    .Assign_Bit_And         = "&=",
+    .Assign_Bit_Or          = "|=",
+    .Assign_Bit_Xor         = "^=",
+    .Assign_Bit_Shift_Left  = "<<=",
+    .Assign_Bit_Shift_Right = ">>=",
+
+    .Range_Excl = "..<",
+    .Range_Incl = "..=",
+}
