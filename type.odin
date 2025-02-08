@@ -116,14 +116,14 @@ type_elem_basic_type :: proc(t: ^Type) -> ^Type {
         return t
 
     case Type_Array:
-        type_elem_basic_type(v.type)
+        return type_elem_basic_type(v.type)
 
     case Type_Pointer:
-        type_elem_basic_type(v.type)
+        return type_elem_basic_type(v.type)
 
     case Type_Struct:
     }
-    return nil
+    return t
 }
 
 type_is_float :: proc(t: ^Type) -> bool {
