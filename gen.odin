@@ -201,67 +201,76 @@ gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     }
 }
 
+// Left is assumed to be already checked
+// THIS CONVERSION THING IS A HACK
+gen_possible_auto_conv_expr :: proc(g: ^Gen, left, right: ^Ast) {
+    emitted_conv := false
+    #partial switch lv in left.type.variant {
+    case Type_Array:
+        #partial switch lr in right.type.variant {
+        case Type_Basic:
+            assert(lv.type == right.type)
+            gen_printf(g, "{}_broadcast(", left.type.cname_lower)
+            emitted_conv = true
+        }
+    }
+
+    gen_expr(g, right, top_level = true)
+
+    if emitted_conv {
+        gen_print(g, ")")
+    }
+}
+
 gen_binary_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     expr := ast.variant.(Ast_Binary_Expr)
+    gen_binary_op(g,
+        left = expr.left,
+        right = expr.right,
+        op = expr.op.kind,
+        top_level = top_level,
+    )
+}
 
+gen_binary_op :: proc(g: ^Gen, left: ^Ast, right: ^Ast, op: Token_Kind, top_level := false) {
     if !top_level {
         gen_print(g, "(")
     }
 
-    #partial switch v in ast.type.variant {
+    #partial switch v in left.type.variant {
     case Type_Basic:
-        op := ""
-        #partial switch expr.op.kind {
-        case .Equal:                op = "=="
-        case .Less_Than:            op = "<"
-        case .Less_Than_Equal:      op = "<="
-        case .Greater_Than:         op = ">"
-        case .Greater_Than_Equal:   op = ">="
-        case .Not_Equal:            op = "!="
-
-        case .Add: op = "+"
-        case .Sub: op = "-"
-        case .Mul: op = "*"
-        case .Div: op = "/"
-        case .Mod: op = "%"
-
-        case .Bit_And:          op = "&"
-        case .Bit_Or:           op = "|"
-        case .Bit_Xor:          op = "^"
-        case .Bit_Shift_Left:   op = "<<"
-        case .Bit_Shift_Right:  op = ">>"
-        }
-        gen_expr(g, expr.left)
-        gen_printf(g, " {} ", op)
-        gen_expr(g, expr.right)
+        op_name := _token_str[op]
+        gen_expr(g, left)
+        gen_printf(g, " {} ", op_name)
+        gen_possible_auto_conv_expr(g, left, right)
 
     case Type_Array:
         op_name := ""
-        #partial switch expr.op.kind {
+
+        #partial switch op {
         case .Equal:                op_name = "eq"
         case .Less_Than:            op_name = "lt"
         case .Less_Than_Equal:      op_name = "le"
         case .Greater_Than:         op_name = "gt"
         case .Greater_Than_Equal:   op_name = "ge"
         case .Not_Equal:            op_name = "neq"
-
-        case .Add: op_name = "add"
-        case .Sub: op_name = "sub"
-        case .Mul: op_name = "mul"
-        case .Div: op_name = "div"
-        case .Mod: op_name = "mod"
-
-        case .Bit_And:          op_name = "and"
-        case .Bit_Or:           op_name = "or"
-        case .Bit_Xor:          op_name = "xor"
-        case .Bit_Shift_Left:   op_name = "shl"
-        case .Bit_Shift_Right:  op_name = "shr"
+        case .Add:                  op_name = "add"
+        case .Sub:                  op_name = "sub"
+        case .Mul:                  op_name = "mul"
+        case .Div:                  op_name = "div"
+        case .Mod:                  op_name = "mod"
+        case .Bit_And:              op_name = "and"
+        case .Bit_Or:               op_name = "or"
+        case .Bit_Xor:              op_name = "xor"
+        case .Bit_Shift_Left:       op_name = "shl"
+        case .Bit_Shift_Right:      op_name = "shr"
         }
-        gen_printf(g, "%s_%s", ast.type.cname_lower, op_name)
+
+        gen_printf(g, "%s_%s", left.type.cname_lower, op_name)
         gen_print(g, "(")
-        gen_expr(g, expr.left)
+        gen_expr(g, left)
         gen_print(g, ", ")
-        gen_expr(g, expr.right)
+        gen_possible_auto_conv_expr(g, left, right)
         gen_print(g, ")")
 
     case:
@@ -414,7 +423,7 @@ gen_type_decl :: proc(g: ^Gen, type: ^Type) {
 
 Gen_Op_Proc :: struct {
     name:       string,
-    op:         string, // C!
+    op:         Token_Kind, // C!
     flags:      bit_set[Gen_Op_Proc_Flag],
 }
 
@@ -426,35 +435,35 @@ Gen_Op_Proc_Flag :: enum u8 {
 
 @(rodata)
 _gen_named_binary_ops := [?]Gen_Op_Proc{
-    {name = "eq" , op = "==", flags = {.Integer, .Float}},
-    {name = "lt" , op = "<",  flags = {.Integer, .Float}},
-    {name = "le" , op = "<=", flags = {.Integer, .Float}},
-    {name = "gt" , op = ">",  flags = {.Integer, .Float}},
-    {name = "ge" , op = ">=", flags = {.Integer, .Float}},
-    {name = "neq", op = "!=", flags = {.Integer, .Float}},
-    {name = "add", op = "+",  flags = {.Integer, .Float}},
-    {name = "sub", op = "-",  flags = {.Integer, .Float}},
-    {name = "mul", op = "*",  flags = {.Integer, .Float}},
-    {name = "div", op = "/",  flags = {.Integer, .Float}},
-    {name = "mod", op = "%",  flags = {.Integer}},
-    {name = "and", op = "&",  flags = {.Integer}},
-    {name = "or" , op = "|",  flags = {.Integer}},
-    {name = "xor", op = "^",  flags = {.Integer}},
-    {name = "shl", op = "<<", flags = {.Integer}},
-    {name = "shr", op = ">>", flags = {.Integer}},
+    // {name = "eq" , op = .Equal,              flags = {.Integer, .Float}},
+    // {name = "lt" , op = .Less_Than,          flags = {.Integer, .Float}},
+    // {name = "le" , op = .Less_Than_Equal,    flags = {.Integer, .Float}},
+    // {name = "gt" , op = .Greater_Than,       flags = {.Integer, .Float}},
+    // {name = "ge" , op = .Greater_Than_Equal, flags = {.Integer, .Float}},
+    // {name = "neq", op = .Not_Equal,          flags = {.Integer, .Float}},
+    {name = "add", op = .Add,                flags = {.Integer, .Float}},
+    {name = "sub", op = .Sub,                flags = {.Integer, .Float}},
+    {name = "mul", op = .Mul,                flags = {.Integer, .Float}},
+    {name = "div", op = .Div,                flags = {.Integer, .Float}},
+    {name = "mod", op = .Mod,                flags = {.Integer}},
+    {name = "and", op = .Bit_And,            flags = {.Integer}},
+    {name = "or" , op = .Bit_Or,             flags = {.Integer}},
+    {name = "xor", op = .Bit_Xor,            flags = {.Integer}},
+    // {name = "shl", op = .Bit_Shift_Left,     flags = {.Integer}},
+    // {name = "shr", op = .Bit_Shift_Right,    flags = {.Integer}},
 }
 
 @(rodata)
 _gen_named_unary_ops := [?]Gen_Op_Proc{
-    {name = "not", op = "!", flags = {.Integer, .Boolean}},
-    {name = "neg", op = "-", flags = {.Integer, .Float}},
+    {name = "not", op = .Not, flags = {.Integer, .Boolean}},
+    {name = "neg", op = .Sub, flags = {.Integer, .Float}},
 }
 
 _gen_type_matches_op_proc :: proc(type: ^Type, op: Gen_Op_Proc) -> bool {
-    if      type_is_integer(type) && .Integer not_in op.flags do return false
-    else if type_is_float  (type) && .Float   not_in op.flags do return false
-    else if type_is_boolean(type) && .Boolean not_in op.flags do return false
-    return true
+    if      type_is_integer(type) && .Integer in op.flags do return true
+    else if type_is_float  (type) && .Float   in op.flags do return true
+    else if type_is_boolean(type) && .Boolean in op.flags do return true
+    return false
 }
 
 gen_type_procs_decls :: proc(g: ^Gen, type: ^Type) {
@@ -474,16 +483,148 @@ gen_type_procs_decls :: proc(g: ^Gen, type: ^Type) {
 gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
     #partial switch v in type.variant {
     case Type_Array:
-        // for op in _gen_named_binary_ops {
-        //     if !_gen_type_matches_op_proc(v.type, op) do continue
-        //     gen_printf(g, "static {0} {1}_{2}({0} a, {0} b) {{\n", type.cname, type.cname_lower, op.name)
-        //     gen_printf(g, "\t{0} result;\n", type.cname)
-        //     for i in 0..<v.len {
-        //         gen_printf(g, "\tresult.data[{0}] = a.data[{0}] {1} b.data[{0}];\n", i, op.op)
-        //     }
-        //     gen_printf(g, "\treturn result;\n")
-        //     gen_printf(g, "}}\n")
-        // }
+        for op in _gen_named_binary_ops {
+            if !_gen_type_matches_op_proc(v.type, op) do continue
+            func := fmt.tprintf("static {0} {1}_{2}({0} a, {0} b) {{", type.cname, type.cname_lower, op.name)
+
+            switch v.kind {
+            case .Fixed_Array:
+                gen_print(g, func)
+                gen_print(g, "\n")
+                gen_printf(g, "\t{0} result;\n", type.cname)
+                for i in 0..<v.len {
+                    gen_printf(g, "\tresult.data[{0}] = a.data[{0}] {1} b.data[{0}];\n", i, _token_str[op.op])
+                }
+                gen_printf(g, "\treturn result;\n")
+                gen_printf(g, "}}\n")
+
+            case .Vector:
+                intrinsic := ""
+
+                basic := v.type.variant.(Type_Basic)
+
+                #partial switch op.op {
+                case .Equal:
+                case .Less_Than:
+                case .Less_Than_Equal:
+                case .Greater_Than:
+                case .Greater_Than_Equal:
+                case .Not_Equal:
+
+                case .Add:
+                    switch v.len {
+                    case 8:
+                        switch basic.kind {
+                        case .B8 , .I8 , .U8    : intrinsic = "_mm256_add_epi8"
+                        case .B16, .I16, .U16   : intrinsic = "_mm256_add_epi16"
+                        case .B32, .I32, .U32   : intrinsic = "_mm256_add_epi32"
+                        case .B64, .I64, .U64   : intrinsic = "_mm256_add_epi64"
+                        case .F32               : intrinsic = "_mm256_add_ps"
+                        case .F64               : intrinsic = "_mm256_add_pd"
+                        }
+                    }
+
+                case .Sub:
+                    switch v.len {
+                    case 8:
+                        switch basic.kind {
+                        case .B8 , .I8 , .U8    : intrinsic = "_mm256_sub_epi8"
+                        case .B16, .I16, .U16   : intrinsic = "_mm256_sub_epi16"
+                        case .B32, .I32, .U32   : intrinsic = "_mm256_sub_epi32"
+                        case .B64, .I64, .U64   : intrinsic = "_mm256_sub_epi64"
+                        case .F32               : intrinsic = "_mm256_sub_ps"
+                        case .F64               : intrinsic = "_mm256_sub_pd"
+                        }
+                    }
+
+                case .Mul:
+                    switch v.len {
+                    case 8:
+                        switch basic.kind {
+                        case .B8 , .I8 , .U8    : intrinsic = "_mm256_mul_epi8"
+                        case .B16, .I16, .U16   : intrinsic = "_mm256_mul_epi16"
+                        case .B32, .I32, .U32   : intrinsic = "_mm256_mul_epi32"
+                        case .B64, .I64, .U64   : intrinsic = "_mm256_mul_epi64"
+                        case .F32               : intrinsic = "_mm256_mul_ps"
+                        case .F64               : intrinsic = "_mm256_mul_pd"
+                        }
+                    }
+
+                case .Div:
+                    switch v.len {
+                    case 8:
+                        switch basic.kind {
+                        case .B8 , .I8 , .U8 ,
+                             .B16, .I16, .U16,
+                             .B32, .I32, .U32,
+                             .B64, .I64, .U64   :
+
+                        case .F32: intrinsic = "_mm256_div_ps"
+                        case .F64: intrinsic = "_mm256_div_pd"
+                        }
+                    }
+
+                case .Mod:
+                    // unimplemented("fuck modulo")
+
+
+
+                case .Bit_And:
+                    switch v.len {
+                    case 8:
+                        switch basic.kind {
+                        case .B8 , .I8 , .U8 ,
+                             .B16, .I16, .U16,
+                             .B32, .I32, .U32,
+                             .B64, .I64, .U64   : intrinsic = "_mm256_and_si256"
+                        case .F32               : intrinsic = "_mm256_and_ps"
+                        case .F64               : intrinsic = "_mm256_and_pd"
+                        }
+                    }
+
+                case .Bit_Or:
+                    switch v.len {
+                    case 8:
+                        switch basic.kind {
+                        case .B8 , .I8 , .U8 ,
+                             .B16, .I16, .U16,
+                             .B32, .I32, .U32,
+                             .B64, .I64, .U64   : intrinsic = "_mm256_or_si256"
+                        case .F32               : intrinsic = "_mm256_or_ps"
+                        case .F64               : intrinsic = "_mm256_or_pd"
+                        }
+                    }
+
+                case .Bit_Xor:
+                    switch v.len {
+                    case 8:
+                        switch basic.kind {
+                        case .B8 , .I8 , .U8 ,
+                             .B16, .I16, .U16,
+                             .B32, .I32, .U32,
+                             .B64, .I64, .U64   : intrinsic = "_mm256_xor_si256"
+                        case .F32               : intrinsic = "_mm256_xor_ps"
+                        case .F64               : intrinsic = "_mm256_xor_pd"
+                        }
+                    }
+
+
+
+                case .Bit_Shift_Left:
+                case .Bit_Shift_Right:
+                }
+
+                // fmt.println(op.op, v.len, basic.kind)
+                // assert(intrinsic != "")
+
+                if intrinsic == "" do break
+
+                gen_print(g, func)
+                gen_printf(g, " return {}(a, b);", intrinsic)
+                gen_printf(g, " }}\n")
+            }
+
+        }
 
         // for op in _gen_named_unary_ops {
         //     if !_gen_type_matches_op_proc(v.type, op) do continue
@@ -726,38 +867,20 @@ gen_for_range_stmt :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_assign_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_Assign_Stmt)
+
     gen_expr(g, stmt.left)
-    #partial switch stmt.op.kind {
-    case .Assign_Add:               gen_print(g, " += ")
-    case .Assign_Sub:               gen_print(g, " -= ")
-    case .Assign_Mul:               gen_print(g, " *= ")
-    case .Assign_Div:               gen_print(g, " /= ")
-    case .Assign_Mod:               gen_print(g, " %= ")
-    case .Assign_Bit_And:           gen_print(g, " &= ")
-    case .Assign_Bit_Or:            gen_print(g, " |= ")
-    case .Assign_Bit_Xor:           gen_print(g, " ^= ")
-    case .Assign_Bit_Shift_Left:    gen_print(g, " <<= ")
-    case .Assign_Bit_Shift_Right:   gen_print(g, " >>= ")
+    gen_print(g, " = ")
 
-    case .Assign:
-        gen_print(g, " = ")
-    }
-
-    emitted_conv := false
-    #partial switch lv in stmt.left.type.variant {
-    case Type_Array:
-        #partial switch lr in stmt.right.type.variant {
-        case Type_Basic:
-            assert(lv.type == stmt.right.type)
-            gen_printf(g, "{}_broadcast(", stmt.left.type.cname_lower)
-            emitted_conv = true
-        }
-    }
-
-    gen_expr(g, stmt.right, top_level = true)
-
-    if emitted_conv {
-        gen_print(g, ")")
+    op, op_ok := token_normalize_assign_op(stmt.op.kind)
+    if op != .Assign && op_ok {
+        gen_binary_op(g,
+            left = stmt.left,
+            right = stmt.right,
+            op = op,
+            top_level = true,
+        )
+    } else {
+        gen_possible_auto_conv_expr(g, stmt.left, stmt.right)
     }
 }
 

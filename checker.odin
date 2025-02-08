@@ -139,7 +139,8 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     assert(ast.type == nil)
 
     lit := ast.variant.(Ast_Basic_Literal)
-    ast.type = find_or_create_type_ast(c, ast)
+    ast.type = find_or_create_type_ast(c, ast, type_hint = type_hint)
+
     #partial switch v in ast.type.variant {
     case Type_Basic:
         #partial switch v.kind {
@@ -238,8 +239,8 @@ check_urnary_expr :: proc(c: ^Checker, ast: ^Ast) {
         check_expr(c, expr.expr)
         ast.type = expr.expr.type
 
-        if !type_is_boolean(expr.expr.type) {
-            checker_error(c, "Unary 'Not' operator can be only applied to boolean values")
+        if !type_is_boolean(expr.expr.type) && !type_is_integer(expr.expr.type) {
+            checker_error(c, "Unary 'Not' operator can be only applied to boolean and integer values")
         }
 
     case:
@@ -249,13 +250,13 @@ check_urnary_expr :: proc(c: ^Checker, ast: ^Ast) {
 
 check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) -> ^Type {
     check_expr(c, left)
-    check_expr(c, right)
+    check_expr(c, right, type_hint = left.type)
 
-    if left.type != right.type {
-        fmt.printfln("%p", left.type)
-        fmt.printfln("%p", right.type)
+    left_elem := type_elem_basic_type(left.type)
+
+    if left_elem != right.type {
         checker_error(c, "Types in binary expression don't match: {} vs {}",
-            type_to_string(left.type), type_to_string(right.type))
+            type_to_string(left_elem), type_to_string(right.type))
     }
 
     type := left.type
@@ -267,7 +268,8 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
          .Greater_Than,
          .Greater_Than_Equal,
          .Not_Equal:
-        if !type_is_numeric(left.type) {
+        type = c.basic_types[.B32]
+        if !type_is_numeric(left_elem) {
             checker_error(c, "{} operator can be only applied to numeric values", op)
         }
 
@@ -275,8 +277,7 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
          .Sub,
          .Mul,
          .Div:
-
-        if !type_is_numeric(left.type) {
+        if !type_is_numeric(left_elem) {
             checker_error(c, "{} operator can be only applied to numeric values", op)
         }
 
@@ -301,7 +302,7 @@ check_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 
     #partial switch v in ast.variant {
     case Ast_Basic_Literal:
-        check_basic_literal(c, ast)
+        check_basic_literal(c, ast, type_hint = type_hint)
 
     case Ast_Ident:
         check_ident(c, ast)
@@ -529,6 +530,7 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
 
     if decl.value != nil {
         check_expr(c, decl.value)
+        // TODO check same as in assign stmt
         if decl.type.type != decl.value.type {
             checker_error(c, "Initializer value type doesn't match, expected {}, got {}", type_to_string(decl.type.type), type_to_string(decl.value.type))
         }
@@ -549,18 +551,12 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         check_value_decl(c, ast)
 
     case Ast_Assign_Stmt:
-        op: Token_Kind
+        op, op_ok := token_normalize_assign_op(v.op.kind)
+        if !op_ok {
+            checker_error(c, "Invalid assign statement op")
+        }
+
         #partial switch v.op.kind {
-        case .Assign_Add:               op = .Add
-        case .Assign_Sub:               op = .Sub
-        case .Assign_Mul:               op = .Mul
-        case .Assign_Div:               op = .Div
-        case .Assign_Mod:               op = .Mod
-        case .Assign_Bit_And:           op = .Bit_And
-        case .Assign_Bit_Or:            op = .Bit_Or
-        case .Assign_Bit_Xor:           op = .Bit_Xor
-        case .Assign_Bit_Shift_Left:    op = .Bit_Shift_Left
-        case .Assign_Bit_Shift_Right:   op = .Bit_Shift_Right
         case .Assign:
             check_expr(c, v.left)
             check_expr(c, v.right, type_hint = v.left.type)
@@ -571,11 +567,10 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
                 return
             }
             checker_error(c, "Assign statement types don't match")
-        case:
-            assert(false)
-        }
 
-        ast.type = check_binary_op(c, v.left, v.right, op)
+        case:
+            ast.type = check_binary_op(c, v.left, v.right, op)
+        }
 
     case Ast_Return_Stmt:
         check_return_stmt(c, ast)
