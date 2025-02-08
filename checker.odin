@@ -14,6 +14,8 @@ Checker :: struct {
     curr_lanes:         int,
     curr_entity:        ^Entity,
     curr_file_scope:    ^Scope,
+    basic_types:        [Type_Basic_Kind]^Type,
+    types:              [dynamic]^Type,
 }
 
 Entity :: struct {
@@ -28,8 +30,6 @@ Entity :: struct {
 Entity_Variant :: union {
     Entity_Proc,
     Entity_Variable,
-    Entity_Type,
-    Entity_Alias,
     Entity_Struct,
     Entity_Struct_Field,
     Entity_Builtin,
@@ -51,10 +51,6 @@ Entity_Builtin :: struct {
 
 Entity_Builtin_Kind :: enum u8 {
     Vector_Index,
-}
-
-Entity_Type :: struct {
-    type:   ^Type,
 }
 
 Entity_Struct :: struct {
@@ -136,14 +132,14 @@ check_type :: proc(c: ^Checker, ast: ^Ast) {
         check_type(c, v.type)
     }
 
-    ast.type = find_or_create_type_entity(c, ast)
+    ast.type = find_or_create_type_ast(c, ast)
 }
 
 check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     assert(ast.type == nil)
 
     lit := ast.variant.(Ast_Basic_Literal)
-    ast.type = find_or_create_type_entity(c, ast)
+    ast.type = find_or_create_type_ast(c, ast)
     #partial switch v in ast.type.variant {
     case Type_Basic:
         #partial switch v.kind {
@@ -271,10 +267,6 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
          .Greater_Than,
          .Greater_Than_Equal,
          .Not_Equal:
-        // HACK
-        ent, _ := find_entity(c.curr_file_scope, "bool") or_break
-        type := ent.variant.(Entity_Type).type
-
         if !type_is_numeric(left.type) {
             checker_error(c, "{} operator can be only applied to numeric values", op)
         }
@@ -465,7 +457,7 @@ check_address_expr :: proc(c: ^Checker, ast: ^Ast) {
         type = expr.expr.type,
     }
 
-    ast.type = find_or_create_type_entity_from_type(c, ptr_type)
+    ast.type = find_or_create_type(c, ptr_type)
 }
 
 check_deref_expr :: proc(c: ^Checker, ast: ^Ast) {
@@ -532,7 +524,7 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
         fmt.println(type_to_string(decl.type.type))
         // NOTE: things like this could be cached on the scalar type, but idgaf for now
         vec := type_vectorize(decl.type.type)
-        decl.type.type = find_or_create_type_entity_from_type(c, vec)
+        decl.type.type = find_or_create_type(c, vec)
     }
 
     if decl.value != nil {
@@ -571,14 +563,12 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         case .Assign_Bit_Shift_Right:   op = .Bit_Shift_Right
         case .Assign:
             check_expr(c, v.left)
-            check_expr(c, v.right)
+            check_expr(c, v.right, type_hint = v.left.type)
+
             if v.left.type == v.right.type do return
             if vec, ok := v.left.type.variant.(Type_Array);
-               ok && vec.kind == .Vector { // && vec.type == v.right.type {
-               fmt.println(vec.type, uintptr(vec.type), type_to_string(vec.type))
-               fmt.println(v.right.type, uintptr(v.right.type), type_to_string(v.right.type))
-               checker_error(c, "aslkdfjalsdf")
-                // return
+               ok && vec.kind == .Vector && vec.type == v.right.type {
+                return
             }
             checker_error(c, "Assign statement types don't match")
         case:
@@ -685,132 +675,61 @@ check_proc_type :: proc(c: ^Checker, ast: ^Ast, name: string) {
     }
 }
 
-
-// Note: the name is used for comparing if types are the same so it has to be unique.
-// There is probably a better way to generate an unique type ID but this is good enough for now.
-ast_type_to_id :: proc(c: ^Checker, ast: ^Ast) -> string {
+create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) -> (result: ^Type) {
     #partial switch v in ast.variant {
-    case Ast_Ident:
-        switch v.token.text {
-        case "bool":return "b8"
-        case "b8" : return "b8"
-        case "b16": return "b16"
-        case "b32": return "b32"
-        case "b64": return "b64"
-        case "i8" : return "i8"
-        case "i16": return "i16"
-        case "i32": return "i32"
-        case "i64": return "i64"
-        case "u8" : return "u8"
-        case "u16": return "u16"
-        case "u32": return "u32"
-        case "u64": return "u64"
-        case "f32": return "f32"
-        case "f64": return "f64"
-        }
-
-        ent, _, ok := find_entity(c.curr_scope, v.token.text)
-        if !ok {
-            checker_error(c, "Unknown entity: {}", v.token.text)
-        }
-
-        return ast_type_to_id(c, ent.ast)
-
-    // HACK: TODO: support untyped literals
-    // TODO: type hints here?
     case Ast_Basic_Literal:
+        hint_basic := type_elem_basic_type(type_hint)
+
+        if hint_basic != nil {
+            #partial switch v.token.kind {
+            case .Integer:
+                if type_is_integer(hint_basic) {
+                    return hint_basic
+                } else {
+                    checker_error(c, "Integer literal cannot be assigned to non-integer-element type")
+                }
+
+            case .Float:
+                // Accept ints without a fraction
+                if type_is_numeric(hint_basic) {
+                    return hint_basic
+                } else {
+                    checker_error(c, "Integer literal cannot be assigned to non-numeric-element type")
+                }
+
+            case .True, .False:
+                if type_is_boolean(hint_basic) {
+                    return hint_basic
+                } else {
+                    checker_error(c, "Boolean literal cannot be assigned to non-boolean-element type")
+                }
+
+            case .Char:
+                if type_is_integer(hint_basic) {
+                    return hint_basic
+                } else {
+                    checker_error(c, "Character literal cannot be assigned to non-integer-element type")
+                }
+
+            case .String:
+                unimplemented("fuck strings tbh")
+            }
+        }
+
         #partial switch v.token.kind {
-        case .Float:
-            return "f32"
-        case .Integer:
-            return "i32"
-        case .True, .False:
-            return "bool"
+        case .Integer:      return c.basic_types[.I32]
+        case .Float:        return c.basic_types[.F32]
+        case .True, .False: return c.basic_types[.B8]
+        case .Char:         return c.basic_types[.U8]
+        case .String:       unimplemented("fuck strings tbh")
         }
 
-    case Ast_Array_Type:
-        return fmt.tprintf("{}[{}]{}", v.kind, v.len.value.(i128), ast_type_to_id(c, v.type))
-
-    case Ast_Pointer_Type:
-        return fmt.tprintf("^{}", ast_type_to_id(c, v.type))
-
-    case Ast_Multi_Pointer_Type:
-        return fmt.tprintf("[^]{}", ast_type_to_id(c, v.type))
-
-    case Ast_Struct_Decl:
-        return ast_type_to_id(c, v.type)
-
-    case Ast_Struct_Type:
-        fields := make([]string, len(v.fields))
-        for field, i in v.fields {
-            f := field.variant.(Ast_Field)
-            fields[i] = fmt.tprintf("{}.{};",
-                f.name.variant.(Ast_Ident).token.text,
-                ast_type_to_id(c, f.type))
-        }
-        return fmt.tprintf("struct{{{}}}", strings.concatenate(fields))
-
-    case:
-        assert(false, "AST is not a valid type")
-    }
-
-    return ""
-}
-
-// NOTE: this is bit of a hack, has to be synced up with 'ast_type_to_id'
-// This is used in the checker for compiler-generated types.
-type_to_id :: proc(c: ^Checker, type: ^Type) -> string {
-    #partial switch v in type.variant {
-    case Type_Basic:
-        switch v.kind {
-        case .B8 : return "b8"
-        case .B16: return "b16"
-        case .B32: return "b32"
-        case .B64: return "b64"
-        case .I8 : return "i8"
-        case .I16: return "i16"
-        case .I32: return "i32"
-        case .I64: return "i64"
-        case .U8 : return "u8"
-        case .U16: return "u16"
-        case .U32: return "u32"
-        case .U64: return "u64"
-        case .F32: return "f32"
-        case .F64: return "f64"
-        }
-
-    case Type_Array:
-        return fmt.tprintf("{}[{}]{}", v.kind, v.len, type_to_id(c, v.type))
-
-    case Type_Pointer:
-        switch v.kind {
-        case .Single: return fmt.tprintf("^{}", type_to_id(c, v.type))
-        case .Multi:  return fmt.tprintf("[^]{}", type_to_id(c, v.type))
-        }
-
-    case Type_Struct:
-        fields := make([]string, len(v.fields))
-        for field, i in v.fields {
-            f := fmt.tprintf("{}.{};", field.name, type_to_id(c, field.type))
-            fields[i] = f
-        }
-        return fmt.tprintf("struct{{{}}}", strings.concatenate(fields))
-
-    case:
-        assert(false, "AST is not a valid type")
-    }
-
-    return ""
-}
-
-create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result: ^Type) {
-    #partial switch v in ast.variant {
     case Ast_Pointer_Type:
         result = new(Type)
         result.size = 8
         result.variant = Type_Pointer{
             kind = .Single,
-            type = find_or_create_type_entity(c, v.type),
+            type = find_or_create_type_ast(c, v.type),
         }
 
     case Ast_Multi_Pointer_Type:
@@ -818,7 +737,7 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
         result.size = 8
         result.variant = Type_Pointer{
             kind = .Multi,
-            type = find_or_create_type_entity(c, v.type),
+            type = find_or_create_type_ast(c, v.type),
         }
 
     case Ast_Array_Type:
@@ -835,7 +754,7 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
         result.variant = Type_Array{
             kind = v.kind,
             len = length,
-            type = find_or_create_type_entity(c, v.type),
+            type = find_or_create_type_ast(c, v.type),
         }
 
     case Ast_Struct_Type:
@@ -846,13 +765,13 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
             f := field.variant.(Ast_Field)
             str.fields[i] = {
                 name = f.name.variant.(Ast_Ident).token.text,
-                type = find_or_create_type_entity(c, f.type),
+                type = find_or_create_type_ast(c, f.type),
             }
         }
         result.variant = str
 
     case Ast_Field:
-        result = find_or_create_type_entity(c, v.type)
+        result = find_or_create_type_ast(c, v.type)
 
     case:
         assert(false, "AST is not a valid type")
@@ -861,79 +780,78 @@ create_new_type_from_ast :: proc(c: ^Checker, id: string, ast: ^Ast) -> (result:
     return result
 }
 
-find_or_create_type_entity :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) -> ^Type {
-    id := ast_type_to_id(c, ast)
-
-    fmt.println("find or create type:", id)
-
-    if ent, _, ok := find_entity(c.curr_scope, id); ok {
-        #partial switch v in ent.variant {
-        case Entity_Type:
-            return v.type
-
-        // TODO: alias
-
-        case Entity_Struct:
-            return v.type
+find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) -> (result: ^Type) {
+    #partial switch v in ast.variant {
+    case Ast_Ident:
+        switch v.token.text {
+        case "b8", "bool"   : result = c.basic_types[.B8 ]
+        case "b16"          : result = c.basic_types[.B16]
+        case "b32"          : result = c.basic_types[.B32]
+        case "b64"          : result = c.basic_types[.B64]
+        case "i8"           : result = c.basic_types[.I8 ]
+        case "i16"          : result = c.basic_types[.I16]
+        case "i32"          : result = c.basic_types[.I32]
+        case "i64"          : result = c.basic_types[.I64]
+        case "u8"           : result = c.basic_types[.U8 ]
+        case "u16"          : result = c.basic_types[.U16]
+        case "u32"          : result = c.basic_types[.U32]
+        case "u64"          : result = c.basic_types[.U64]
+        case "f32", "float" : result = c.basic_types[.F32]
+        case "f64"          : result = c.basic_types[.F64]
 
         case:
-            assert(false)
+            if ent, _, ok := find_entity(c.curr_scope, v.token.text); ok {
+                #partial switch v in ent.variant {
+                // TODO: alias
+                case Entity_Struct:
+                    result = v.type
+
+                case:
+                    assert(false)
+                }
+            } else {
+                assert(false)
+            }
         }
+
+    case:
+        result = find_or_create_type(c, type = create_new_type_from_ast(c, ast, type_hint = type_hint))
     }
 
-    type := create_new_type_from_ast(c, id, ast)
-    create_type_entity(scope = c.curr_file_scope, id = id, type = type, ast = ast)
+    assert(result != nil)
 
-    return type
+    return result
 }
 
-// NOTE: the input type is assumed to be a "pseudo type" which is created by the compiler.
 // If an already existing match is found, the match gets returned.
-// Otherwise the input type will get registered as a new type entity and reused later!
-find_or_create_type_entity_from_type :: proc(c: ^Checker, type: ^Type) -> ^Type {
-    id := type_to_id(c, type)
-
-    fmt.println("find or create type from type:", id)
-
-    if ent, _, ok := find_entity(c.curr_scope, id); ok {
-        #partial switch v in ent.variant {
-        case Entity_Type:
-            return v.type
-
-        case Entity_Struct:
-            return v.type
-
-        case:
-            assert(false)
-        }
-    }
-
-    switch v in type.variant {
+// Otherwise the input type will get registered as a new type and reused later!
+find_or_create_type :: proc(c: ^Checker, type: ^Type) -> ^Type {
+    switch &v in type.variant {
     case Type_Basic:
+        return c.basic_types[v.kind]
+
     case Type_Array:
-        find_or_create_type_entity_from_type(c, v.type)
+        v.type = find_or_create_type(c, v.type)
+
     case Type_Pointer:
-        find_or_create_type_entity_from_type(c, v.type)
+        v.type = find_or_create_type(c, v.type)
+
     case Type_Struct:
-        for field in v.fields {
-            find_or_create_type_entity_from_type(c, field.type)
+        for &field in v.fields {
+            field.type = find_or_create_type(c, field.type)
         }
     }
 
-    create_type_entity(scope = c.curr_file_scope, id = id, type = type, ast = nil)
+    // Linear search, bit dumb. Could hash some type info to split into buckets.
+    for t in c.types {
+        if types_equal(t, type) {
+            return t
+        }
+    }
+
+    append(&c.types, type)
 
     return type
-}
-
-create_type_entity :: proc(scope: ^Scope, id: string, type: ^Type, ast: ^Ast) -> ^Entity {
-    return create_entity(
-        scope = scope,
-        name = id,
-        ast = ast,
-        variant = Entity_Type{
-            type = type,
-        },
-    )
 }
 
 check_type_decl :: proc(c: ^Checker, ast: ^Ast, name: string) {
@@ -984,7 +902,7 @@ check_scope_procedures_recursive :: proc(c: ^Checker, scope: ^Scope) {
 
 // Check and codegen C
 check_program :: proc(c: ^Checker) {
-    basic_types := [Type_Basic_Kind]^Type{
+    c.basic_types = [Type_Basic_Kind]^Type{
         .B8  = new_clone(Type{size = 1, variant = Type_Basic{kind = .B8 }}),
         .B16 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B16}}),
         .B32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B32}}),
@@ -1001,27 +919,16 @@ check_program :: proc(c: ^Checker) {
         .F64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .F64}}),
     }
 
-    create_type_entity(c.curr_file_scope, "bool",basic_types[.B8 ], nil)
-    create_type_entity(c.curr_file_scope, "b8" , basic_types[.B8 ], nil)
-    create_type_entity(c.curr_file_scope, "b16", basic_types[.B16], nil)
-    create_type_entity(c.curr_file_scope, "b32", basic_types[.B32], nil)
-    create_type_entity(c.curr_file_scope, "b64", basic_types[.B64], nil)
-    create_type_entity(c.curr_file_scope, "i8" , basic_types[.I8 ], nil)
-    create_type_entity(c.curr_file_scope, "i16", basic_types[.I16], nil)
-    create_type_entity(c.curr_file_scope, "i32", basic_types[.I32], nil)
-    create_type_entity(c.curr_file_scope, "i64", basic_types[.I64], nil)
-    create_type_entity(c.curr_file_scope, "u8" , basic_types[.U8 ], nil)
-    create_type_entity(c.curr_file_scope, "u16", basic_types[.U16], nil)
-    create_type_entity(c.curr_file_scope, "u32", basic_types[.U32], nil)
-    create_type_entity(c.curr_file_scope, "u64", basic_types[.U64], nil)
-    create_type_entity(c.curr_file_scope, "f32", basic_types[.F32], nil)
-    create_type_entity(c.curr_file_scope, "f64", basic_types[.F64], nil)
+    for t in c.basic_types {
+        append(&c.types, t)
+    }
 
-    v8i32_type := find_or_create_type_entity_from_type(c, new_clone(Type{variant = Type_Array{
-        kind = .Vector, len = 8, type = basic_types[.I32],
+    v8i32_type := find_or_create_type(c, new_clone(Type{variant = Type_Array{
+        kind = .Vector, len = 8, type = c.basic_types[.I32],
     }}))
 
-    create_entity(c.curr_file_scope, "vector_width", nil, Entity_Builtin{kind = .Vector_Index, value = VECTOR_WIDTH, type = basic_types[.I32]})
+    create_entity(c.curr_file_scope, "vector_width", nil, Entity_Builtin{
+        kind = .Vector_Index, value = VECTOR_WIDTH, type = c.basic_types[.I32]})
     create_entity(c.curr_file_scope, "vector_index", nil, Entity_Builtin{
         kind = .Vector_Index, value = [8]i32{0, 1, 2, 3, 4, 5, 6, 7}, type = v8i32_type})
 

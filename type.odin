@@ -107,6 +107,25 @@ type_is_integer :: proc(t: ^Type) -> bool {
     }
 }
 
+type_elem_basic_type :: proc(t: ^Type) -> ^Type {
+    if t == nil {
+        return nil
+    }
+    switch v in t.variant {
+    case Type_Basic:
+        return t
+
+    case Type_Array:
+        type_elem_basic_type(v.type)
+
+    case Type_Pointer:
+        type_elem_basic_type(v.type)
+
+    case Type_Struct:
+    }
+    return nil
+}
+
 type_is_float :: proc(t: ^Type) -> bool {
     #partial switch v in t.variant {
     case Type_Basic:
