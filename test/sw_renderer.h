@@ -20,7 +20,7 @@ typedef int64_t bool64_t;
 typedef struct Aos4_uint8_t { uint8_t data[4]; } Aos4_uint8_t;
 typedef struct Aos2_int32_t { int32_t data[2]; } Aos2_int32_t;
 typedef struct Aos2_float { float data[2]; } Aos2_float;
-typedef struct Aos2___m256 {  data[2]; } Aos2___m256;
+typedef struct Aos2___m256 { __m256 data[2]; } Aos2___m256;
 
 // VECC exported function declarations
 void compute_frame(Aos4_uint8_t* framebuffer, Aos2_int32_t resolution, float time, float delta, int32_t frame);
@@ -45,6 +45,7 @@ void compute_frame(Aos4_uint8_t* framebuffer, Aos2_int32_t resolution, float tim
 		for (int32_t x = 0; x < resolution.data[0]; x += vector_width) {
 			const int32_t index = x + (y * resolution.data[0]);
 			Aos2___m256 uv = {0};
+			uv.data[0] = 0.5f;
 		};
 	};
 }

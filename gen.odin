@@ -395,6 +395,8 @@ gen_type_decl :: proc(g: ^Gen, type: ^Type) {
             // gen_printf(g, "}} {};\n", type.cname)
 
         case .Fixed_Array:
+            fmt.println(type_to_string(type), ":", type_to_string(v.type))
+            assert(v.type.cname != "")
             gen_printf(g, "typedef struct {} {{ ", type.cname)
             gen_printf(g, "{} data[{}]; ", v.type.cname, v.len)
             gen_printf(g, "}} {};\n", type.cname)
@@ -515,7 +517,7 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type, ent_name := "") -> string 
     case Type_Array:
         switch v.kind {
         case .Vector:
-            fmt.println(type_to_string(type))
+            fmt.println("GENERATING CNAME:", type_to_string(type))
             elem := v.type.variant.(Type_Basic)
 
             backing: string
@@ -537,17 +539,13 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type, ent_name := "") -> string 
                 }
             }
 
+            assert(backing != "")
+
             return backing
 
         case .Fixed_Array:
             name := gen_type_generate_cname(g, v.type)
-
-            switch v.kind {
-            case .Vector:
-                return fmt.tprintf("Vec{}_{}", v.len, name)
-            case .Fixed_Array:
-                return fmt.tprintf("Aos{}_{}", v.len, name)
-            }
+            return fmt.tprintf("Aos{}_{}", v.len, name)
         }
 
     case Type_Pointer:
@@ -826,6 +824,13 @@ gen_program :: proc(g: ^Gen) {
     gen_struct_entity_cnames_recursive(g, g.curr_file_scope)
 
     gen_type_entity_cnames_recursive(g, g.curr_file_scope)
+
+    for name, ent in g.curr_file_scope.entities {
+        #partial switch v in ent.variant {
+        case Entity_Type:
+            fmt.println("CNAME", name, ent.variant.(Entity_Type).type.cname)
+        }
+    }
 
     for sorted in sorted_entities {
         #partial switch v in sorted.entity.variant {

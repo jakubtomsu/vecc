@@ -14,6 +14,7 @@ procedure export compute_frame (
             immut index i32 = (x + (y * resolution.x))
 
             mut vector uv [2]f32
+            uv.x = 0.5
             // uv.x = conv(f32, x) / conv(f32, resolution.x)
             // uv.y = conv(f32, y) / conv(f32, resolution.y)
 

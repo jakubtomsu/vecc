@@ -140,6 +140,8 @@ check_type :: proc(c: ^Checker, ast: ^Ast) {
 }
 
 check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
+    assert(ast.type == nil)
+
     lit := ast.variant.(Ast_Basic_Literal)
     ast.type = find_or_create_type_entity(c, ast)
     #partial switch v in ast.type.variant {
@@ -187,6 +189,8 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 }
 
 check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
+    assert(ast.type == nil)
+
     call_expr := ast.variant.(Ast_Call_Expr)
 
     ent := check_ident(c, call_expr.procedure)
@@ -211,6 +215,8 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
 }
 
 check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
+    assert(ast.type == nil)
+
     expr := ast.variant.(Ast_Cast_Expr)
 
     check_type(c, expr.type)
@@ -220,6 +226,8 @@ check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
 }
 
 check_urnary_expr :: proc(c: ^Checker, ast: ^Ast) {
+    assert(ast.type == nil)
+
     expr := ast.variant.(Ast_Unary_Expr)
     #partial switch expr.op.kind {
     case .Sub:
@@ -297,6 +305,8 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
 check_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     if ast == nil do return
 
+    assert(ast.type == nil)
+
     #partial switch v in ast.variant {
     case Ast_Basic_Literal:
         check_basic_literal(c, ast)
@@ -334,6 +344,8 @@ check_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 }
 
 check_selector_expr :: proc(c: ^Checker, ast: ^Ast) {
+    assert(ast.type == nil)
+
     expr := ast.variant.(Ast_Selector_Expr)
     check_expr(c, expr.left)
 
@@ -399,6 +411,8 @@ check_selector_expr :: proc(c: ^Checker, ast: ^Ast) {
 }
 
 check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
+    assert(ast.type == nil)
+
     expr := ast.variant.(Ast_Index_Expr)
     check_expr(c, expr.left)
     check_expr(c, expr.index)
@@ -438,6 +452,8 @@ check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
 }
 
 check_address_expr :: proc(c: ^Checker, ast: ^Ast) {
+    assert(ast.type == nil)
+
     expr := ast.variant.(Ast_Address_Expr)
     check_expr(c, expr.expr)
 
@@ -453,6 +469,8 @@ check_address_expr :: proc(c: ^Checker, ast: ^Ast) {
 }
 
 check_deref_expr :: proc(c: ^Checker, ast: ^Ast) {
+    assert(ast.type == nil)
+
     expr := ast.variant.(Ast_Deref_Expr)
     check_expr(c, expr.expr)
     #partial switch v in expr.expr.type.variant {
@@ -463,6 +481,8 @@ check_deref_expr :: proc(c: ^Checker, ast: ^Ast) {
 }
 
 check_binary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
+    assert(ast.type == nil)
+
     expr := ast.variant.(Ast_Binary_Expr)
     ast.type = check_binary_op(c, expr.left, expr.right, expr.op.kind)
 
@@ -501,11 +521,15 @@ check_binary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 }
 
 check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
+    assert(ast.type == nil)
+
     decl := ast.variant.(Ast_Value_Decl)
     check_type(c, decl.type)
     // check_ident(c, value.name)
 
     if decl.vector {
+        ast_print(ast, "", 0)
+        fmt.println(type_to_string(decl.type.type))
         // NOTE: things like this could be cached on the scalar type, but idgaf for now
         vec := type_vectorize(decl.type.type)
         decl.type.type = find_or_create_type_entity_from_type(c, vec)
@@ -533,8 +557,6 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         check_value_decl(c, ast)
 
     case Ast_Assign_Stmt:
-        check_expr(c, v.left)
-
         op: Token_Kind
         #partial switch v.op.kind {
         case .Assign_Add:               op = .Add
@@ -548,16 +570,21 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         case .Assign_Bit_Shift_Left:    op = .Bit_Shift_Left
         case .Assign_Bit_Shift_Right:   op = .Bit_Shift_Right
         case .Assign:
+            check_expr(c, v.left)
             check_expr(c, v.right)
-            if v.left.type != v.right.type {
-                checker_error(c, "Assign statement types don't match")
+            if v.left.type == v.right.type do return
+            if vec, ok := v.left.type.variant.(Type_Array);
+               ok && vec.kind == .Vector { // && vec.type == v.right.type {
+               fmt.println(vec.type, uintptr(vec.type), type_to_string(vec.type))
+               fmt.println(v.right.type, uintptr(v.right.type), type_to_string(v.right.type))
+               checker_error(c, "aslkdfjalsdf")
+                // return
             }
-            return
+            checker_error(c, "Assign statement types don't match")
         case:
             assert(false)
         }
 
-        check_expr(c, v.right)
         ast.type = check_binary_op(c, v.left, v.right, op)
 
     case Ast_Return_Stmt:
@@ -866,6 +893,8 @@ find_or_create_type_entity :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = ni
 find_or_create_type_entity_from_type :: proc(c: ^Checker, type: ^Type) -> ^Type {
     id := type_to_id(c, type)
 
+    fmt.println("find or create type from type:", id)
+
     if ent, _, ok := find_entity(c.curr_scope, id); ok {
         #partial switch v in ent.variant {
         case Entity_Type:
@@ -876,6 +905,18 @@ find_or_create_type_entity_from_type :: proc(c: ^Checker, type: ^Type) -> ^Type 
 
         case:
             assert(false)
+        }
+    }
+
+    switch v in type.variant {
+    case Type_Basic:
+    case Type_Array:
+        find_or_create_type_entity_from_type(c, v.type)
+    case Type_Pointer:
+        find_or_create_type_entity_from_type(c, v.type)
+    case Type_Struct:
+        for field in v.fields {
+            find_or_create_type_entity_from_type(c, field.type)
         }
     }
 
@@ -998,6 +1039,10 @@ check_program :: proc(c: ^Checker) {
         #partial switch v in ent.variant {
         case Entity_Variable:
             decl := ent.ast.variant.(Ast_Value_Decl)
+            if decl.scope != c.curr_file_scope {
+                continue
+            }
+
             check_value_decl(c, ent.ast)
             ent.ast.type = decl.type.type
         }
@@ -1010,6 +1055,28 @@ check_program :: proc(c: ^Checker) {
 
         #partial switch v in ent.variant {
         case Entity_Proc:
+            fmt.println("\nPROC ENTITY", name, ent)
+            decl := ent.ast.variant.(Ast_Proc_Decl)
+        }
+    }
+
+    proc_entities := make([dynamic]^Entity)
+
+    for name, ent in c.curr_file_scope.entities {
+        #partial switch v in ent.variant {
+        case Entity_Proc:
+            fmt.println("\nPROC ENTITY", name, ent)
+            append(&proc_entities, ent)
+        }
+    }
+
+    // for name, ent in c.curr_file_scope.entities {
+    for ent in proc_entities {
+        c.curr_entity = ent
+
+        #partial switch v in ent.variant {
+        case Entity_Proc:
+            // fmt.println("\nPROC ENTITY", name, ent)
             decl := ent.ast.variant.(Ast_Proc_Decl)
             check_block_stmt(c, decl.body)
         }
