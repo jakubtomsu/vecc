@@ -248,7 +248,7 @@ gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
         gen_urnary_expr(g, ast)
 
     case Ast_Binary_Expr:
-        gen_binary_expr(g, ast, top_level = top_level)
+        gen_binary_expr(g, ast)
 
     case Ast_Selector_Expr:
         gen_selector_expr(g, ast)
@@ -983,14 +983,14 @@ gen_program :: proc(g: ^Gen) {
 
         case Entity_Builtin:
             if v.type != nil && v.value != nil {
-                gen_print(g, "const")
-                gen_print(g, " ")
-                gen_type(g, v.type)
-                gen_print(g, " ")
-                gen_print(g, sorted.name)
-                gen_print(g, " = ")
-                gen_value(g, v.value, v.type)
-                gen_print(g, ";\n")
+                // gen_print(g, "const")
+                // gen_print(g, " ")
+                // gen_type(g, v.type)
+                // gen_print(g, " ")
+                // gen_print(g, sorted.name)
+                // gen_print(g, " = ")
+                // gen_value(g, v.value, v.type)
+                // gen_print(g, ";\n")
             }
         }
     }

@@ -33,6 +33,10 @@ typedef double   f64;
 #define vecc_func static
 #define vecc_op static __forceinline
 
+const i32 vector_width = 8;
+#define vector_index v8i32_set(0, 1, 2, 3, 4, 5, 6, 7)
+
+
 #define VECC_AVX2 1
 
 #ifdef VECC_AVX2
@@ -162,7 +166,7 @@ vecc_func v8i16 v8f32_to_v8i16(v8f32 a) {
     return {{_mm256_castsi256_si128(_mm256_packs_epi32(a32, a32))}};
 }
 
-vecc_func v8f32 v8i32_to_v8f32(v8i32 a) { return {{_mm256_castsi256_ps(a.data[0])}}; }
+vecc_func v8f32 v8i32_to_v8f32(v8i32 a) { return {{_mm256_cvtepi32_ps(a.data[0])}}; }
 
 vecc_op v8f32 v8f32_set1(f32 a) { return {{_mm256_set1_ps(a)}}; }
 vecc_op v4f64 v4f64_set1(f64 a) { return {{_mm256_set1_pd(a)}}; }
@@ -204,14 +208,14 @@ vecc_op v4f64 v4f64_xor (v4f64 a, v4f64 b)  { return {{_mm256_xor_pd(a.data[0], 
 
 vecc_op v8i32 v8i32_add (v8i32 a, v8i32 b)  { return {{_mm256_add_epi32(a.data[0], b.data[0])}}; }
 vecc_op v8i32 v8i32_sub (v8i32 a, v8i32 b)  { return {{_mm256_sub_epi32(a.data[0], b.data[0])}}; }
-vecc_op v8i32 v8i32_mul (v8i32 a, v8i32 b)  { return {{_mm256_mul_epi32(a.data[0], b.data[0])}}; }
+vecc_op v8i32 v8i32_mul (v8i32 a, v8i32 b)  { return {{_mm256_mullo_epi32(a.data[0], b.data[0])}}; }
 vecc_op v8i32 v8i32_and (v8i32 a, v8i32 b)  { return {{_mm256_and_si256(a.data[0], b.data[0])}}; }
 vecc_op v8i32 v8i32_or  (v8i32 a, v8i32 b)  { return {{_mm256_or_si256(a.data[0], b.data[0])}}; }
 vecc_op v8i32 v8i32_xor (v8i32 a, v8i32 b)  { return {{_mm256_xor_si256(a.data[0], b.data[0])}}; }
 
 vecc_op v8u32 v8u32_add (v8u32 a, v8u32 b)  { return {{_mm256_add_epi32(a.data[0], b.data[0])}}; }
 vecc_op v8u32 v8u32_sub (v8u32 a, v8u32 b)  { return {{_mm256_sub_epi32(a.data[0], b.data[0])}}; }
-vecc_op v8u32 v8u32_mul (v8u32 a, v8u32 b)  { return {{_mm256_mul_epi32(a.data[0], b.data[0])}}; }
+vecc_op v8u32 v8u32_mul (v8u32 a, v8u32 b)  { return {{_mm256_mullo_epi32(a.data[0], b.data[0])}}; }
 vecc_op v8u32 v8u32_and (v8u32 a, v8u32 b)  { return {{_mm256_and_si256(a.data[0], b.data[0])}}; }
 vecc_op v8u32 v8u32_or  (v8u32 a, v8u32 b)  { return {{_mm256_or_si256(a.data[0], b.data[0])}}; }
 vecc_op v8u32 v8u32_xor (v8u32 a, v8u32 b)  { return {{_mm256_xor_si256(a.data[0], b.data[0])}}; }

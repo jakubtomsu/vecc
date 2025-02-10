@@ -8,13 +8,15 @@
 #include "sw_renderer.h"
 
 #define WIDTH  320
-#define HEIGHT 180
+#define HEIGHT 184
 
 LARGE_INTEGER g_frequency = {0};
 v8u32* g_framebuffer;
 uint64_t g_start_clock;
 uint64_t g_prev_clock;
 uint32_t g_frame;
+
+HBITMAP g_framebuffer_bitmap;
 
 uint64_t time_clock() {
     LARGE_INTEGER counter;
@@ -31,6 +33,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CLOSE:
             PostQuitMessage(0);
             return 0;
+
+        case WM_CREATE: {
+            HDC dc = GetDC(hwnd);
+
+            BITMAPINFO bitmap_info = {0};
+            bitmap_info.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+            bitmap_info.bmiHeader.biWidth       = WIDTH;
+            bitmap_info.bmiHeader.biHeight      = -HEIGHT;
+            bitmap_info.bmiHeader.biPlanes      = 1;
+            bitmap_info.bmiHeader.biBitCount    = 32;
+            bitmap_info.bmiHeader.biCompression = BI_RGB;
+
+            g_framebuffer_bitmap = CreateDIBSection(dc, (BITMAPINFO*)&bitmap_info, DIB_RGB_COLORS, (void**)&g_framebuffer, 0, 0);
+        } break;
+
         case WM_PAINT: {
             Sleep(1);
 
@@ -52,19 +69,20 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             printf("delta time: %g ms (%g fps), compute: %g ms\n", delta * 1e3, 1.0 / delta, compute_time * 1e3);
 
             PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
+            HDC dc = BeginPaint(hwnd, &ps);
 
-            BITMAPINFO bmi = {0};
-            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bmi.bmiHeader.biWidth = WIDTH;
-            bmi.bmiHeader.biHeight = -HEIGHT; // Top-down
-            bmi.bmiHeader.biPlanes = 1;
-            bmi.bmiHeader.biBitCount = 32;
-            bmi.bmiHeader.biCompression = BI_RGB;
+            HDC bitmap_dc = CreateCompatibleDC(dc);
+            HGDIOBJ old_bitmap_handle = SelectObject(bitmap_dc, (HGDIOBJ)(g_framebuffer_bitmap));
 
-            StretchDIBits(hdc, 0, 0, WIDTH * 3, HEIGHT * 3,  // Scale up
-                         0, 0, WIDTH, HEIGHT,
-                         g_framebuffer, &bmi, DIB_RGB_COLORS, SRCCOPY);
+            RECT client_rect;
+            GetClientRect(hwnd, &client_rect);
+            int width = client_rect.right - client_rect.left;
+            int height = client_rect.bottom - client_rect.top;
+
+            StretchBlt(dc, 0, 0, width, height, bitmap_dc, 0, 0, WIDTH, HEIGHT, SRCCOPY);
+
+            SelectObject(bitmap_dc, old_bitmap_handle);
+            DeleteDC(bitmap_dc);
 
             EndPaint(hwnd, &ps);
 
@@ -87,8 +105,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                              WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                              CW_USEDEFAULT, CW_USEDEFAULT, WIDTH * 3, HEIGHT * 3,
                              NULL, NULL, hInstance, NULL);
-
-    g_framebuffer = (v8u32*)malloc(WIDTH * HEIGHT * sizeof(v8u32));
 
     QueryPerformanceFrequency(&g_frequency);
     g_start_clock = time_clock();

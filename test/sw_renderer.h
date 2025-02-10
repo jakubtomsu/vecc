@@ -28,32 +28,31 @@ void compute_frame(v8u32* framebuffer, Aos2_i32 resolution, f32 time, f32 delta,
 // VECC global variable declarations
 
 const i32 W = 8;
-const i32 vector_width = 8;
-const v8i32 vector_index = v8i32_set(0, 1, 2, 3, 4, 5, 6, 7);
 
 // VECC function definitions
 
 void compute_frame(v8u32* framebuffer, Aos2_i32 resolution, f32 time, f32 delta, i32 frame) {
-	for (i32 x = 0; x < resolution.data[0]; x = x + 1) {
-		for (i32 y = 0; y < resolution.data[1] / vector_width; y = y + 1) {
-			const v8i32 pixel_y = v8i32_add(vector_index, v8i32_set1(y * vector_width));
+	for (i32 y = 0; (y < resolution.data[1]); y = y + 1) {
+		for (i32 x = 0; (x < (resolution.data[0] / vector_width)); x = x + 1) {
+			v8i32 pixel_x = (v8i32_add((v8i32_mul(vector_index, v8i32_set1(1))), v8i32_set1((x * vector_width))));
 			Aos2_v8f32 uv = {0};
-			uv.data[0] = v8f32_set1((f32)x * 0.0049999999f);
+			uv.data[0] = (v8f32_div(v8i32_to_v8f32(pixel_x), v8f32_set1((f32)resolution.data[0])));
+			uv.data[1] = v8f32_set1(((f32)y / (f32)resolution.data[1]));
 			Aos4_v8f32 col = {0};
 			col.data[0] = uv.data[0];
 			col.data[1] = uv.data[1];
 			col.data[3] = v8f32_set1(1.0f);
 			Aos4_v8u32 col_int = {0};
-			col_int.data[0] = v8u32_min(v8u32_set1(255), v8f32_to_v8u32(v8f32_mul(col.data[0], v8f32_set1(255.0f))));
-			col_int.data[1] = v8u32_min(v8u32_set1(255), v8f32_to_v8u32(v8f32_mul(col.data[1], v8f32_set1(255.0f))));
-			col_int.data[2] = v8u32_min(v8u32_set1(255), v8f32_to_v8u32(v8f32_mul(col.data[2], v8f32_set1(255.0f))));
-			col_int.data[3] = v8u32_min(v8u32_set1(255), v8f32_to_v8u32(v8f32_mul(col.data[3], v8f32_set1(255.0f))));
+			col_int.data[0] = v8u32_min(v8u32_set1(255), v8f32_to_v8u32((v8f32_mul(col.data[0], v8f32_set1(255.0f)))));
+			col_int.data[1] = v8u32_min(v8u32_set1(255), v8f32_to_v8u32((v8f32_mul(col.data[1], v8f32_set1(255.0f)))));
+			col_int.data[2] = v8u32_min(v8u32_set1(255), v8f32_to_v8u32((v8f32_mul(col.data[2], v8f32_set1(255.0f)))));
+			col_int.data[3] = v8u32_min(v8u32_set1(255), v8f32_to_v8u32((v8f32_mul(col.data[3], v8f32_set1(255.0f)))));
 			v8u32 col_rgba = {0};
 			col_rgba = col_int.data[2];
-			col_rgba = v8u32_or(col_rgba, v8u32_sl(col_int.data[1], 8));
-			col_rgba = v8u32_or(col_rgba, v8u32_sl(col_int.data[0], 16));
-			col_rgba = v8u32_or(col_rgba, v8u32_sl(col_int.data[3], 24));
-			const i32 index = x + y * resolution.data[0];
+			col_rgba = v8u32_or(col_rgba, (v8u32_sl(col_int.data[1], 8)));
+			col_rgba = v8u32_or(col_rgba, (v8u32_sl(col_int.data[0], 16)));
+			col_rgba = v8u32_or(col_rgba, (v8u32_sl(col_int.data[3], 24)));
+			const i32 index = (x + (y * (resolution.data[0] / vector_width)));
 			framebuffer[index] = col_rgba;
 		};
 	};

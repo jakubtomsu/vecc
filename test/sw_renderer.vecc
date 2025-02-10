@@ -9,17 +9,15 @@ procedure export compute_frame (
     immut delta                 f32
     immut frame                 i32
 ) {
-    for x i32; x < resolution.x; x += 1 {
-        for y i32; y < (resolution.y / vector_width); y += 1 {
-            immut vector pixel_y i32 = vector_index + (y * vector_width)
+    for y i32; y < resolution.y; y += 1 {
+        for x i32; x < (resolution.x / vector_width); x += 1 {
+            mut vector pixel_x i32 = (vector_index * 1) + (x * vector_width)
 
             mut vector uv [2]f32
-            // uv.x = 0.5
-            uv.x = conv(f32, x) * 0.005 // / conv(f32, resolution.x)
-            // uv.y = conv(f32, y) * 0.0 // / conv(f32, resolution.y)
+            uv.x = conv(f32, pixel_x) / conv(f32, resolution.x)
+            uv.y = conv(f32, y) / conv(f32, resolution.y)
 
             mut vector col [4]f32
-            // // col.r = (sin((conv(f32, x) * 0.05) + time) * 0.5) + 0.5
             col.r = uv.x
             col.g = uv.y
             col.a = 1.0
@@ -38,7 +36,7 @@ procedure export compute_frame (
             col_rgba |= col_int.r << 16
             col_rgba |= col_int.a << 24
 
-            immut index i32 = x + (y * resolution.x)
+            immut index i32 = x + (y * (resolution.x / vector_width))
             framebuffer[index] = col_rgba
         }
     }
