@@ -15,5 +15,6 @@ https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/lectures/07_gpucore.p
 - strong static type checking
     - type hint system for inferring literal types
 - constant folding
+- array programming combined with SIMD and AoSoA
 - type vectorization
 - C codegen backend
