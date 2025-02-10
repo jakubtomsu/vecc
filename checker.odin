@@ -112,6 +112,7 @@ check_type :: proc(c: ^Checker, ast: ^Ast) {
     case Ast_Array_Type:
         check_expr(c, v.len)
         check_type(c, v.type)
+
         #partial switch l in v.len.value {
         case i128:
             assert(l > 0)
@@ -219,7 +220,20 @@ check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
     check_type(c, expr.type)
     check_expr(c, expr.value)
 
-    ast.type = expr.type.type
+    // lil hack :P
+    #partial switch v in expr.value.type.variant {
+    case Type_Array:
+        basic := expr.type.type.variant.(Type_Basic)
+
+        temp := type_clone(expr.value.type)
+        temp_arr := &temp.variant.(Type_Array)
+        temp_arr.type = expr.type.type
+        ast.type = find_or_create_type(c, temp)
+
+    case:
+        ast.type = expr.type.type
+    }
+
 }
 
 check_urnary_expr :: proc(c: ^Checker, ast: ^Ast) {
@@ -681,7 +695,11 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
                 if type_is_integer(hint_basic) {
                     return hint_basic
                 } else {
-                    checker_error(c, "Integer literal cannot be assigned to non-integer-element type")
+                    checker_error(c,
+                        "Integer literal cannot be assigned to non-integer-element type ({} from {})",
+                        type_to_string(hint_basic),
+                        type_to_string(type_hint),
+                    )
                 }
 
             case .Float:

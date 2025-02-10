@@ -40,14 +40,26 @@ Type_Basic_Kind :: enum u8 {
 }
 
 Type_Array :: struct {
-    kind:   Type_Array_Kind,
-    len:    int,
-    type:   ^Type,
+    kind:           Type_Array_Kind,
+    // Relevant only when kind is Vector
+    vector_backing: Type_Vector_Backing,
+    len:            int,
+    type:           ^Type,
 }
 
 Type_Array_Kind :: enum u8 {
     Fixed_Array = 0,
     Vector,
+}
+
+Type_Vector_Backing :: enum u8 {
+    None = 0,
+    V128I,
+    V128F,
+    V128D,
+    V256I,
+    V256F,
+    V256D,
 }
 
 Type_Pointer :: struct {

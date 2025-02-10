@@ -14,6 +14,7 @@ Gen :: struct {
     curr_entity:        ^Entity,
     depth:              int,
     indent:             int,
+    unique_counter:     int,
 }
 
 gen_indent :: proc(g: ^Gen) {
@@ -154,10 +155,51 @@ gen_urnary_expr :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_cast_expr :: proc(g: ^Gen, ast: ^Ast) {
     expr := ast.variant.(Ast_Cast_Expr)
-    gen_print(g, "(")
-    gen_type(g, expr.type.type)
-    gen_print(g, ")")
-    gen_expr(g, expr.value)
+    #partial switch expr.op.kind {
+    case .Reinterpret:
+        gen_print(g, "(")
+        gen_print(g, "*(")
+        gen_type(g, expr.type.type)
+        gen_print(g, "*)&")
+        gen_expr(g, expr.value)
+        gen_print(g, ")")
+
+    case .Conv:
+        #partial switch v in expr.value.type.variant {
+        case Type_Basic:
+            gen_print(g, "(")
+            gen_type(g, expr.type.type)
+            gen_print(g, ")")
+            gen_expr(g, expr.value)
+
+        case Type_Array:
+            switch v.kind {
+            case .Vector:
+                dst := expr.type.type.variant.(Type_Basic)
+                src := v.type.variant.(Type_Basic)
+
+                op_name := ""
+
+                #partial switch src.kind {
+                case .F32:
+                    #partial switch dst.kind {
+                    case .U8:
+                    }
+                }
+
+                op_name = fmt.tprintf("{}_conv_{}", expr.value.type.cname, expr.type.type.cname)
+
+                assert(op_name != "")
+
+                gen_print(g, op_name)
+                gen_print(g, "(")
+                gen_expr(g, expr.value, top_level = true)
+                gen_print(g, ")")
+
+            case .Fixed_Array:
+            }
+        }
+    }
 }
 
 gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
@@ -317,10 +359,33 @@ gen_selector_expr :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_index_expr :: proc(g: ^Gen, ast: ^Ast) {
     expr := ast.variant.(Ast_Index_Expr)
-    gen_expr(g, expr.left)
-    gen_print(g, "[")
-    gen_expr(g, expr.index)
-    gen_print(g, "]")
+    #partial switch v in ast.type.variant {
+    case Type_Array:
+        switch v.kind {
+        case .Vector:
+            index := 0
+            // switch val in expr.index.value {
+            // case i128:
+            //     index = int(val)
+            // case:
+            //     panic("currently the index has to be a constant")
+            // }
+
+            op_name := ""
+
+            assert(op_name != "")
+
+
+        case .Fixed_Array:
+            gen_expr(g, expr.left)
+            gen_print(g, "[")
+            gen_expr(g, expr.index)
+            gen_print(g, "]")
+        }
+
+    case:
+        assert(false)
+    }
 }
 
 gen_proc_param_field :: proc(g: ^Gen, ast: ^Ast) {
@@ -466,9 +531,13 @@ _gen_type_matches_op_proc :: proc(type: ^Type, op: Gen_Op_Proc) -> bool {
     return false
 }
 
+// TEMP just so we don't generate arithmetic procs for big fixed array buffers etc
+MAX_VECTOR_WIDTH :: 64
+
 gen_type_procs_decls :: proc(g: ^Gen, type: ^Type) {
     #partial switch v in type.variant {
     case Type_Array:
+        if v.len > MAX_VECTOR_WIDTH do return
         for op in _gen_named_binary_ops {
             if !_gen_type_matches_op_proc(v.type, op) do continue
             gen_printf(g, "static {0} {1}_{2}({0} a, {0} b);\n", type.cname, type.cname_lower, op.name)
@@ -483,6 +552,7 @@ gen_type_procs_decls :: proc(g: ^Gen, type: ^Type) {
 gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
     #partial switch v in type.variant {
     case Type_Array:
+        if v.len > MAX_VECTOR_WIDTH do return
         for op in _gen_named_binary_ops {
             if !_gen_type_matches_op_proc(v.type, op) do continue
             func := fmt.tprintf("static {0} {1}_{2}({0} a, {0} b) {{", type.cname, type.cname_lower, op.name)
@@ -513,39 +583,72 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
 
                 case .Add:
                     switch v.len {
-                    case 8:
-                        switch basic.kind {
+                    case 32:
+                        #partial switch basic.kind {
                         case .B8 , .I8 , .U8    : intrinsic = "_mm256_add_epi8"
+                        }
+                    case 16:
+                        #partial switch basic.kind {
+                        case .B8 , .I8 , .U8    : intrinsic = "_mm128_add_epi8"
                         case .B16, .I16, .U16   : intrinsic = "_mm256_add_epi16"
+                        }
+                    case 8:
+                        #partial switch basic.kind {
                         case .B32, .I32, .U32   : intrinsic = "_mm256_add_epi32"
                         case .B64, .I64, .U64   : intrinsic = "_mm256_add_epi64"
                         case .F32               : intrinsic = "_mm256_add_ps"
+                        }
+
+                    case 4:
+                        #partial switch basic.kind {
                         case .F64               : intrinsic = "_mm256_add_pd"
                         }
                     }
 
                 case .Sub:
                     switch v.len {
-                    case 8:
-                        switch basic.kind {
+                    case 32:
+                        #partial switch basic.kind {
                         case .B8 , .I8 , .U8    : intrinsic = "_mm256_sub_epi8"
+                        }
+                    case 16:
+                        #partial switch basic.kind {
+                        case .B8 , .I8 , .U8    : intrinsic = "_mm128_sub_epi8"
                         case .B16, .I16, .U16   : intrinsic = "_mm256_sub_epi16"
+                        }
+                    case 8:
+                        #partial switch basic.kind {
                         case .B32, .I32, .U32   : intrinsic = "_mm256_sub_epi32"
                         case .B64, .I64, .U64   : intrinsic = "_mm256_sub_epi64"
                         case .F32               : intrinsic = "_mm256_sub_ps"
+                        }
+
+                    case 4:
+                        #partial switch basic.kind {
                         case .F64               : intrinsic = "_mm256_sub_pd"
                         }
                     }
 
                 case .Mul:
                     switch v.len {
-                    case 8:
-                        switch basic.kind {
+                    case 32:
+                        #partial switch basic.kind {
                         case .B8 , .I8 , .U8    : intrinsic = "_mm256_mul_epi8"
+                        }
+                    case 16:
+                        #partial switch basic.kind {
+                        case .B8 , .I8 , .U8    : intrinsic = "_mm128_mul_epi8"
                         case .B16, .I16, .U16   : intrinsic = "_mm256_mul_epi16"
+                        }
+                    case 8:
+                        #partial switch basic.kind {
                         case .B32, .I32, .U32   : intrinsic = "_mm256_mul_epi32"
                         case .B64, .I64, .U64   : intrinsic = "_mm256_mul_epi64"
                         case .F32               : intrinsic = "_mm256_mul_ps"
+                        }
+
+                    case 4:
+                        #partial switch basic.kind {
                         case .F64               : intrinsic = "_mm256_mul_pd"
                         }
                     }
@@ -553,13 +656,17 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
                 case .Div:
                     switch v.len {
                     case 8:
-                        switch basic.kind {
+                        #partial switch basic.kind {
                         case .B8 , .I8 , .U8 ,
                              .B16, .I16, .U16,
                              .B32, .I32, .U32,
                              .B64, .I64, .U64   :
 
                         case .F32: intrinsic = "_mm256_div_ps"
+                        }
+
+                    case 4:
+                        #partial switch basic.kind {
                         case .F64: intrinsic = "_mm256_div_pd"
                         }
                     }
@@ -574,8 +681,8 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
                     case 8:
                         switch basic.kind {
                         case .B8 , .I8 , .U8 ,
-                             .B16, .I16, .U16,
-                             .B32, .I32, .U32,
+                             .B16, .I16, .U16   : intrinsic = "_mm_and_si128"
+                        case .B32, .I32, .U32,
                              .B64, .I64, .U64   : intrinsic = "_mm256_and_si256"
                         case .F32               : intrinsic = "_mm256_and_ps"
                         case .F64               : intrinsic = "_mm256_and_pd"
@@ -587,8 +694,8 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
                     case 8:
                         switch basic.kind {
                         case .B8 , .I8 , .U8 ,
-                             .B16, .I16, .U16,
-                             .B32, .I32, .U32,
+                             .B16, .I16, .U16   : intrinsic = "_mm_xor_si128"
+                        case .B32, .I32, .U32,
                              .B64, .I64, .U64   : intrinsic = "_mm256_or_si256"
                         case .F32               : intrinsic = "_mm256_or_ps"
                         case .F64               : intrinsic = "_mm256_or_pd"
@@ -600,8 +707,8 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
                     case 8:
                         switch basic.kind {
                         case .B8 , .I8 , .U8 ,
-                             .B16, .I16, .U16,
-                             .B32, .I32, .U32,
+                             .B16, .I16, .U16   : intrinsic = "_mm_xor_si128"
+                        case .B32, .I32, .U32,
                              .B64, .I64, .U64   : intrinsic = "_mm256_xor_si256"
                         case .F32               : intrinsic = "_mm256_xor_ps"
                         case .F64               : intrinsic = "_mm256_xor_pd"
@@ -609,8 +716,19 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
                     }
 
 
-
+                // TODO: support both vector and scalar params
                 case .Bit_Shift_Left:
+                    switch v.len {
+                    case 8:
+                        switch basic.kind {
+                        case .B8 , .I8 , .U8    :
+                        case .B16, .I16, .U16   : intrinsic = "_mm_slli_epi16"
+                        case .B32, .I32, .U32   : intrinsic = "_mm256_slli_epi32"
+                        case .F32               :
+                        case .B64, .I64, .U64, .F64:
+                        }
+                    }
+
                 case .Bit_Shift_Right:
                 }
 
@@ -643,8 +761,8 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
             switch v.len {
             case 8:
                 switch v.type.variant.(Type_Basic).kind {
-                case .B8,  .I8,  .U8 : intrinsic = "_mm256_set1_epi8"
-                case .B16, .I16, .U16: intrinsic = "_mm256_set1_epi16"
+                case .B8,  .I8,  .U8 : intrinsic = "_mm_set1_epi8"
+                case .B16, .I16, .U16: intrinsic = "_mm_set1_epi16"
                 case .B32, .I32, .U32: intrinsic = "_mm256_set1_epi32"
                 case .B64, .I64, .U64: intrinsic = "_mm256_set1_epi64x"
                 case .F32:  intrinsic = "_mm256_set1_ps"
@@ -657,7 +775,7 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
             gen_printf(g, "\treturn {}(a);\n", intrinsic)
 
         case .Fixed_Array:
-            gen_printf(g, "\t{0} result;\n", type.cname)
+                gen_printf(g, "\t{0} result;\n", type.cname)
             for i in 0..<v.len {
                 gen_printf(g, "\tresult.data[{0}] = a;\n", i)
             }
@@ -698,7 +816,22 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
             elem := v.type.variant.(Type_Basic)
 
             backing: string
+            // TODO: formalize this
             switch v.len {
+            case 4:
+                #partial switch elem.kind {
+                case .B8 :
+                case .B16:
+                case .U8 :
+                case .U16:
+                case .I8 :
+                case .I16:
+                case .B32, .I32, .U32: backing = "__m128i"
+                case .B64, .I64, .U64: backing = "__m256i"
+                case .F32: backing = "__m128"
+                case .F64: backing = "__m256d"
+                }
+
             case 8:
                 #partial switch elem.kind {
                 case .B8 : backing = "__m128i"
@@ -711,8 +844,12 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
                 case .U16: backing = "__m128i"
                 case .U32: backing = "__m256i"
                 case .F32: backing = "__m256"
-                case:
-                    assert(false)
+                }
+
+            case 16:
+                #partial switch elem.kind {
+                case .B8, .I8, .U8: backing = "__m128i"
+                case .B16, .I16, .U16: backing = "__m256i"
                 }
             }
 
@@ -1002,6 +1139,7 @@ gen_program :: proc(g: ^Gen) {
 
     // FIXME: make sure the impl expands only once
     gen_print(g, "\n#ifdef VECC_IMPL\n")
+    gen_print(g, "#include \"vecc_builtin.h\"\n")
 
     gen_print(g, "\n// VECC private function declarations\n\n")
 
