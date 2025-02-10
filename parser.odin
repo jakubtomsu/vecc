@@ -188,6 +188,7 @@ Ast_Binary_Expr :: struct {
 
 Ast_Call_Expr :: struct {
     procedure:  ^Ast,
+    entity:     ^Entity,
     args:       []^Ast,
 }
 
@@ -278,6 +279,10 @@ ast_print :: proc(ast: ^Ast, name: string, depth: int) {
     case Ast_Array_Type:    fmt.printf(" : kind={}", v.kind)
     }
 
+    if ast.type != nil {
+        fmt.printf("  ({})", type_to_string(ast.type))
+    }
+
     fmt.println()
 
     depth += 1
@@ -300,6 +305,16 @@ ast_print :: proc(ast: ^Ast, name: string, depth: int) {
     case Ast_Binary_Expr:
         ast_print(v.left, "left", depth)
         ast_print(v.right, "right", depth)
+
+    case Ast_Index_Expr:
+        ast_print(v.index, "index", depth)
+        ast_print(v.left, "left", depth)
+
+    case Ast_Address_Expr:
+        ast_print(v.expr, "expr", depth)
+
+    case Ast_Deref_Expr:
+        ast_print(v.expr, "deref", depth)
 
     case Ast_Value_Decl:
         ast_print(v.name, "name", depth)

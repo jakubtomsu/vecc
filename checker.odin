@@ -50,7 +50,11 @@ Entity_Builtin :: struct {
 }
 
 Entity_Builtin_Kind :: enum u8 {
+    // Values
+    Vector_Width,
     Vector_Index,
+    // Procs
+    Min,
 }
 
 Entity_Struct :: struct {
@@ -116,6 +120,9 @@ check_type :: proc(c: ^Checker, ast: ^Ast) {
         #partial switch l in v.len.value {
         case i128:
             assert(l > 0)
+            if v.kind == .Vector {
+                assert(l <= 64)
+            }
         case:
             assert(false)
         }
@@ -189,26 +196,45 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
     assert(ast.type == nil)
 
-    call_expr := ast.variant.(Ast_Call_Expr)
+    call_expr := &ast.variant.(Ast_Call_Expr)
 
     ent := check_ident(c, call_expr.procedure)
-
-    if _, ok := ent.variant.(Entity_Proc); !ok {
-        checker_error(c, "Invalid call entity")
-    }
-
-    proc_decl := ent.ast.variant.(Ast_Proc_Decl)
-    proc_type := proc_decl.type.variant.(Ast_Proc_Type)
+    call_expr.entity = ent
 
     for arg, i in call_expr.args {
         check_expr(c, arg)
-        if arg.type != proc_type.params[i].type {
-            checker_error(c, "Invalid argument type")
-        }
     }
 
-    if proc_type.result != nil {
-        ast.type = proc_type.result.type
+    #partial switch v in ent.variant {
+    case Entity_Proc:
+        proc_decl := ent.ast.variant.(Ast_Proc_Decl)
+        proc_type := proc_decl.type.variant.(Ast_Proc_Type)
+
+        for arg, i in call_expr.args {
+            if arg.type != proc_type.params[i].type {
+                checker_error(c, "Invalid argument type")
+            }
+        }
+
+        if proc_type.result != nil {
+            ast.type = proc_type.result.type
+        }
+
+    case Entity_Builtin:
+        #partial switch v.kind {
+        case .Min:
+            assert(len(call_expr.args) == 2) // Allow also 3 params? or any number > 1?
+            ast.type = call_expr.args[0].type
+            for arg in call_expr.args {
+                assert(ast.type == arg.type)
+            }
+
+        case:
+            checker_error(c, "This builtin cannot be called") // dafuq
+        }
+
+    case:
+        checker_error(c, "Invalid call entity")
     }
 }
 
@@ -264,14 +290,36 @@ check_urnary_expr :: proc(c: ^Checker, ast: ^Ast) {
 
 check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) -> ^Type {
     check_expr(c, left)
-    check_expr(c, right, type_hint = left.type)
+
+    hint: ^Type
+    #partial switch op {
+    case .Bit_Shift_Left, .Bit_Shift_Right:
+        hint = c.basic_types[.I32]
+    case:
+        hint = left.type
+    }
+
+    check_expr(c, right, type_hint = hint)
 
     left_elem := type_elem_basic_type(left.type)
+    #partial switch op {
+    case .Bit_Shift_Left, .Bit_Shift_Right:
+        // if !type_is_integer(left_elem) {
+        //     checker_error(c, "Shift operation re")
+        // }
 
-    if left_elem != right.type {
-        checker_error(c, "Types in binary expression don't match: {} vs {}",
-            type_to_string(left_elem), type_to_string(right.type))
+        if !type_is_integer(right.type) {
+            checker_error(c, "Shift amount must be an integer")
+        }
+
+    case:
+
+        if left.type != right.type && left_elem != right.type {
+            checker_error(c, "Types in binary expression don't match: {} vs {}",
+                type_to_string(left_elem), type_to_string(right.type))
+        }
     }
+
 
     type := left.type
 
@@ -535,7 +583,6 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
     // check_ident(c, value.name)
 
     if decl.vector {
-        ast_print(ast, "", 0)
         fmt.println(type_to_string(decl.type.type))
         // NOTE: things like this could be cached on the scalar type, but idgaf for now
         vec := type_vectorize(decl.type.type)
@@ -555,7 +602,8 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
 
 check_proc_param_field :: proc(c: ^Checker, ast: ^Ast) {
     decl := ast.variant.(Ast_Value_Decl)
-    check_type(c, decl.type)
+    // check_type(c, decl.type)
+    check_value_decl(c, ast)
     ast.type = decl.type.type
 }
 
@@ -580,6 +628,10 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
                ok && vec.kind == .Vector && vec.type == v.right.type {
                 return
             }
+            // if t, ok := v.left.type.variant.(Type_Pointer);
+            //    ok && t.kind == .Multi && t.type == v.right.type {
+            //     return
+            // }
             checker_error(c, "Assign statement types don't match")
 
         case:
@@ -941,9 +993,11 @@ check_program :: proc(c: ^Checker) {
     }}))
 
     create_entity(c.curr_file_scope, "vector_width", nil, Entity_Builtin{
-        kind = .Vector_Index, value = VECTOR_WIDTH, type = c.basic_types[.I32]})
+        kind = .Vector_Width, value = VECTOR_WIDTH, type = c.basic_types[.I32]})
     create_entity(c.curr_file_scope, "vector_index", nil, Entity_Builtin{
         kind = .Vector_Index, value = [8]i32{0, 1, 2, 3, 4, 5, 6, 7}, type = v8i32_type})
+
+    create_entity(c.curr_file_scope, "min", nil, Entity_Builtin{kind = .Min})
 
     // 1. check all types
     // 2. check all entity declarations
