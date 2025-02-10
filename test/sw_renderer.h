@@ -59,6 +59,35 @@ static __m256 __m256_div(__m256 a, __m256 b);
 static __m256 __m256_broadcast(float a);
 typedef struct Aos2___m256 { __m256 data[2]; } Aos2___m256;
 static Aos2___m256 aos2___m256_broadcast(__m256 a);
+typedef struct Aos4_float { float data[4]; } Aos4_float;
+static Aos4_float aos4_float_add(Aos4_float a, Aos4_float b);
+static Aos4_float aos4_float_sub(Aos4_float a, Aos4_float b);
+static Aos4_float aos4_float_mul(Aos4_float a, Aos4_float b);
+static Aos4_float aos4_float_div(Aos4_float a, Aos4_float b);
+static Aos4_float aos4_float_broadcast(float a);
+typedef struct Aos4___m256 { __m256 data[4]; } Aos4___m256;
+static Aos4___m256 aos4___m256_broadcast(__m256 a);
+typedef struct Aos4_uint16_t { uint16_t data[4]; } Aos4_uint16_t;
+static Aos4_uint16_t aos4_uint16_t_add(Aos4_uint16_t a, Aos4_uint16_t b);
+static Aos4_uint16_t aos4_uint16_t_sub(Aos4_uint16_t a, Aos4_uint16_t b);
+static Aos4_uint16_t aos4_uint16_t_mul(Aos4_uint16_t a, Aos4_uint16_t b);
+static Aos4_uint16_t aos4_uint16_t_div(Aos4_uint16_t a, Aos4_uint16_t b);
+static Aos4_uint16_t aos4_uint16_t_mod(Aos4_uint16_t a, Aos4_uint16_t b);
+static Aos4_uint16_t aos4_uint16_t_and(Aos4_uint16_t a, Aos4_uint16_t b);
+static Aos4_uint16_t aos4_uint16_t_or(Aos4_uint16_t a, Aos4_uint16_t b);
+static Aos4_uint16_t aos4_uint16_t_xor(Aos4_uint16_t a, Aos4_uint16_t b);
+static Aos4_uint16_t aos4_uint16_t_broadcast(uint16_t a);
+static __m128i __m128i_add(__m128i a, __m128i b);
+static __m128i __m128i_sub(__m128i a, __m128i b);
+static __m128i __m128i_mul(__m128i a, __m128i b);
+static __m128i __m128i_div(__m128i a, __m128i b);
+static __m128i __m128i_mod(__m128i a, __m128i b);
+static __m128i __m128i_and(__m128i a, __m128i b);
+static __m128i __m128i_or(__m128i a, __m128i b);
+static __m128i __m128i_xor(__m128i a, __m128i b);
+static __m128i __m128i_broadcast(uint16_t a);
+typedef struct Aos4___m128i { __m128i data[4]; } Aos4___m128i;
+static Aos4___m128i aos4___m128i_broadcast(__m128i a);
 
 // VECC exported function declarations
 void compute_frame(Aos4_uint8_t* framebuffer, Aos2_int32_t resolution, float time, float delta, int32_t frame);
@@ -66,6 +95,7 @@ void compute_frame(Aos4_uint8_t* framebuffer, Aos2_int32_t resolution, float tim
 
 
 #ifdef VECC_IMPL
+#include "vecc_builtin.h"
 
 // VECC private function declarations
 
@@ -243,6 +273,136 @@ static Aos2___m256 aos2___m256_broadcast(__m256 a) {
 	result.data[0] = a;
 	result.data[1] = a;
 }
+static Aos4_float aos4_float_add(Aos4_float a, Aos4_float b) {
+	Aos4_float result;
+	result.data[0] = a.data[0] + b.data[0];
+	result.data[1] = a.data[1] + b.data[1];
+	result.data[2] = a.data[2] + b.data[2];
+	result.data[3] = a.data[3] + b.data[3];
+	return result;
+}
+static Aos4_float aos4_float_sub(Aos4_float a, Aos4_float b) {
+	Aos4_float result;
+	result.data[0] = a.data[0] - b.data[0];
+	result.data[1] = a.data[1] - b.data[1];
+	result.data[2] = a.data[2] - b.data[2];
+	result.data[3] = a.data[3] - b.data[3];
+	return result;
+}
+static Aos4_float aos4_float_mul(Aos4_float a, Aos4_float b) {
+	Aos4_float result;
+	result.data[0] = a.data[0] * b.data[0];
+	result.data[1] = a.data[1] * b.data[1];
+	result.data[2] = a.data[2] * b.data[2];
+	result.data[3] = a.data[3] * b.data[3];
+	return result;
+}
+static Aos4_float aos4_float_div(Aos4_float a, Aos4_float b) {
+	Aos4_float result;
+	result.data[0] = a.data[0] / b.data[0];
+	result.data[1] = a.data[1] / b.data[1];
+	result.data[2] = a.data[2] / b.data[2];
+	result.data[3] = a.data[3] / b.data[3];
+	return result;
+}
+static Aos4_float aos4_float_broadcast(float a) {
+	Aos4_float result;
+	result.data[0] = a;
+	result.data[1] = a;
+	result.data[2] = a;
+	result.data[3] = a;
+}
+static Aos4___m256 aos4___m256_broadcast(__m256 a) {
+	Aos4___m256 result;
+	result.data[0] = a;
+	result.data[1] = a;
+	result.data[2] = a;
+	result.data[3] = a;
+}
+static Aos4_uint16_t aos4_uint16_t_add(Aos4_uint16_t a, Aos4_uint16_t b) {
+	Aos4_uint16_t result;
+	result.data[0] = a.data[0] + b.data[0];
+	result.data[1] = a.data[1] + b.data[1];
+	result.data[2] = a.data[2] + b.data[2];
+	result.data[3] = a.data[3] + b.data[3];
+	return result;
+}
+static Aos4_uint16_t aos4_uint16_t_sub(Aos4_uint16_t a, Aos4_uint16_t b) {
+	Aos4_uint16_t result;
+	result.data[0] = a.data[0] - b.data[0];
+	result.data[1] = a.data[1] - b.data[1];
+	result.data[2] = a.data[2] - b.data[2];
+	result.data[3] = a.data[3] - b.data[3];
+	return result;
+}
+static Aos4_uint16_t aos4_uint16_t_mul(Aos4_uint16_t a, Aos4_uint16_t b) {
+	Aos4_uint16_t result;
+	result.data[0] = a.data[0] * b.data[0];
+	result.data[1] = a.data[1] * b.data[1];
+	result.data[2] = a.data[2] * b.data[2];
+	result.data[3] = a.data[3] * b.data[3];
+	return result;
+}
+static Aos4_uint16_t aos4_uint16_t_div(Aos4_uint16_t a, Aos4_uint16_t b) {
+	Aos4_uint16_t result;
+	result.data[0] = a.data[0] / b.data[0];
+	result.data[1] = a.data[1] / b.data[1];
+	result.data[2] = a.data[2] / b.data[2];
+	result.data[3] = a.data[3] / b.data[3];
+	return result;
+}
+static Aos4_uint16_t aos4_uint16_t_mod(Aos4_uint16_t a, Aos4_uint16_t b) {
+	Aos4_uint16_t result;
+	result.data[0] = a.data[0] % b.data[0];
+	result.data[1] = a.data[1] % b.data[1];
+	result.data[2] = a.data[2] % b.data[2];
+	result.data[3] = a.data[3] % b.data[3];
+	return result;
+}
+static Aos4_uint16_t aos4_uint16_t_and(Aos4_uint16_t a, Aos4_uint16_t b) {
+	Aos4_uint16_t result;
+	result.data[0] = a.data[0] & b.data[0];
+	result.data[1] = a.data[1] & b.data[1];
+	result.data[2] = a.data[2] & b.data[2];
+	result.data[3] = a.data[3] & b.data[3];
+	return result;
+}
+static Aos4_uint16_t aos4_uint16_t_or(Aos4_uint16_t a, Aos4_uint16_t b) {
+	Aos4_uint16_t result;
+	result.data[0] = a.data[0] | b.data[0];
+	result.data[1] = a.data[1] | b.data[1];
+	result.data[2] = a.data[2] | b.data[2];
+	result.data[3] = a.data[3] | b.data[3];
+	return result;
+}
+static Aos4_uint16_t aos4_uint16_t_xor(Aos4_uint16_t a, Aos4_uint16_t b) {
+	Aos4_uint16_t result;
+	result.data[0] = a.data[0] ^ b.data[0];
+	result.data[1] = a.data[1] ^ b.data[1];
+	result.data[2] = a.data[2] ^ b.data[2];
+	result.data[3] = a.data[3] ^ b.data[3];
+	return result;
+}
+static Aos4_uint16_t aos4_uint16_t_broadcast(uint16_t a) {
+	Aos4_uint16_t result;
+	result.data[0] = a;
+	result.data[1] = a;
+	result.data[2] = a;
+	result.data[3] = a;
+}
+static __m128i __m128i_and(__m128i a, __m128i b) { return _mm_and_si128(a, b); }
+static __m128i __m128i_or(__m128i a, __m128i b) { return _mm_xor_si128(a, b); }
+static __m128i __m128i_xor(__m128i a, __m128i b) { return _mm_xor_si128(a, b); }
+static __m128i __m128i_broadcast(uint16_t a) {
+	return _mm_set1_epi16(a);
+}
+static Aos4___m128i aos4___m128i_broadcast(__m128i a) {
+	Aos4___m128i result;
+	result.data[0] = a;
+	result.data[1] = a;
+	result.data[2] = a;
+	result.data[3] = a;
+}
 
 // VECC global variable declarations
 
@@ -261,6 +421,18 @@ void compute_frame(Aos4_uint8_t* framebuffer, Aos2_int32_t resolution, float tim
 			uv.data[1] = __m256_broadcast((float)y / (float)resolution.data[1]);
 			uv.data[0] = __m256_mul(uv.data[0], __m256_broadcast(2.0f));
 			uv.data[0] = __m256_add(uv.data[0], __m256_broadcast(1.0f));
+			Aos4___m256 col = {0};
+			col.data[0] = uv.data[0];
+			col.data[1] = uv.data[1];
+			col.data[3] = __m256_broadcast(1.0f);
+			Aos4___m128i col_int = {0};
+			col_int.data[2] = __m128i_and(__m256_conv_uint16_t(__m256_mul(col.data[0], __m256_broadcast(255.0f))), __m128i_broadcast(255));
+			col_int.data[1] = __m128i_and(__m256_conv_uint16_t(__m256_mul(col.data[1], __m256_broadcast(255.0f))), __m128i_broadcast(255));
+			col_int.data[0] = __m128i_and(__m256_conv_uint16_t(__m256_mul(col.data[2], __m256_broadcast(255.0f))), __m128i_broadcast(255));
+			col_int.data[3] = __m128i_and(__m256_conv_uint16_t(__m256_mul(col.data[3], __m256_broadcast(255.0f))), __m128i_broadcast(255));
+			__m128i idk = __m128i_shl(col_int.data[0], __m128i_broadcast(24));
+			for (int32_t i = 0; i < vector_width; i = i + 1) {
+			};
 		};
 	};
 }

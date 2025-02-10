@@ -21,21 +21,26 @@ procedure export compute_frame (
             uv.x *= 2.0
             uv.x += 1.0
 
-            // mut vector col [4]f32
+            mut vector col [4]f32
             // // col.r = (sin((conv(f32, x) * 0.05) + time) * 0.5) + 0.5
-            // col.r = uv.x
-            // col.g = uv.y
-            // col.w = 1.0
+            col.r = uv.x
+            col.g = uv.y
+            col.w = 1.0
 
-            // mut vector col8 [4]u8
-            // col8.b = conv(u8, col.r * 255.0) & conv(u8, 0xff)
-            // col8.g = conv(u8, col.g * 255.0) & conv(u8, 0xff)
-            // col8.r = conv(u8, col.b * 255.0) & conv(u8, 0xff)
-            // col8.a = conv(u8, col.a * 255.0) & conv(u8, 0xff)
+            mut vector col_int [4]u16
+            col_int.b = conv(u16, col.r * 255.0) & 0xff
+            col_int.g = conv(u16, col.g * 255.0) & 0xff
+            col_int.r = conv(u16, col.b * 255.0) & 0xff
+            col_int.a = conv(u16, col.a * 255.0) & 0xff
 
-            // for i i32; i < vector_width; i += 1 {
-            //     framebuffer[base_index + i] = col8[i]
-            // }
+            // mut col_rgba
+            mut vector idk u16 = col_int.r << 24
+
+            for i i32; i < vector_width; i += 1 {
+
+
+                // framebuffer[index + i][0] = chan
+            }
         }
     }
 }
