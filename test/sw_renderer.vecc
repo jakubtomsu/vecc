@@ -3,44 +3,43 @@
 const W i32 = 8
 
 procedure export compute_frame (
-    immut framebuffer   [^][4]u8
-    immut resolution    [2]i32
-    immut time          f32
-    immut delta         f32
-    immut frame         i32
+    immut vector framebuffer    [^]u32
+    immut resolution            [2]i32
+    immut time                  f32
+    immut delta                 f32
+    immut frame                 i32
 ) {
-    for y i32; y < resolution.y; y += 1 {
-        for x i32; x < resolution.x; x += vector_width {
-            immut index i32 = (x + (y * resolution.x))
+    for x i32; x < resolution.x; x += 1 {
+        for y i32; y < (resolution.y / vector_width); y += 1 {
+            immut vector pixel_y i32 = vector_index + (y * vector_width)
 
             mut vector uv [2]f32
             // uv.x = 0.5
-            uv.x = conv(f32, x) / conv(f32, resolution.x)
-            uv.y = conv(f32, y) / conv(f32, resolution.y)
-
-            uv.x *= 2.0
-            uv.x += 1.0
+            uv.x = conv(f32, x) * 0.005 // / conv(f32, resolution.x)
+            // uv.y = conv(f32, y) * 0.0 // / conv(f32, resolution.y)
 
             mut vector col [4]f32
             // // col.r = (sin((conv(f32, x) * 0.05) + time) * 0.5) + 0.5
             col.r = uv.x
             col.g = uv.y
-            col.w = 1.0
+            col.a = 1.0
 
-            mut vector col_int [4]u16
-            col_int.b = conv(u16, col.r * 255.0) & 0xff
-            col_int.g = conv(u16, col.g * 255.0) & 0xff
-            col_int.r = conv(u16, col.b * 255.0) & 0xff
-            col_int.a = conv(u16, col.a * 255.0) & 0xff
+            // Store
 
-            // mut col_rgba
-            mut vector idk u16 = col_int.r << 24
+            mut vector col_int [4]u32
+            col_int.r = min(conv(vector(8, u32), 0xff), conv(u32, col.r * 255.0))
+            col_int.g = min(conv(vector(8, u32), 0xff), conv(u32, col.g * 255.0))
+            col_int.b = min(conv(vector(8, u32), 0xff), conv(u32, col.b * 255.0))
+            col_int.a = min(conv(vector(8, u32), 0xff), conv(u32, col.a * 255.0))
 
-            for i i32; i < vector_width; i += 1 {
+            mut vector col_rgba u32
+            col_rgba = col_int.b
+            col_rgba |= col_int.g << 8
+            col_rgba |= col_int.r << 16
+            col_rgba |= col_int.a << 24
 
-
-                // framebuffer[index + i][0] = chan
-            }
+            immut index i32 = x + (y * resolution.x)
+            framebuffer[index] = col_rgba
         }
     }
 }

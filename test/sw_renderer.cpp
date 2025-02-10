@@ -11,7 +11,7 @@
 #define HEIGHT 180
 
 LARGE_INTEGER g_frequency = {0};
-Aos4_uint8_t* g_framebuffer;
+v8u32* g_framebuffer;
 uint64_t g_start_clock;
 uint64_t g_prev_clock;
 uint32_t g_frame;
@@ -88,7 +88,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                              CW_USEDEFAULT, CW_USEDEFAULT, WIDTH * 3, HEIGHT * 3,
                              NULL, NULL, hInstance, NULL);
 
-    g_framebuffer = (Aos4_uint8_t*)malloc(WIDTH * HEIGHT * sizeof(Aos4_uint8_t));
+    g_framebuffer = (v8u32*)malloc(WIDTH * HEIGHT * sizeof(v8u32));
 
     QueryPerformanceFrequency(&g_frequency);
     g_start_clock = time_clock();
