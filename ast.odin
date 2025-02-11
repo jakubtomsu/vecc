@@ -63,13 +63,21 @@ Ast_Basic_Literal :: struct {
 
 Ast_Value_Decl :: struct {
     private:    bool,
-    vector:     bool,
+    export:     bool,
+    vector:     Value_Vectorization,
     mut:        Value_Mutablity,
     scope:      ^Scope,
     entity:     ^Entity,
     name:       ^Ast,
     type:       ^Ast,
     value:      ^Ast,
+}
+
+Value_Vectorization :: enum u8 {
+    None = 0,
+    Default,
+    Scalar,
+    Vector,
 }
 
 Value_Mutablity :: enum u8 {
@@ -257,7 +265,7 @@ ast_print :: proc(ast: ^Ast, name: string, depth: int) {
     case Ast_Cast_Expr:     fmt.print(" :", v.op.text)
     case Ast_Break_Stmt:    fmt.print(" :", v.token.text)
     case Ast_Continue_Stmt: fmt.print(" :", v.token.text)
-    case Ast_Value_Decl:    fmt.printf(" : {} vector={} private={}", v.mut, v.vector, v.private)
+    case Ast_Value_Decl:    fmt.printf(" : {} export={} vector={} private={}", v.mut, v.export, v.vector, v.private)
     case Ast_Proc_Decl:     fmt.printf(" : export={} private={}", v.export, v.private)
     case Ast_Array_Type:    fmt.printf(" : kind={}", v.kind)
     }
