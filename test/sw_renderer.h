@@ -64,8 +64,8 @@ static Aos4_v8u32 aos4_v8u32_xor(Aos4_v8u32 a, Aos4_v8u32 b);
 
 // VECC exported constants
 
-const i32 RESOLUTION_X = (320 * 3);
-const i32 RESOLUTION_Y = (184 * 3);
+const i32 RESOLUTION_X = (320 * 4);
+const i32 RESOLUTION_Y = (184 * 4);
 
 // VECC exported function declarations
 void compute_frame(v8u32* framebuffer, Aos2_i32 resolution, f32 time, f32 delta, i32 frame);
@@ -427,19 +427,20 @@ void compute_frame(v8u32* framebuffer, Aos2_i32 resolution, f32 time, f32 delta,
 	c.data[1] = 0.186f;
 	c.data[0] = c.data[0] - ((0.045f * zoom) * (1.0f - (ltime * 0.5f)));
 	c.data[1] = c.data[1] - ((0.045f * zoom) * (1.0f - (ltime * 0.5f)));
+	Aos2_v8f32 inv_res = {0};
+	inv_res.data[0] = v8f32_set1(f32_rcp((f32)resolution.data[0]));
+	inv_res.data[1] = v8f32_set1(f32_rcp((f32)resolution.data[1]));
 	for (i32 y = 0; (y < resolution.data[1]); y = y + 1) {
 		for (i32 x = 0; (x < (resolution.data[0] / vector_width)); x = x + 1) {
 			v8i32 pixel_x = v8i32_add(v8i32_mul(vector_index, v8i32_set1(1)), v8i32_set1((x * vector_width)));
 			Aos2_v8f32 uv = {0};
-			uv.data[0] = v8f32_div(v8i32_to_v8f32(pixel_x), v8f32_set1((f32)resolution.data[0]));
-			uv.data[1] = v8f32_set1(((f32)y / (f32)resolution.data[1]));
 			Aos4_v8f32 col = {0};
 			col.data[3] = v8f32_set1(1.0f);
 			Aos2_v8f32 p = {0};
 			p.data[0] = v8i32_to_v8f32(pixel_x);
 			p.data[1] = v8f32_set1((f32)y);
-			p.data[0] = v8f32_mul(v8f32_sub(v8f32_mul(p.data[0], v8f32_set1(2.0f)), v8f32_set1((f32)resolution.data[0])), v8f32_set1(f32_rcp((f32)resolution.data[1])));
-			p.data[1] = v8f32_mul(v8f32_sub(v8f32_mul(p.data[1], v8f32_set1(2.0f)), v8f32_set1((f32)resolution.data[1])), v8f32_set1(f32_rcp((f32)resolution.data[1])));
+			p.data[0] = v8f32_mul(v8f32_sub(v8f32_mul(p.data[0], v8f32_set1(2.0f)), v8f32_set1((f32)resolution.data[0])), inv_res.data[1]);
+			p.data[1] = v8f32_mul(v8f32_sub(v8f32_mul(p.data[1], v8f32_set1(2.0f)), v8f32_set1((f32)resolution.data[1])), inv_res.data[1]);
 			Aos2_v8f32 z = {0};
 			z.data[0] = v8f32_add(v8f32_mul(v8f32_sub(p.data[0], v8f32_set1(cen.data[0])), v8f32_set1(zoom)), v8f32_set1(cen.data[0]));
 			z.data[1] = v8f32_add(v8f32_mul(v8f32_sub(p.data[1], v8f32_set1(cen.data[1])), v8f32_set1(zoom)), v8f32_set1(cen.data[1]));

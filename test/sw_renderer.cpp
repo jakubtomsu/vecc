@@ -47,12 +47,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         } break;
 
         case WM_PAINT: {
-            Sleep(1);
 
             uint64_t begin_clock = time_clock();
             double delta = time_diff(begin_clock, g_prev_clock);
             double time = time_diff(begin_clock, g_start_clock);
             g_prev_clock = begin_clock;
+            Sleep(1);
 
             compute_frame(
                 g_framebuffer,
@@ -99,7 +99,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpszClassName = "SoftwareRenderer";
     RegisterClass(&wc);
 
-    HWND hwnd = CreateWindow(wc.lpszClassName, "Win32 Software Rendering",
+    HWND hwnd = CreateWindow(wc.lpszClassName, "VecC software rendering sample",
                              WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                              CW_USEDEFAULT, CW_USEDEFAULT, RESOLUTION_X, RESOLUTION_Y,
                              NULL, NULL, hInstance, NULL);
