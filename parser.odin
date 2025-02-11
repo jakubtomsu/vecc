@@ -455,7 +455,8 @@ parse_range_stmt :: proc(p: ^Parser) -> ^Ast {
     type.variant = Ast_Ident{token = {text = "i64"}}
     register_value_entity(p,
         mut = .Mutable,
-        vector = false,
+        export = false,
+        vector = .Scalar,
         private = false,
         ident_tok = ident_tok,
         name = for_stmt.ident,
@@ -539,7 +540,8 @@ parse_block :: proc(p: ^Parser, ignore_scope := false) -> ^Ast {
 register_value_entity :: proc(
     p:          ^Parser,
     mut:        Value_Mutablity,
-    vector:     bool,
+    export:     bool,
+    vector:     Value_Vectorization,
     private:    bool,
     ident_tok:  Token,
     name:       ^Ast,
@@ -551,6 +553,7 @@ register_value_entity :: proc(
 
     value_decl.mut = mut
     value_decl.private = private
+    value_decl.export = export
     value_decl.vector = vector
     value_decl.scope = p.curr_scope
     value_decl.name = name
@@ -641,8 +644,17 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
 }
 
 parse_value_decl :: proc(p: ^Parser, mut: Value_Mutablity) -> ^Ast {
+    // TODO: unordered
+
     private := allow(p, .Private)
+    export := allow(p, .Export)
+
+    if export && mut != .Constant {
+        parser_error(p, p.curr_token, "Only constant value declarations can be exported for now")
+    }
+
     vector := allow(p, .Vector)
+
 
     ident_tok := next(p)
     name := parse_ident(p, ident_tok)
@@ -654,7 +666,8 @@ parse_value_decl :: proc(p: ^Parser, mut: Value_Mutablity) -> ^Ast {
 
     return register_value_entity(p,
         mut         = mut,
-        vector      = vector,
+        export      = export,
+        vector      = vector ? .Vector : .Default,
         private     = private,
         ident_tok   = ident_tok,
         name        = name,
