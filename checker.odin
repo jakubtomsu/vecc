@@ -59,6 +59,7 @@ Entity_Builtin_Kind :: enum u8 {
     Clamp,
     Abs,
     Sign,
+    Blend,
     Trunc,
     Floor,
     Round,
@@ -75,6 +76,11 @@ Entity_Builtin_Kind :: enum u8 {
     Exp2,
     Log,
     Log2,
+    Reduce_Add,
+    Reduce_Mul,
+    Reduce_And,
+    Reduce_All,
+    Reduce_Any,
 }
 
 Entity_Struct :: struct {
@@ -308,10 +314,30 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
             assert(len(call_expr.args) == 1)
             ast.type = call_expr.args[0].type
 
+        case .Reduce_Add,
+             .Reduce_Mul,
+             .Reduce_And:
+            assert(len(call_expr.args) == 1)
+            ast.type = type_elem_basic_type(call_expr.args[0].type)
+            assert(type_is_numeric(ast.type))
+
+        case .Reduce_All,
+             .Reduce_Any:
+            assert(len(call_expr.args) == 1)
+            ast.type = type_elem_basic_type(call_expr.args[0].type)
+            assert(type_is_boolean(ast.type))
+
         case .Pow:
             assert(len(call_expr.args) == 2)
             ast.type = call_expr.args[0].type
             assert(type_elem_basic_type(ast.type) == type_elem_basic_type(call_expr.args[1].type))
+
+        case .Blend:
+            assert(len(call_expr.args) == 3)
+            ast.type = call_expr.args[0].type
+            assert(ast.type == call_expr.args[1].type)
+            assert(type_is_boolean(type_elem_basic_type(call_expr.args[2].type)))
+            // assert(call_expr.args[2].type.size * 8 >= len)
 
         case:
             checker_error(c, "This builtin cannot be called") // dafuq
@@ -404,7 +430,6 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
         }
     }
 
-
     type := left.type
 
     #partial switch op {
@@ -414,8 +439,18 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
          .Greater_Than,
          .Greater_Than_Equal,
          .Not_Equal:
-        type = c.basic_types[.B32]
-        if !type_is_numeric(left_elem) {
+
+        #partial switch v in left.type.variant {
+        case Type_Basic:
+            type = c.basic_types[.B32]
+        case Type_Array:
+            type = type_clone(left.type)
+            arr := &type.variant.(Type_Array)
+            arr.type = c.basic_types[.B32] // HACK
+            type = find_or_create_type(c, type)
+        }
+
+        if op != .Equal && op != .Not_Equal && !type_is_numeric(left_elem) {
             checker_error(c, "{} operator can be only applied to numeric values", op)
         }
 
@@ -1060,19 +1095,19 @@ check_scope_procedures_recursive :: proc(c: ^Checker, scope: ^Scope) {
 check_program :: proc(c: ^Checker) {
     c.basic_types = [Type_Basic_Kind]^Type{
         .B8  = new_clone(Type{size = 1, variant = Type_Basic{kind = .B8 }}),
-        .B16 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B16}}),
+        .B16 = new_clone(Type{size = 2, variant = Type_Basic{kind = .B16}}),
         .B32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B32}}),
-        .B64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B64}}),
-        .I8  = new_clone(Type{size = 4, variant = Type_Basic{kind = .I8 }}),
-        .I16 = new_clone(Type{size = 4, variant = Type_Basic{kind = .I16}}),
+        .B64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .B64}}),
+        .I8  = new_clone(Type{size = 1, variant = Type_Basic{kind = .I8 }}),
+        .I16 = new_clone(Type{size = 2, variant = Type_Basic{kind = .I16}}),
         .I32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .I32}}),
-        .I64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .I64}}),
-        .U8  = new_clone(Type{size = 4, variant = Type_Basic{kind = .U8 }}),
-        .U16 = new_clone(Type{size = 4, variant = Type_Basic{kind = .U16}}),
+        .I64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .I64}}),
+        .U8  = new_clone(Type{size = 1, variant = Type_Basic{kind = .U8 }}),
+        .U16 = new_clone(Type{size = 2, variant = Type_Basic{kind = .U16}}),
         .U32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .U32}}),
-        .U64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .U64}}),
+        .U64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .U64}}),
         .F32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .F32}}),
-        .F64 = new_clone(Type{size = 4, variant = Type_Basic{kind = .F64}}),
+        .F64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .F64}}),
     }
 
     for t in c.basic_types {
@@ -1093,6 +1128,7 @@ check_program :: proc(c: ^Checker) {
     create_entity(c.curr_file_scope, "clamp"   , nil, Entity_Builtin{kind = .Clamp})
     create_entity(c.curr_file_scope, "abs"     , nil, Entity_Builtin{kind = .Abs})
     create_entity(c.curr_file_scope, "sign"    , nil, Entity_Builtin{kind = .Sign})
+    create_entity(c.curr_file_scope, "blend"   , nil, Entity_Builtin{kind = .Blend})
     create_entity(c.curr_file_scope, "trunc"   , nil, Entity_Builtin{kind = .Trunc})
     create_entity(c.curr_file_scope, "floor"   , nil, Entity_Builtin{kind = .Floor})
     create_entity(c.curr_file_scope, "round"   , nil, Entity_Builtin{kind = .Round})
@@ -1109,6 +1145,11 @@ check_program :: proc(c: ^Checker) {
     create_entity(c.curr_file_scope, "exp2"    , nil, Entity_Builtin{kind = .Exp2})
     create_entity(c.curr_file_scope, "log"     , nil, Entity_Builtin{kind = .Log})
     create_entity(c.curr_file_scope, "log2"    , nil, Entity_Builtin{kind = .Log2})
+    create_entity(c.curr_file_scope, "reduce_add",nil,Entity_Builtin{kind = .Reduce_Add})
+    create_entity(c.curr_file_scope, "reduce_mul",nil,Entity_Builtin{kind = .Reduce_Mul})
+    create_entity(c.curr_file_scope, "reduce_and",nil,Entity_Builtin{kind = .Reduce_And})
+    create_entity(c.curr_file_scope, "reduce_all",nil,Entity_Builtin{kind = .Reduce_All})
+    create_entity(c.curr_file_scope, "reduce_any",nil,Entity_Builtin{kind = .Reduce_Any})
 
     // 1. check all types
     // 2. check all entity declarations

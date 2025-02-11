@@ -422,6 +422,11 @@ void compute_frame(v8u32* framebuffer, Aos2_i32 resolution, f32 time, f32 delta,
 	cen.data[0] = 0.2655f;
 	cen.data[1] = 0.301f;
 	cen = aos2_f32_add(cen, aos2_f32_set1(((zoom * 0.8f) * f32_cos((4.0f + (2.0f * ltime))))));
+	Aos2_f32 c = {0};
+	c.data[0] = -0.745f;
+	c.data[1] = 0.186f;
+	c.data[0] = c.data[0] - ((0.045f * zoom) * (1.0f - (ltime * 0.5f)));
+	c.data[1] = c.data[1] - ((0.045f * zoom) * (1.0f - (ltime * 0.5f)));
 	for (i32 y = 0; (y < resolution.data[1]); y = y + 1) {
 		for (i32 x = 0; (x < (resolution.data[0] / vector_width)); x = x + 1) {
 			v8i32 pixel_x = v8i32_add(v8i32_mul(vector_index, v8i32_set1(1)), v8i32_set1((x * vector_width)));
@@ -430,11 +435,6 @@ void compute_frame(v8u32* framebuffer, Aos2_i32 resolution, f32 time, f32 delta,
 			uv.data[1] = v8f32_set1(((f32)y / (f32)resolution.data[1]));
 			Aos4_v8f32 col = {0};
 			col.data[3] = v8f32_set1(1.0f);
-			Aos2_v8f32 c = {0};
-			c.data[0] = v8f32_set1(-0.745f);
-			c.data[1] = v8f32_set1(0.186f);
-			c.data[0] = v8f32_sub(c.data[0], v8f32_set1(((0.045f * zoom) * (1.0f - (ltime * 0.5f)))));
-			c.data[1] = v8f32_sub(c.data[1], v8f32_set1(((0.045f * zoom) * (1.0f - (ltime * 0.5f)))));
 			Aos2_v8f32 p = {0};
 			p.data[0] = v8i32_to_v8f32(pixel_x);
 			p.data[1] = v8f32_set1((f32)y);
@@ -446,23 +446,29 @@ void compute_frame(v8u32* framebuffer, Aos2_i32 resolution, f32 time, f32 delta,
 			v8f32 ld2 = {0};
 			ld2 = v8f32_set1(1.0f);
 			v8f32 lz2 = v8f32_add(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1]));
+			v8b32 break_mask = {0};
 			for (i32 i = 0; (i < 256); i = i + 1) {
-				ld2 = v8f32_mul(ld2, v8f32_mul(lz2, v8f32_set1(4.0f)));
+				ld2 = v8f32_blend(v8f32_mul(ld2, v8f32_mul(lz2, v8f32_set1(4.0f))), ld2, break_mask);
 				const Aos2_v8f32 old_z = z;
-				z.data[0] = v8f32_add(v8f32_sub(v8f32_mul(old_z.data[0], old_z.data[0]), v8f32_mul(old_z.data[1], old_z.data[1])), c.data[0]);
-				z.data[1] = v8f32_add(v8f32_mul(v8f32_mul(old_z.data[0], old_z.data[1]), v8f32_set1(2.0f)), c.data[1]);
-				lz2 = v8f32_add(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1]));
+				z.data[0] = v8f32_add(v8f32_sub(v8f32_mul(old_z.data[0], old_z.data[0]), v8f32_mul(old_z.data[1], old_z.data[1])), v8f32_set1(c.data[0]));
+				z.data[1] = v8f32_add(v8f32_mul(v8f32_mul(old_z.data[0], old_z.data[1]), v8f32_set1(2.0f)), v8f32_set1(c.data[1]));
+				lz2 = v8f32_blend(v8f32_add(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1])), lz2, break_mask);
+				break_mask = v8b32_or(break_mask, v8f32_gt(lz2, v8f32_set1(200.0f)));
+				if (v8b32_reduce_all(break_mask)) {
+					break;
+				};
 			};
-			const v8f32 d = v8f32_mul(v8f32_sqrt(v8f32_div(lz2, ld2)), v8f32_log(lz2));
+			v8f32 d = v8f32_mul(v8f32_sqrt(v8f32_div(lz2, ld2)), v8f32_log(lz2));
 			const v8f32 scol = v8f32_sqrt(v8f32_clamp(v8f32_mul(v8f32_div(v8f32_set1(150.0f), v8f32_set1(zoom)), d), v8f32_set1(0.0f), v8f32_set1(1.0f)));
 			col.data[0] = v8f32_pow(scol, v8f32_set1(0.89999998f));
 			col.data[1] = v8f32_pow(scol, v8f32_set1(1.1f));
 			col.data[2] = v8f32_pow(scol, v8f32_set1(1.39999998f));
+			col.data[3] = v8f32_set1(1.0f);
 			Aos4_v8u32 col_int = {0};
-			col_int.data[0] = v8u32_clamp(v8f32_to_v8u32(v8f32_mul(col.data[0], v8f32_set1(255.0f))), v8u32_set1(0), v8u32_set1(255));
-			col_int.data[1] = v8u32_clamp(v8f32_to_v8u32(v8f32_mul(col.data[1], v8f32_set1(255.0f))), v8u32_set1(0), v8u32_set1(255));
-			col_int.data[2] = v8u32_clamp(v8f32_to_v8u32(v8f32_mul(col.data[2], v8f32_set1(255.0f))), v8u32_set1(0), v8u32_set1(255));
-			col_int.data[3] = v8u32_clamp(v8f32_to_v8u32(v8f32_mul(col.data[3], v8f32_set1(255.0f))), v8u32_set1(0), v8u32_set1(255));
+			col_int.data[0] = v8f32_to_v8u32(v8f32_mul(v8f32_clamp(col.data[0], v8f32_set1(0.0f), v8f32_set1(1.0f)), v8f32_set1(255.0f)));
+			col_int.data[1] = v8f32_to_v8u32(v8f32_mul(v8f32_clamp(col.data[1], v8f32_set1(0.0f), v8f32_set1(1.0f)), v8f32_set1(255.0f)));
+			col_int.data[2] = v8f32_to_v8u32(v8f32_mul(v8f32_clamp(col.data[2], v8f32_set1(0.0f), v8f32_set1(1.0f)), v8f32_set1(255.0f)));
+			col_int.data[3] = v8f32_to_v8u32(v8f32_mul(v8f32_clamp(col.data[3], v8f32_set1(0.0f), v8f32_set1(1.0f)), v8f32_set1(255.0f)));
 			v8u32 col_rgba = {0};
 			col_rgba = col_int.data[2];
 			col_rgba = v8u32_or(col_rgba, v8u32_sl(col_int.data[1], 8));

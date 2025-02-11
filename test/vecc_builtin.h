@@ -275,6 +275,25 @@ vecc_op v8f32 v8f32_rcp  (v8f32 a) { return {{_mm256_rcp_ps   (a.data[0])}}; }
 vecc_op v8f32 v8f32_sqrt (v8f32 a) { return {{_mm256_sqrt_ps  (a.data[0])}}; }
 vecc_op v8f32 v8f32_rsqrt(v8f32 a) { return {{_mm256_rsqrt_ps (a.data[0])}}; }
 
+vecc_op v8b32 v8f32_gt(v8f32 a, v8f32 b) { return {{_mm256_castps_si256(_mm256_cmp_ps(a.data[0], b.data[0], _CMP_GT_OQ))}}; }
+vecc_op v8b32 v8f32_ge(v8f32 a, v8f32 b) { return {{_mm256_castps_si256(_mm256_cmp_ps(a.data[0], b.data[0], _CMP_GE_OQ))}}; }
+vecc_op v8b32 v8f32_lt(v8f32 a, v8f32 b) { return {{_mm256_castps_si256(_mm256_cmp_ps(a.data[0], b.data[0], _CMP_LT_OQ))}}; }
+vecc_op v8b32 v8f32_le(v8f32 a, v8f32 b) { return {{_mm256_castps_si256(_mm256_cmp_ps(a.data[0], b.data[0], _CMP_LE_OQ))}}; }
+
+vecc_op v8f32 v8f32_blend(v8f32 a, v8f32 b, v8b32 mask) {
+    return {{_mm256_blendv_ps(a.data[0], b.data[0], _mm256_castsi256_ps(mask.data[0]))}};
+}
+vecc_op v8i32 v8i32_blend(v8i32 a, v8i32 b, v8b32 mask) {
+    return {{_mm256_castps_si256(_mm256_blendv_ps(
+        _mm256_castsi256_ps(a.data[0]), _mm256_castsi256_ps(b.data[0]), _mm256_castsi256_ps(mask.data[0])
+    ))}};
+}
+vecc_op v8u32 v8u32_blend(v8u32 a, v8u32 b, v8b32 mask) {
+    return {{_mm256_castps_si256(_mm256_blendv_ps(
+        _mm256_castsi256_ps(a.data[0]), _mm256_castsi256_ps(b.data[0]), _mm256_castsi256_ps(mask.data[0])
+    ))}};
+}
+
 // Slow scalar fallback for now
 
 #define VECC_ALIGNED(n) __declspec(align(n))
@@ -325,6 +344,8 @@ vecc_op v8f32 v8f32_pow(v8f32 a, v8f32 b) {
     }
     return {{_mm256_load_ps(a_data)}};
 }
+
+vecc_op b32 v8b32_reduce_all(v8b32 a) { return _mm256_testc_si256(a.data[0], _mm256_set1_epi32(-1)); }
 
 #endif // VECC_AVX2
 

@@ -1,9 +1,5 @@
-// Implement this: https://www.shadertoy.com/view/MsdGzl
-
 const export RESOLUTION_X i32 = 320 * 3
 const export RESOLUTION_Y i32 = 184 * 3
-
-// mut vector volume [(RESOLUTION_X * RESOLUTION_Y) / vector_width][4]f32
 
 procedure export compute_frame (
     immut vector framebuffer    [^]u32
@@ -16,9 +12,16 @@ procedure export compute_frame (
     immut ltime f32 = 0.5 - (0.5*cos(time*0.06))
     immut zoom f32 = pow(0.9, 50.0*ltime)
     mut cen [2]f32
+    // NOTE: missing initializer lists and some array programming
     cen.x = 0.2655
     cen.y = 0.301
     cen += (zoom*0.8) * cos(4.0+(2.0*ltime))
+
+    mut c [2]f32
+    c.x = -0.745
+    c.y = 0.186
+    c.x -= (0.045*zoom)*(1.0-(ltime*0.5))
+    c.y -= (0.045*zoom)*(1.0-(ltime*0.5))
 
     for y i32; y < resolution.y; y += 1 {
         for x i32; x < (resolution.x / vector_width); x += 1 {
@@ -32,12 +35,6 @@ procedure export compute_frame (
             // col.r = uv.x
             // col.g = (cos(uv.y * 50) * 0.5) + 0.5
             col.a = 1.0
-
-            mut vector c [2]f32
-            c.x = -0.745
-            c.y = 0.186
-            c.x -= (0.045*zoom)*(1.0-(ltime*0.5))
-            c.y -= (0.045*zoom)*(1.0-(ltime*0.5))
 
             mut vector p [2]f32
             p.x = conv(f32, pixel_x)
@@ -53,35 +50,36 @@ procedure export compute_frame (
             mut vector ld2 f32
             ld2 = 1.0
             mut vector lz2 f32 = (z.x*z.x) + (z.y*z.y)
+            mut vector break_mask b32 // hack
             for i i32; i < 256; i += 1 {
-                ld2 *= lz2*4.0
+                ld2 = blend(ld2 * (lz2*4.0), ld2, break_mask)
                 immut vector old_z [2]f32 = z
                 z.x = ((old_z.x*old_z.x) - (old_z.y*old_z.y)) + c.x
                 z.y = ((old_z.x*old_z.y)*2) + c.y
-                lz2 = (z.x*z.x) + (z.y*z.y)
-            //     if( lz2>200.0 ) break
+                lz2 = blend((z.x*z.x) + (z.y*z.y), lz2, break_mask)
+                break_mask |= lz2 > 200.0
+                if reduce_all(break_mask) {
+                    break
+                }
             }
-            immut vector d f32 = sqrt(lz2/ld2) * log(lz2)
+            mut vector d f32 = sqrt(lz2/ld2) * log(lz2)
 
             immut vector scol f32 = sqrt(clamp((conv(vector(8, f32), 150.0)/zoom)*d, 0.0, 1.0))
 
             col.r = pow(scol, 0.9)
             col.g = pow(scol, 1.1)
             col.b = pow(scol, 1.4)
-
-            // col.r *= 0.7 + 0.3 * pow(((uv.x*16.0)*uv.y)*(1.0-uv.x))
-            // col.g *= 0.7 + 0.3 * pow(((uv.x*16.0)*uv.y)*(1.0-uv.x))
-            // col.b *= 0.7 + 0.3 * pow(((uv.x*16.0)*uv.y)*(1.0-uv.x))
+            col.a = 1
 
             // col.b = conv(f32, (pixel_x * y) & 1);
 
             // Store
 
             mut vector col_int [4]u32
-            col_int.r = clamp(conv(u32, col.r * 255.0), 0, 0xff)
-            col_int.g = clamp(conv(u32, col.g * 255.0), 0, 0xff)
-            col_int.b = clamp(conv(u32, col.b * 255.0), 0, 0xff)
-            col_int.a = clamp(conv(u32, col.a * 255.0), 0, 0xff)
+            col_int.r = conv(u32, clamp(col.r, 0, 1) * 255.0)
+            col_int.g = conv(u32, clamp(col.g, 0, 1) * 255.0)
+            col_int.b = conv(u32, clamp(col.b, 0, 1) * 255.0)
+            col_int.a = conv(u32, clamp(col.a, 0, 1) * 255.0)
 
             mut vector col_rgba u32
             col_rgba = col_int.b

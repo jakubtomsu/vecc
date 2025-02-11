@@ -7,7 +7,7 @@ Ast :: struct {
     variant:        Ast_Variant,
     type:           ^Type,
     value:          Value, // compile time known only
-    order_index:    int, // local scope
+    order_index:    int,
 }
 
 Value :: union {
