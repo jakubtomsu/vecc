@@ -56,28 +56,44 @@ gen_value :: proc(g: ^Gen, value: Value, type: ^Type) {
         gen_print(g, v)
 
     case i128:
-        gen_print(g, v)
+
+        #partial switch tv in type.variant {
+        case Type_Basic:
+            gen_print(g, v)
+
+        case Type_Array:
+            switch tv.kind {
+            case .Vector:
+                // HACK, use conversion code
+                gen_printf(g, "v{}{}_set1(", tv.len, tv.type.cname_lower)
+                gen_print(g, v)
+                gen_print(g, ")")
+
+            case .Fixed_Array:
+                unimplemented()
+            }
+
+        case:
+            assert(false)
+        }
 
     case f64:
         #partial switch tv in type.variant {
         case Type_Basic:
-            #partial switch tv.kind {
-            case .F32:
-                val := fmt.tprint(f32(v))
-                gen_printf(g, val)
-                // HACK this is silly
-                if slice.contains(transmute([]u8)val, '.') {
-                    gen_print(g, "f")
-                } else {
-                    gen_print(g, ".0f")
-                }
+            _print_float(g, tv.kind, v)
 
-            case .F64:
-                gen_print(g, v)
+        case Type_Array:
+            switch tv.kind {
+            case .Vector:
+                // HACK, use conversion code
+                gen_printf(g, "v{}{}_set1(", tv.len, tv.type.cname_lower)
+                _print_float(g, tv.type.variant.(Type_Basic).kind, v)
+                gen_print(g, ")")
 
-            case:
-                assert(false)
+            case .Fixed_Array:
+                unimplemented()
             }
+
         case:
             assert(false)
         }
@@ -109,6 +125,26 @@ gen_value :: proc(g: ^Gen, value: Value, type: ^Type) {
     case nil:
         assert(false)
     }
+
+    _print_float :: proc(g: ^Gen, basic: Type_Basic_Kind, v: f64) {
+        #partial switch basic {
+        case .F32:
+            val := fmt.tprint(f32(v))
+            gen_printf(g, val)
+            // HACK this is silly
+            if slice.contains(transmute([]u8)val, '.') {
+                gen_print(g, "f")
+            } else {
+                gen_print(g, ".0f")
+            }
+
+        case .F64:
+            gen_print(g, v)
+
+        case:
+            assert(false)
+        }
+    }
 }
 
 gen_basic_literal :: proc(g: ^Gen, ast: ^Ast) {
@@ -129,13 +165,7 @@ gen_call_expr :: proc(g: ^Gen, ast: ^Ast) {
         gen_print(g, call_expr.procedure.variant.(Ast_Ident).token.text)
 
     case Entity_Builtin:
-        #partial switch v.kind {
-        case .Min:
-            gen_printf(g, "{}_min", call_expr.args[0].type.cname_lower)
-
-        case:
-            assert(false)
-        }
+        gen_printf(g, "{}_{}", call_expr.args[0].type.cname_lower, strings.to_lower(fmt.tprint(v.kind)))
     }
 
     gen_print(g, "(")
@@ -304,16 +334,43 @@ gen_binary_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
 }
 
 gen_binary_op :: proc(g: ^Gen, left: ^Ast, right: ^Ast, op: Token_Kind, top_level := false) {
-    if !top_level {
-        gen_print(g, "(")
-    }
+    data := gen_binary_op_data(
+        left = left.type,
+        right = right.type,
+        op = op,
+        top_level = top_level,
+    )
 
-    #partial switch v in left.type.variant {
+    assert(data != {})
+
+    gen_print(g, data.prefix)
+    gen_expr(g, left)
+    gen_print(g, data.sep)
+    gen_possible_auto_conv_expr(g, left, right)
+    gen_print(g, data.suffix)
+}
+
+Gen_Binary_Op_Data :: struct {
+    prefix: string,
+    sep:    string,
+    suffix: string,
+}
+
+gen_binary_op_data :: proc(
+    left: ^Type,
+    right: ^Type,
+    op: Token_Kind,
+    top_level: bool,
+) -> (result: Gen_Binary_Op_Data) {
+    #partial switch v in left.variant {
     case Type_Basic:
+        if !top_level {
+            result.prefix = "("
+            result.suffix = ")"
+        }
+
         op_name := _token_str[op]
-        gen_expr(g, left)
-        gen_printf(g, " {} ", op_name)
-        gen_possible_auto_conv_expr(g, left, right)
+        result.sep = fmt.tprintf(" {} ", op_name)
 
     case Type_Array:
         op_name := ""
@@ -337,20 +394,15 @@ gen_binary_op :: proc(g: ^Gen, left: ^Ast, right: ^Ast, op: Token_Kind, top_leve
         case .Bit_Shift_Right:      op_name = "sr"
         }
 
-        gen_printf(g, "%s_%s", left.type.cname_lower, op_name)
-        gen_print(g, "(")
-        gen_expr(g, left)
-        gen_print(g, ", ")
-        gen_possible_auto_conv_expr(g, left, right)
-        gen_print(g, ")")
+        result.prefix = fmt.tprintf("%s_%s(", left.cname_lower, op_name)
+        result.sep = ", "
+        result.suffix = ")"
 
     case:
         unimplemented()
     }
 
-    if !top_level {
-        gen_print(g, ")")
-    }
+    return result
 }
 
 gen_selector_expr :: proc(g: ^Gen, ast: ^Ast) {
@@ -545,8 +597,8 @@ _gen_named_binary_ops := [?]Gen_Op_Proc{
     {name = "add", op = .Add,                flags = {.Integer, .Float}},
     {name = "sub", op = .Sub,                flags = {.Integer, .Float}},
     {name = "mul", op = .Mul,                flags = {.Integer, .Float}},
-    {name = "div", op = .Div,                flags = {.Integer, .Float}},
-    {name = "mod", op = .Mod,                flags = {.Integer}},
+    {name = "div", op = .Div,                flags = {.Float}},
+    {name = "mod", op = .Mod,                flags = {}},
     {name = "and", op = .Bit_And,            flags = {.Integer}},
     {name = "or" , op = .Bit_Or,             flags = {.Integer}},
     {name = "xor", op = .Bit_Xor,            flags = {.Integer}},
@@ -568,51 +620,57 @@ _gen_type_matches_op_proc :: proc(type: ^Type, op: Gen_Op_Proc) -> bool {
 }
 
 // TEMP just so we don't generate arithmetic procs for big fixed array buffers etc
-MAX_VECTOR_WIDTH :: 64
+MAX_ARITMETIC_ARRAY_WIDTH :: 64
 
-gen_type_procs_decls :: proc(g: ^Gen, type: ^Type) {
+// TODO: scalar 2nd arg versions?
+gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
     #partial switch v in type.variant {
     case Type_Array:
-        if v.len > MAX_VECTOR_WIDTH do return
-        for op in _gen_named_binary_ops {
-            if !_gen_type_matches_op_proc(v.type, op) do continue
-            gen_printf(g, "static {0} {1}_{2}({0} a, {0} b);\n", type.cname, type.cname_lower, op.name)
-        }
-        if type_is_integer(v.type) {
-            gen_printf(g, "static {0} {1}_shl({0} a, int32_t b);\n", type.cname, type.cname_lower)
-            gen_printf(g, "static {0} {1}_shr({0} a, int32_t b);\n", type.cname, type.cname_lower)
-            gen_printf(g, "static {0} {1}_shlv({0} a, {0} b);\n", type.cname, type.cname_lower)
-            gen_printf(g, "static {0} {1}_shrv({0} a, {0} b);\n", type.cname, type.cname_lower)
-        }
-        for op in _gen_named_unary_ops {
-            if !_gen_type_matches_op_proc(v.type, op) do continue
-        }
-        gen_printf(g, "static {} {}_{}({} a);\n", type.cname, type.cname_lower, "set1", v.type.cname)
-    }
-}
+        if v.kind != .Fixed_Array do return
+        if v.len > MAX_ARITMETIC_ARRAY_WIDTH do return
 
-gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
-    #partial switch v in type.variant {
-    case Type_Array:
-        if v.len > MAX_VECTOR_WIDTH do return
-        for op in _gen_named_binary_ops {
-            if !_gen_type_matches_op_proc(v.type, op) do continue
-            func := fmt.tprintf("static {0} {1}_{2}({0} a, {0} b) {{", type.cname, type.cname_lower, op.name)
+        gen_printf(g, "static {} {}_{}({} a)", type.cname, type.cname_lower, "set1", v.type.cname)
+        if defs {
+            gen_printf(g, " {{\n")
+            gen_printf(g, "\t{0} result;\n", type.cname)
+            for i in 0..<v.len {
+                gen_printf(g, "\tresult.data[{0}] = a;\n", i)
+            }
+            gen_printf(g, "\treturn result;\n")
+            gen_printf(g, "}}\n")
+        } else {
+            gen_print(g, ";\n")
+        }
 
-            switch v.kind {
-            case .Fixed_Array:
-                gen_print(g, func)
-                gen_print(g, "\n")
+        for op in _gen_named_binary_ops {
+            if !_gen_type_matches_op_proc(type_elem_basic_type(v.type), op) do continue
+            gen_printf(g, "static {0} {1}_{2}({0} a, {0} b)", type.cname, type.cname_lower, op.name)
+            if defs {
+                gen_printf(g, " {{\n")
                 gen_printf(g, "\t{0} result;\n", type.cname)
+
+                data := gen_binary_op_data(
+                    left = v.type,
+                    right = v.type,
+                    op = op.op,
+                    top_level = true,
+                )
+
                 for i in 0..<v.len {
-                    gen_printf(g, "\tresult.data[{0}] = a.data[{0}] {1} b.data[{0}];\n", i, _token_str[op.op])
+                    gen_printf(g, "\tresult.data[{0}] = ", i)
+                    gen_print(g, data.prefix)
+                    gen_printf(g, "a.data[{0}]", i)
+                    gen_print(g, data.sep)
+                    gen_printf(g, "b.data[{0}]", i)
+                    gen_print(g, data.suffix)
+                    gen_printf(g, ";\n")
                 }
+
                 gen_printf(g, "\treturn result;\n")
                 gen_printf(g, "}}\n")
-
-            case .Vector:
+            } else {
+                gen_printf(g, ";\n")
             }
-
         }
 
         // for op in _gen_named_unary_ops {
@@ -623,36 +681,6 @@ gen_type_procs_defs :: proc(g: ^Gen, type: ^Type) {
         //     }
         //     gen_printf(g, "}}\n")
         // }
-
-        gen_printf(g, "static {} {}_{}({} a) {{\n", type.cname, type.cname_lower, "set1", v.type.cname)
-
-        switch v.kind {
-        case .Vector:
-            intrinsic := ""
-            switch v.len {
-            case 8:
-                switch v.type.variant.(Type_Basic).kind {
-                case .B8,  .I8,  .U8 : intrinsic = "_mm_set1_epi8"
-                case .B16, .I16, .U16: intrinsic = "_mm_set1_epi16"
-                case .B32, .I32, .U32: intrinsic = "_mm256_set1_epi32"
-                case .B64, .I64, .U64: intrinsic = "_mm256_set1_epi64x"
-                case .F32:  intrinsic = "_mm256_set1_ps"
-                case .F64:  intrinsic = "_mm256_set1_pd"
-                }
-            }
-
-            assert(intrinsic != "")
-
-            gen_printf(g, "\treturn {}(a);\n", intrinsic)
-
-        case .Fixed_Array:
-                gen_printf(g, "\t{0} result;\n", type.cname)
-            for i in 0..<v.len {
-                gen_printf(g, "\tresult.data[{0}] = a;\n", i)
-            }
-        }
-
-        gen_printf(g, "}}\n")
     }
 }
 
@@ -935,7 +963,19 @@ gen_program :: proc(g: ^Gen) {
 
     for type in g.types {
         gen_type_decl(g, type)
-        // gen_type_procs_decls(g, type)
+        gen_type_procs(g, type, defs = false)
+    }
+
+    gen_print(g, "\n// VECC exported constants\n\n")
+
+    for sorted in sorted_entities {
+        #partial switch v in sorted.entity.variant {
+        case Entity_Variable:
+            decl := sorted.entity.ast.variant.(Ast_Value_Decl)
+            if !decl.export do continue
+            gen_value_decl(g, sorted.entity.ast)
+            gen_print(g, ";\n")
+        }
     }
 
     gen_print(g, "\n// VECC exported function declarations\n")
@@ -958,7 +998,7 @@ gen_program :: proc(g: ^Gen) {
     gen_print(g, "\n// VECC private function declarations\n\n")
 
     for type in g.types {
-        // gen_type_procs_defs(g, type)
+        gen_type_procs(g, type, defs = true)
     }
 
     for sorted in sorted_entities {
@@ -978,6 +1018,7 @@ gen_program :: proc(g: ^Gen) {
         #partial switch v in sorted.entity.variant {
         case Entity_Variable:
             decl := sorted.entity.ast.variant.(Ast_Value_Decl)
+            if decl.export do continue
             gen_value_decl(g, sorted.entity.ast)
             gen_print(g, ";\n")
 
