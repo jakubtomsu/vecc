@@ -181,6 +181,9 @@ type_is_numeric :: proc(t: ^Type) -> bool {
 }
 
 type_to_string :: proc(type: ^Type) -> string {
+    if type == nil {
+        return "NULL TYPE"
+    }
     switch v in type.variant {
     case Type_Basic:
         return reflect.enum_name_from_value(v.kind) or_break

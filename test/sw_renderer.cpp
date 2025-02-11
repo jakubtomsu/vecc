@@ -7,9 +7,6 @@
 #define VECC_IMPL
 #include "sw_renderer.h"
 
-#define WIDTH  320
-#define HEIGHT 184
-
 LARGE_INTEGER g_frequency = {0};
 v8u32* g_framebuffer;
 uint64_t g_start_clock;
@@ -30,17 +27,18 @@ double time_diff(uint64_t now, uint64_t prev) {
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
-        case WM_CLOSE:
+        case WM_CLOSE: {
             PostQuitMessage(0);
             return 0;
+        } break;
 
         case WM_CREATE: {
             HDC dc = GetDC(hwnd);
 
             BITMAPINFO bitmap_info = {0};
             bitmap_info.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-            bitmap_info.bmiHeader.biWidth       = WIDTH;
-            bitmap_info.bmiHeader.biHeight      = -HEIGHT;
+            bitmap_info.bmiHeader.biWidth       = RESOLUTION_X;
+            bitmap_info.bmiHeader.biHeight      = -RESOLUTION_Y;
             bitmap_info.bmiHeader.biPlanes      = 1;
             bitmap_info.bmiHeader.biBitCount    = 32;
             bitmap_info.bmiHeader.biCompression = BI_RGB;
@@ -58,7 +56,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             compute_frame(
                 g_framebuffer,
-                {{WIDTH, HEIGHT}},
+                {{RESOLUTION_X, RESOLUTION_Y}},
                 (float)time,
                 (float)delta,
                 g_frame);
@@ -79,7 +77,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int width = client_rect.right - client_rect.left;
             int height = client_rect.bottom - client_rect.top;
 
-            StretchBlt(dc, 0, 0, width, height, bitmap_dc, 0, 0, WIDTH, HEIGHT, SRCCOPY);
+            StretchBlt(dc, 0, 0, width, height, bitmap_dc, 0, 0, RESOLUTION_X, RESOLUTION_Y, SRCCOPY);
 
             SelectObject(bitmap_dc, old_bitmap_handle);
             DeleteDC(bitmap_dc);
@@ -103,7 +101,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     HWND hwnd = CreateWindow(wc.lpszClassName, "Win32 Software Rendering",
                              WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                             CW_USEDEFAULT, CW_USEDEFAULT, WIDTH * 3, HEIGHT * 3,
+                             CW_USEDEFAULT, CW_USEDEFAULT, RESOLUTION_X, RESOLUTION_Y,
                              NULL, NULL, hInstance, NULL);
 
     QueryPerformanceFrequency(&g_frequency);
