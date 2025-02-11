@@ -55,6 +55,26 @@ Entity_Builtin_Kind :: enum u8 {
     Vector_Index,
     // Procs
     Min,
+    Max,
+    Clamp,
+    Abs,
+    Sign,
+    Trunc,
+    Floor,
+    Round,
+    Ceil,
+    Fract,
+    Rcp,
+    Sqrt,
+    RSqrt,
+    Sin,
+    Cos,
+    Tan,
+    Pow,
+    Exp,
+    Exp2,
+    Log,
+    Log2,
 }
 
 Entity_Struct :: struct {
@@ -151,16 +171,30 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 
     #partial switch v in ast.type.variant {
     case Type_Basic:
-        #partial switch v.kind {
+        ast.value = _to_value(c, v.kind, lit)
+
+    case Type_Array:
+        basic := type_elem_basic_type(v.type)
+        if basic == nil do break
+        ast.value = _to_value(c, basic.variant.(Type_Basic).kind, lit)
+
+    case:
+        assert(false)
+    }
+
+    return
+
+    _to_value :: proc(c: ^Checker, basic: Type_Basic_Kind, lit: Ast_Basic_Literal) -> Value {
+        #partial switch basic {
         case .B8,
              .B16,
              .B32,
              .B64:
             #partial switch lit.token.kind {
             case .True:
-                ast.value = true
+                return true
             case .False:
-                ast.value = false
+                return false
             case:
                 checker_error(c, "Invalid boolean literal")
             }
@@ -175,21 +209,19 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
              .U64:
             val, ok := strconv.parse_i128_maybe_prefixed(lit.token.text)
             assert(ok)
-            ast.value = i128(val)
+            return i128(val)
 
         case .F32:
             val, ok := strconv.parse_f32(lit.token.text)
             assert(ok)
-            ast.value = f64(val)
+            return f64(val)
 
         case .F64:
             val, ok := strconv.parse_f64(lit.token.text)
             assert(ok)
-            ast.value = f64(val)
+            return f64(val)
         }
-
-    case:
-        assert(false)
+        return nil
     }
 }
 
@@ -201,12 +233,12 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
     ent := check_ident(c, call_expr.procedure)
     call_expr.entity = ent
 
-    for arg, i in call_expr.args {
-        check_expr(c, arg)
-    }
-
     #partial switch v in ent.variant {
     case Entity_Proc:
+        for arg, i in call_expr.args {
+            check_expr(c, arg)
+        }
+
         proc_decl := ent.ast.variant.(Ast_Proc_Decl)
         proc_type := proc_decl.type.variant.(Ast_Proc_Type)
 
@@ -221,13 +253,65 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
         }
 
     case Entity_Builtin:
+        for arg, i in call_expr.args {
+            check_expr(c, arg, type_hint = call_expr.args[0].type) // hint is a lil hack
+        }
+
         #partial switch v.kind {
-        case .Min:
+        case .Min,
+             .Max:
             assert(len(call_expr.args) == 2) // Allow also 3 params? or any number > 1?
             ast.type = call_expr.args[0].type
-            for arg in call_expr.args {
-                assert(ast.type == arg.type)
+            for arg, i in call_expr.args {
+                if ast.type != arg.type {
+                    checker_error(c, "{} expected argument %i to be {}, got {}",
+                        v.kind,
+                        i,
+                        type_to_string(ast.type),
+                        type_to_string(arg.type),
+                    )
+                }
             }
+
+        case .Clamp:
+            assert(len(call_expr.args) == 3)
+            ast.type = call_expr.args[0].type
+            assert(type_is_numeric(type_elem_basic_type(ast.type)))
+            for arg, i in call_expr.args {
+                if ast.type != arg.type {
+                    checker_error(c, "{} expected argument %i to be {}, got {}",
+                        v.kind,
+                        i,
+                        type_to_string(ast.type),
+                        type_to_string(arg.type),
+                    )
+                }
+            }
+
+        case .Abs,
+             .Sign,
+             .Trunc,
+             .Floor,
+             .Round,
+             .Ceil,
+             .Fract,
+             .Rcp,
+             .Sqrt,
+             .RSqrt,
+             .Sin,
+             .Cos,
+             .Tan,
+             .Exp,
+             .Exp2,
+             .Log,
+             .Log2:
+            assert(len(call_expr.args) == 1)
+            ast.type = call_expr.args[0].type
+
+        case .Pow:
+            assert(len(call_expr.args) == 2)
+            ast.type = call_expr.args[0].type
+            assert(type_elem_basic_type(ast.type) == type_elem_basic_type(call_expr.args[1].type))
 
         case:
             checker_error(c, "This builtin cannot be called") // dafuq
@@ -582,7 +666,11 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
     check_type(c, decl.type)
     // check_ident(c, value.name)
 
-    if decl.vector {
+    if decl.vector == .Default {
+        // TODO
+    }
+
+    if decl.vector == .Vector {
         fmt.println(type_to_string(decl.type.type))
         // NOTE: things like this could be cached on the scalar type, but idgaf for now
         vec := type_vectorize(decl.type.type)
@@ -744,11 +832,11 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
         if hint_basic != nil {
             #partial switch v.token.kind {
             case .Integer:
-                if type_is_integer(hint_basic) {
-                    return hint_basic
+                if type_is_numeric(hint_basic) {
+                    return type_hint
                 } else {
                     checker_error(c,
-                        "Integer literal cannot be assigned to non-integer-element type ({} from {})",
+                        "Integer literal cannot be assigned to non-numeric-element type ({} from {})",
                         type_to_string(hint_basic),
                         type_to_string(type_hint),
                     )
@@ -756,22 +844,25 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
 
             case .Float:
                 // Accept ints without a fraction
-                if type_is_numeric(hint_basic) {
-                    return hint_basic
+                if type_is_float(hint_basic) {
+                    return type_hint
                 } else {
-                    checker_error(c, "Integer literal cannot be assigned to non-numeric-element type")
-                }
+                    checker_error(c,
+                        "Integer literal cannot be assigned to non-float-element type ({} from {})",
+                        type_to_string(hint_basic),
+                        type_to_string(type_hint),
+                    )                }
 
             case .True, .False:
                 if type_is_boolean(hint_basic) {
-                    return hint_basic
+                    return type_hint
                 } else {
                     checker_error(c, "Boolean literal cannot be assigned to non-boolean-element type")
                 }
 
             case .Char:
                 if type_is_integer(hint_basic) {
-                    return hint_basic
+                    return type_hint
                 } else {
                     checker_error(c, "Character literal cannot be assigned to non-integer-element type")
                 }
@@ -786,7 +877,7 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
         case .Float:        return c.basic_types[.F32]
         case .True, .False: return c.basic_types[.B8]
         case .Char:         return c.basic_types[.U8]
-        case .String:       unimplemented("fuck strings tbh")
+        case .String:       unimplemented("")
         }
 
     case Ast_Pointer_Type:
@@ -794,7 +885,7 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
         result.size = 8
         result.variant = Type_Pointer{
             kind = .Single,
-            type = find_or_create_type_ast(c, v.type),
+            type = find_or_create_type_ast(c, v.type, type_hint = type_hint),
         }
 
     case Ast_Multi_Pointer_Type:
@@ -802,7 +893,7 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
         result.size = 8
         result.variant = Type_Pointer{
             kind = .Multi,
-            type = find_or_create_type_ast(c, v.type),
+            type = find_or_create_type_ast(c, v.type, type_hint = type_hint),
         }
 
     case Ast_Array_Type:
@@ -819,7 +910,7 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
         result.variant = Type_Array{
             kind = v.kind,
             len = length,
-            type = find_or_create_type_ast(c, v.type),
+            type = find_or_create_type_ast(c, v.type, type_hint = type_hint),
         }
 
     case Ast_Struct_Type:
@@ -830,13 +921,13 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
             f := field.variant.(Ast_Field)
             str.fields[i] = {
                 name = f.name.variant.(Ast_Ident).token.text,
-                type = find_or_create_type_ast(c, f.type),
+                type = find_or_create_type_ast(c, f.type, type_hint = type_hint),
             }
         }
         result.variant = str
 
     case Ast_Field:
-        result = find_or_create_type_ast(c, v.type)
+        result = find_or_create_type_ast(c, v.type, type_hint = type_hint)
 
     case:
         assert(false, "AST is not a valid type")
@@ -997,7 +1088,27 @@ check_program :: proc(c: ^Checker) {
     create_entity(c.curr_file_scope, "vector_index", nil, Entity_Builtin{
         kind = .Vector_Index, value = [8]i32{0, 1, 2, 3, 4, 5, 6, 7}, type = v8i32_type})
 
-    create_entity(c.curr_file_scope, "min", nil, Entity_Builtin{kind = .Min})
+    create_entity(c.curr_file_scope, "min"     , nil, Entity_Builtin{kind = .Min})
+    create_entity(c.curr_file_scope, "max"     , nil, Entity_Builtin{kind = .Max})
+    create_entity(c.curr_file_scope, "clamp"   , nil, Entity_Builtin{kind = .Clamp})
+    create_entity(c.curr_file_scope, "abs"     , nil, Entity_Builtin{kind = .Abs})
+    create_entity(c.curr_file_scope, "sign"    , nil, Entity_Builtin{kind = .Sign})
+    create_entity(c.curr_file_scope, "trunc"   , nil, Entity_Builtin{kind = .Trunc})
+    create_entity(c.curr_file_scope, "floor"   , nil, Entity_Builtin{kind = .Floor})
+    create_entity(c.curr_file_scope, "round"   , nil, Entity_Builtin{kind = .Round})
+    create_entity(c.curr_file_scope, "ceil"    , nil, Entity_Builtin{kind = .Ceil})
+    create_entity(c.curr_file_scope, "fract"   , nil, Entity_Builtin{kind = .Fract})
+    create_entity(c.curr_file_scope, "rcp"     , nil, Entity_Builtin{kind = .Rcp})
+    create_entity(c.curr_file_scope, "sqrt"    , nil, Entity_Builtin{kind = .Sqrt})
+    create_entity(c.curr_file_scope, "rsqrt"   , nil, Entity_Builtin{kind = .RSqrt})
+    create_entity(c.curr_file_scope, "sin"     , nil, Entity_Builtin{kind = .Sin})
+    create_entity(c.curr_file_scope, "cos"     , nil, Entity_Builtin{kind = .Cos})
+    create_entity(c.curr_file_scope, "tan"     , nil, Entity_Builtin{kind = .Tan})
+    create_entity(c.curr_file_scope, "pow"     , nil, Entity_Builtin{kind = .Pow})
+    create_entity(c.curr_file_scope, "exp"     , nil, Entity_Builtin{kind = .Exp})
+    create_entity(c.curr_file_scope, "exp2"    , nil, Entity_Builtin{kind = .Exp2})
+    create_entity(c.curr_file_scope, "log"     , nil, Entity_Builtin{kind = .Log})
+    create_entity(c.curr_file_scope, "log2"    , nil, Entity_Builtin{kind = .Log2})
 
     // 1. check all types
     // 2. check all entity declarations

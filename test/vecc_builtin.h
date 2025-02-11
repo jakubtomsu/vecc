@@ -2,6 +2,7 @@
 #define VECC_BUILTIN_DEFINED 1
 
 #include <stdint.h>
+#include <math.h>
 
 typedef int8_t   i8;
 typedef int16_t  i16;
@@ -30,11 +31,26 @@ typedef double   f64;
 #define b32_true (b32)0xffffffff
 #define b64_true (b64)0xffffffffffffffff
 
-#define vecc_func static
-#define vecc_op static __forceinline
+#define vecc_big_op static
+#define vecc_op static inline
 
 const i32 vector_width = 8;
 #define vector_index v8i32_set(0, 1, 2, 3, 4, 5, 6, 7)
+
+#define VECC_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
+
+
+vecc_op f32 f32_sqrt(f32 a) { return sqrtf(a); }
+vecc_op f64 f64_sqrt(f64 a) { return sqrt(a); }
+vecc_op f32 f32_sin(f32 a) { return sinf(a); }
+vecc_op f64 f64_sin(f64 a) { return sin(a); }
+vecc_op f32 f32_cos(f32 a) { return cosf(a); }
+vecc_op f64 f64_cos(f64 a) { return cos(a); }
+vecc_op f32 f32_rcp(f32 a) { return 1.0 / a; }
+vecc_op f64 f64_rcp(f64 a) { return 1.0 / a; }
+
+vecc_op f32 f32_pow(f32 a, f32 b) { return powf(a, b); }
+vecc_op f64 f64_pow(f64 a, f64 b) { return pow(a, b); }
 
 
 #define VECC_AVX2 1
@@ -141,32 +157,34 @@ typedef struct { __m256d data[4];  } v16b64;
 typedef struct { __m256d data[8];  } v32b64;
 typedef struct { __m256d data[16]; } v64b64;
 
+vecc_op f32 f32_rsqrt(f32 a) { return _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(a))); }
+vecc_op f64 f64_rsqrt(f64 a) { return 1.0 / sqrt(a); }
 
-vecc_func __m128i __m256_conv_uint8_t(__m256 x) {
+vecc_big_op __m128i __m256_conv_uint8_t(__m256 x) {
     __m256i x_i32 = _mm256_cvtps_epi32(x);
     __m256i x_i16 = _mm256_packs_epi32(x_i32, x_i32);
     return _mm256_castsi256_si128(_mm256_packus_epi16(x_i16, x_i16));
 }
 
-vecc_func v8i32 v8f32_to_v8i32(v8f32 a) {
+vecc_big_op v8i32 v8f32_to_v8i32(v8f32 a) {
     return {{_mm256_cvtps_epi32(a.data[0])}};
 }
 
-vecc_func v8u32 v8f32_to_v8u32(v8f32 a) {
+vecc_big_op v8u32 v8f32_to_v8u32(v8f32 a) {
     return {{_mm256_cvtps_epi32(a.data[0])}};
 }
 
-vecc_func v8u16 v8f32_to_v8u16(v8f32 a) {
+vecc_big_op v8u16 v8f32_to_v8u16(v8f32 a) {
     __m256i a32 = _mm256_cvtps_epi32(a.data[0]);
     return {{_mm256_castsi256_si128(_mm256_packus_epi32(a32, a32))}};
 }
 
-vecc_func v8i16 v8f32_to_v8i16(v8f32 a) {
+vecc_big_op v8i16 v8f32_to_v8i16(v8f32 a) {
     __m256i a32 = _mm256_cvtps_epi32(a.data[0]);
     return {{_mm256_castsi256_si128(_mm256_packs_epi32(a32, a32))}};
 }
 
-vecc_func v8f32 v8i32_to_v8f32(v8i32 a) { return {{_mm256_cvtepi32_ps(a.data[0])}}; }
+vecc_big_op v8f32 v8i32_to_v8f32(v8i32 a) { return {{_mm256_cvtepi32_ps(a.data[0])}}; }
 
 vecc_op v8f32 v8f32_set1(f32 a) { return {{_mm256_set1_ps(a)}}; }
 vecc_op v4f64 v4f64_set1(f64 a) { return {{_mm256_set1_pd(a)}}; }
@@ -235,7 +253,78 @@ vecc_op v8u16 v8u16_xor (v8u16 a, v8u16 b)  { return {{_mm_xor_si128(a.data[0], 
 vecc_op v8u16 v8u16_sl  (v8u16 a, int b)    { return {{_mm_slli_epi16(a.data[0], b)}}; }
 vecc_op v8u16 v8u16_sr  (v8u16 a, int b)    { return {{_mm_srli_epi16(a.data[0], b)}}; }
 
-vecc_op v8u32 v8u32_min (v8u32 a, v8u32 b)  { return {{_mm256_min_epi32(a.data[0], b.data[0])}}; }
+vecc_op v8i32 v8i32_min (v8i32 a, v8i32 b)  { return {{_mm256_min_epi32(a.data[0], b.data[0])}}; }
+vecc_op v8i32 v8i32_max (v8i32 a, v8i32 b)  { return {{_mm256_max_epi32(a.data[0], b.data[0])}}; }
+vecc_op v8u32 v8u32_min (v8u32 a, v8u32 b)  { return {{_mm256_min_epu32(a.data[0], b.data[0])}}; }
+vecc_op v8u32 v8u32_max (v8u32 a, v8u32 b)  { return {{_mm256_max_epu32(a.data[0], b.data[0])}}; }
+vecc_op v8f32 v8f32_min  (v8f32 a, v8f32 b) { return {{_mm256_min_ps(a.data[0], b.data[0])}}; }
+vecc_op v8f32 v8f32_max  (v8f32 a, v8f32 b) { return {{_mm256_max_ps(a.data[0], b.data[0])}}; }
+
+vecc_op v8f32 v8f32_clamp(v8f32 a, v8f32 lo, v8f32 hi) { return v8f32_min(v8f32_max(a, lo), hi); }
+vecc_op v8i32 v8i32_clamp(v8i32 a, v8i32 lo, v8i32 hi) { return v8i32_min(v8i32_max(a, lo), hi); }
+vecc_op v8u32 v8u32_clamp(v8u32 a, v8u32 lo, v8u32 hi) { return v8u32_min(v8u32_max(a, lo), hi); }
+
+vecc_op v8f32 v8f32_abs  (v8f32 a) { return {{_mm256_and_ps(a.data[0], _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF)))}}; }
+// vecc_op v8f32 v8f32_sign (v8f32 a) { return {{_mm256_sign_ps  (a.data[0])}}; }
+vecc_op v8f32 v8f32_trunc(v8f32 a) { return {{_mm256_round_ps(a.data[0],_MM_FROUND_TO_ZERO|_MM_FROUND_NO_EXC)}}; }
+vecc_op v8f32 v8f32_floor(v8f32 a) { return {{_mm256_round_ps(a.data[0],_MM_FROUND_TO_NEG_INF|_MM_FROUND_NO_EXC)}}; }
+vecc_op v8f32 v8f32_round(v8f32 a) { return {{_mm256_round_ps(a.data[0],_MM_FROUND_TO_NEAREST_INT|_MM_FROUND_NO_EXC)}}; }
+vecc_op v8f32 v8f32_ceil (v8f32 a) { return {{_mm256_round_ps(a.data[0],_MM_FROUND_TO_POS_INF|_MM_FROUND_NO_EXC)}}; }
+vecc_op v8f32 v8f32_fract(v8f32 a) { return v8f32_sub(a, v8f32_floor(a)); }
+vecc_op v8f32 v8f32_rcp  (v8f32 a) { return {{_mm256_rcp_ps   (a.data[0])}}; }
+vecc_op v8f32 v8f32_sqrt (v8f32 a) { return {{_mm256_sqrt_ps  (a.data[0])}}; }
+vecc_op v8f32 v8f32_rsqrt(v8f32 a) { return {{_mm256_rsqrt_ps (a.data[0])}}; }
+
+// Slow scalar fallback for now
+
+#define VECC_ALIGNED(n) __declspec(align(n))
+
+vecc_op v8f32 v8f32_sin(v8f32 a) {
+    VECC_ALIGNED(32) f32 data[8];
+    _mm256_store_ps(data, a.data[0]);
+    for (int i = 0; i < VECC_LEN(data); i++) {
+        data[i] = sinf(data[i]);
+    }
+    return {{_mm256_load_ps(data)}};
+}
+
+vecc_op v8f32 v8f32_cos(v8f32 a) {
+    VECC_ALIGNED(32) f32 data[8];
+    _mm256_store_ps(data, a.data[0]);
+    for (int i = 0; i < VECC_LEN(data); i++) {
+        data[i] = cosf(data[i]);
+    }
+    return {{_mm256_load_ps(data)}};
+}
+
+vecc_op v8f32 v8f32_tan(v8f32 a) {
+    VECC_ALIGNED(32) f32 data[8];
+    _mm256_store_ps(data, a.data[0]);
+    for (int i = 0; i < VECC_LEN(data); i++) {
+        data[i] = tanf(data[i]);
+    }
+    return {{_mm256_load_ps(data)}};
+}
+
+vecc_op v8f32 v8f32_log(v8f32 a) {
+    VECC_ALIGNED(32) f32 data[8];
+    _mm256_store_ps(data, a.data[0]);
+    for (int i = 0; i < VECC_LEN(data); i++) {
+        data[i] = logf(data[i]);
+    }
+    return {{_mm256_load_ps(data)}};
+}
+
+vecc_op v8f32 v8f32_pow(v8f32 a, v8f32 b) {
+    VECC_ALIGNED(32) f32 a_data[8];
+    VECC_ALIGNED(32) f32 b_data[8];
+    _mm256_store_ps(a_data, a.data[0]);
+    _mm256_store_ps(b_data, b.data[0]);
+    for (int i = 0; i < VECC_LEN(a_data); i++) {
+        a_data[i] = powf(a_data[i], b_data[i]);
+    }
+    return {{_mm256_load_ps(a_data)}};
+}
 
 #endif // VECC_AVX2
 
