@@ -20,11 +20,12 @@ Value :: union {
 
 Ast_Variant :: union {
     Ast_Ident,
+    Ast_Basic_Literal,
+    Ast_Compound_Literal,
 
     Ast_Proc_Decl,
     Ast_Value_Decl,
     Ast_Struct_Decl,
-    Ast_Basic_Literal,
     Ast_Field,
 
     Ast_Block_Stmt,
@@ -59,6 +60,11 @@ Ast_Ident :: struct {
 
 Ast_Basic_Literal :: struct {
     token: Token,
+}
+
+Ast_Compound_Literal :: struct {
+    type:   ^Ast,
+    elems:  []^Ast,
 }
 
 Ast_Value_Decl :: struct {

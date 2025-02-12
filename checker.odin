@@ -231,6 +231,35 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     }
 }
 
+check_compound_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
+    lit := ast.variant.(Ast_Compound_Literal)
+    if lit.type != nil {
+        check_type(c, lit.type)
+        ast.type = lit.type.type
+    } else {
+        ast.type = type_hint
+
+    }
+
+    if ast.type == nil {
+        checker_error(c, "Invalid compound type literal")
+    }
+
+    for elem, i in lit.elems {
+        hint: ^Type
+        #partial switch v in ast.type.variant {
+        case Type_Array:
+            hint = v.type
+        case Type_Struct:
+            hint = v.fields[i].type
+        case:
+            checker_error(c, "Comopound literal is not valid for this type")
+        }
+
+        check_expr(c, elem, type_hint)
+    }
+}
+
 check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
     assert(ast.type == nil)
 
@@ -545,11 +574,14 @@ check_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     assert(ast.type == nil)
 
     #partial switch v in ast.variant {
+    case Ast_Ident:
+        check_ident(c, ast)
+
     case Ast_Basic_Literal:
         check_basic_literal(c, ast, type_hint = type_hint)
 
-    case Ast_Ident:
-        check_ident(c, ast)
+    case Ast_Compound_Literal:
+        check_compound_literal(c, ast, type_hint = type_hint)
 
     case Ast_Call_Expr:
         check_call_expr(c, ast)
@@ -1096,7 +1128,9 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
         }
 
     case:
-        result = find_or_create_type(c, type = create_new_type_from_ast(c, ast, type_hint = type_hint))
+        result = find_or_create_type(c,
+            type = create_new_type_from_ast(c, ast, type_hint = type_hint),
+        )
     }
 
     assert(result != nil)

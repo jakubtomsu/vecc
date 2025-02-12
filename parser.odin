@@ -29,30 +29,30 @@ parser_error :: proc(p: ^Parser, pos: Pos, format: string, args: ..any, loc := #
 
 // Grammar
 
-next :: proc(p: ^Parser) -> Token {
+next :: proc(p: ^Parser, loc := #caller_location) -> Token {
     token, err := get_token(&p.tokenizer)
     if err != nil && token.kind != .EOF {
         parser_error(p, token.pos, "Found invalid token: {}", err)
     }
 
-    // Print every token. Very useful for parser debugging
-    fmt.println(token)
+    // Print every token. Useful for parser debugging
+    fmt.println(token, loc)
 
     p.prev_token, p.curr_token = p.curr_token, token
     return p.prev_token
 }
 
 expect :: proc(p: ^Parser, kind: Token_Kind, loc := #caller_location) -> Token {
-    token := next(p)
+    token := next(p, loc = loc)
     if token.kind != kind {
         parser_error(p, token.pos, "Expected {}, got {} ({})", kind, token.kind, token.text, loc = loc)
     }
     return token
 }
 
-allow :: proc(p: ^Parser, kind: Token_Kind) -> bool {
+allow :: proc(p: ^Parser, kind: Token_Kind, loc := #caller_location) -> bool {
     if p.curr_token.kind == kind {
-        next(p)
+        next(p, loc = loc)
         return true
     }
     return false
@@ -78,6 +78,32 @@ parse_basic_literal :: proc(p: ^Parser, token: Token) -> ^Ast {
     result.variant = Ast_Basic_Literal{
         token = token,
     }
+    return result
+}
+
+parse_compound_literal :: proc(p: ^Parser, type: ^Ast) -> ^Ast {
+    result := create_ast()
+
+    expect(p, .Open_Brace)
+
+    lit: Ast_Compound_Literal
+    lit.type = type
+
+    elems: [dynamic]^Ast
+
+    for peek(p) != .Close_Brace {
+        expr := parse_expr(p)
+        append(&elems, expr)
+
+        if !allow(p, .Semicolon) {
+            break
+        }
+    }
+
+    expect(p, .Close_Brace)
+
+    lit.elems = elems[:]
+    result.variant = lit
     return result
 }
 
@@ -198,9 +224,9 @@ parse_deref_expr :: proc(p: ^Parser) -> ^Ast {
 }
 
 parse_factor :: proc(p: ^Parser, loc := #caller_location) -> ^Ast {
-    tok := next(p)
-    #partial switch tok.kind {
+    #partial switch peek(p) {
     case .Ident:
+        tok := expect(p, .Ident)
         ident := parse_ident(p, tok)
 
         curr_ast := ident
@@ -224,23 +250,34 @@ parse_factor :: proc(p: ^Parser, loc := #caller_location) -> ^Ast {
         return curr_ast
 
     case .Integer, .Float, .String, .False, .True:
-        return parse_basic_literal(p, tok)
+        return parse_basic_literal(p, next(p))
 
     case .Conv, .Reinterpret:
-        return parse_cast_expr(p, tok)
+        return parse_cast_expr(p, next(p))
 
     case .Bit_And:
+        next(p)
         return parse_address_expr(p)
 
     case .Mul:
+        next(p)
         return parse_deref_expr(p)
 
     case .Open_Paren:
+        next(p)
         result := parse_expr(p)
         expect(p, .Close_Paren)
         return result
+
+    case .Open_Brace:
+        // checker will attempt to infer the type later
+        return parse_compound_literal(p, type = nil)
+
+    case:
+        type := parse_type(p)
+        return parse_compound_literal(p, type = type)
     }
-    parser_error(p, tok.pos, "Invalid factor, got {}", tok.kind, loc = loc)
+    parser_error(p, p.curr_token.pos, "Invalid factor, got {}", p.curr_token.kind, loc = loc)
 }
 
 parse_unary_expr :: proc(p: ^Parser) -> ^Ast {
@@ -580,6 +617,7 @@ register_value_entity :: proc(
 }
 
 parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
+    fmt.println("PARSE TYPE:", peek(p))
     #partial switch peek(p) {
     case .Open_Bracket:
         expect(p, .Open_Bracket)

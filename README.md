@@ -2,6 +2,9 @@
 
 An experimental compiler for a vector programming languge. Inspired by ISPC and shader programming.
 
+> [!WARNING]
+> This is NOT a finished programming language. Do not use for serious projects.
+
 https://pharr.org/matt/blog/2018/04/30/ispc-all
 
 https://pharr.org/matt/blog/2018/04/21/ispc-volta-c-and-spmd

@@ -84,20 +84,26 @@ gen_value :: proc(g: ^Gen, value: Value, type: ^Type) {
             _print_float(g, tv.kind, v)
 
         case Type_Array:
-            switch tv.kind {
-            case .Vector:
-                // HACK, use conversion code
-                gen_printf(g, "v{}{}_set1(", tv.len, tv.type.cname_lower)
-                _print_float(g, tv.type.variant.(Type_Basic).kind, v)
-                gen_print(g, ")")
+            elem := type_elem_basic_type(type)
+            data := gen_cast_op_data(g,
+                type = type,
+                value = elem,
+                op = .Conv,
+            )
 
-            case .Fixed_Array:
-                unimplemented()
+            gen_print(g, data.prefix)
+            if data.sep != "" {
+                gen_type(g, type)
+                gen_print(g, data.sep)
             }
+            _print_float(g, elem.variant.(Type_Basic).kind, v)
+            gen_print(g, data.suffix)
 
         case:
             assert(false)
         }
+
+    // HACK
 
     case [8]i32:
         gen_printf(g, "v8i32_set(%i, %i, %i, %i, %i, %i, %i, %i)",
@@ -112,7 +118,7 @@ gen_value :: proc(g: ^Gen, value: Value, type: ^Type) {
         )
 
     case [8]f32:
-    gen_printf(g, "v8f32_set(%i, %i, %i, %i, %i, %i, %i, %i)",
+        gen_printf(g, "v8f32_set(%i, %i, %i, %i, %i, %i, %i, %i)",
             v[0],
             v[1],
             v[2],
@@ -225,6 +231,12 @@ gen_cast_op_data :: proc(
     value:  ^Type,
     op:     Token_Kind,
 ) -> (result: Gen_Op_Data) {
+    if type == value {
+        return {}
+    }
+
+    fmt.println("CAST OP:", type_to_string(type), "<-", type_to_string(value))
+
     #partial switch op {
     case .Reinterpret:
         result.prefix = "(*("
@@ -236,12 +248,27 @@ gen_cast_op_data :: proc(
         case Type_Basic:
             #partial switch tv in type.variant {
             case Type_Basic:
+                if v.kind == tv.kind {
+                    return {}
+                }
+
                 result.prefix = "("
                 result.sep = ")"
 
             case Type_Array:
-                result.prefix = fmt.tprintf("{}_set1(", type.cname_lower)
-                result.suffix = ")"
+                sub: Gen_Op_Data
+                fmt.print("\t")
+                sub = gen_cast_op_data(g,
+                    type = tv.type,
+                    value = value,
+                    op = op,
+                )
+
+                result.prefix = fmt.tprintf("{}_set1({}", type.cname_lower, sub.prefix)
+
+                result.sep = sub.sep
+
+                result.suffix = fmt.tprintf("{})", sub.suffix)
             }
 
 
@@ -333,8 +360,15 @@ gen_possible_auto_conv_expr :: proc(g: ^Gen, type: ^Type, expr: ^Ast, top_level:
             #partial switch lr in expr.type.variant {
             case Type_Basic:
                 if lvt.type == expr.type {
-                    conv_prefix = fmt.tprintf("{}_set1({}_set1(", type.cname_lower, lv.type.cname_lower)
-                    conv_suffix = "))"
+                    // conv_prefix = fmt.tprintf("{}_set1({}_set1(", type.cname_lower, lv.type.cname_lower)
+                    // conv_suffix = "))"
+                    conv := gen_cast_op_data(g,
+                        type = type,
+                        value = expr.type,
+                        op = .Conv,
+                    )
+                    conv_prefix = conv.prefix
+                    conv_suffix = conv.suffix
                 }
 
             case Type_Array:

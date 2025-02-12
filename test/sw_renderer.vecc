@@ -39,10 +39,11 @@ procedure export compute_frame (
             mut vector p [2]f32
             p.x = conv(f32, pixel_x)
             p.y = conv(f32, y)
-            p.x = ((p.x * 2.0)-conv(f32, resolution.x)) * inv_res.y
-            p.y = ((p.y * 2.0)-conv(f32, resolution.y)) * inv_res.y
+            p = ((p * 2.0)-conv(f32, resolution)) * inv_res.y
 
             mut vector z [2]f32 = ((p-cen)*zoom) + cen
+
+            // immut fooo [2]f32 = [2]f32{1; 2}
 
             // only derivative length version
             mut vector ld2 f32 = 1.0
@@ -55,6 +56,7 @@ procedure export compute_frame (
                 z.y = ((old_z.x*old_z.y)*2) + c.y
                 lz2 = blend((z.x*z.x) + (z.y*z.y), lz2, break_mask)
                 break_mask |= lz2 > 200.0
+
                 if reduce_all(break_mask) {
                     break
                 }
