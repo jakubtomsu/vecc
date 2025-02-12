@@ -309,32 +309,70 @@ gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
 
 // Left is assumed to be already checked
 // THIS CONVERSION THING IS A HACK
-gen_possible_auto_conv_expr :: proc(g: ^Gen, left, right: ^Ast) {
-    emitted_conv := false
-    #partial switch lv in left.type.variant {
+// TODO: refactor to use gen_cast_op_data
+gen_possible_auto_conv_expr :: proc(g: ^Gen, type: ^Type, expr: ^Ast, top_level: bool) {
+    conv_prefix := ""
+    conv_suffix := ""
+    // this also does not spark joy
+    #partial switch lv in type.variant {
     case Type_Array:
-        #partial switch lr in right.type.variant {
+
+        #partial switch lvt in lv.type.variant {
         case Type_Basic:
-            if lv.type == right.type {
-                gen_printf(g, "{}_set1(", left.type.cname_lower)
-                emitted_conv = true
+            #partial switch lr in expr.type.variant {
+            case Type_Basic:
+                if lv.type == expr.type {
+                    conv_prefix = fmt.tprintf("{}_set1(", type.cname_lower)
+                    conv_suffix = ")"
+                }
+            }
+
+        case Type_Array:
+            if lvt.kind != .Vector do break
+
+            #partial switch lr in expr.type.variant {
+            case Type_Basic:
+                if lvt.type == expr.type {
+                    conv_prefix = fmt.tprintf("{}_set1({}_set1(", type.cname_lower, lv.type.cname_lower)
+                    conv_suffix = "))"
+                }
+
+            case Type_Array:
+                switch lr.kind {
+                case .Vector:
+                    if lvt.type == lr.type {
+                        conv_prefix = fmt.tprintf("{}_set1(", type.cname_lower)
+                        conv_suffix = ")"
+                    }
+
+                case .Fixed_Array:
+                    if lvt.type == lr.type {
+                        conv_prefix = fmt.tprintf("{}_set_scalar(", type.cname_lower)
+                        conv_suffix = ")"
+                    }
+                }
             }
         }
+
+        // #partial switch lr in expr.type.variant {
+        // case Type_Basic:
+        //     if lv.type == expr.type {
+        //         gen_printf(g, "{}_set1(", type.cname_lower)
+        //         emitted_conv = true
+        //     }
+        // }
     }
 
-    gen_expr(g, right, top_level = true)
-
-    if emitted_conv {
-        gen_print(g, ")")
-    }
+    gen_print(g, conv_prefix)
+    gen_expr(g, expr, top_level = (conv_prefix != "") || top_level)
+    gen_print(g, conv_suffix)
 }
 
 gen_binary_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     expr := ast.variant.(Ast_Binary_Expr)
-    if expr.op.kind == .Div {
-        fmt.println("div")
-    }
+
     gen_binary_op(g,
+        type = expr.left.type, // HACK
         left = expr.left,
         right = expr.right,
         op = expr.op.kind,
@@ -342,8 +380,16 @@ gen_binary_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     )
 }
 
-gen_binary_op :: proc(g: ^Gen, left: ^Ast, right: ^Ast, op: Token_Kind, top_level := false) {
+gen_binary_op :: proc(
+    g:          ^Gen,
+    type:       ^Type,
+    left:       ^Ast,
+    right:      ^Ast,
+    op:         Token_Kind,
+    top_level   := false,
+) {
     data := gen_binary_op_data(
+        type = type,
         left = left.type,
         right = right.type,
         op = op,
@@ -353,9 +399,9 @@ gen_binary_op :: proc(g: ^Gen, left: ^Ast, right: ^Ast, op: Token_Kind, top_leve
     assert(data != {})
 
     gen_print(g, data.prefix)
-    gen_expr(g, left)
+    gen_possible_auto_conv_expr(g, type, left, top_level = top_level)
     gen_print(g, data.sep)
-    gen_possible_auto_conv_expr(g, left, right)
+    gen_possible_auto_conv_expr(g, type, right, top_level = top_level)
     gen_print(g, data.suffix)
 }
 
@@ -366,12 +412,13 @@ Gen_Op_Data :: struct {
 }
 
 gen_binary_op_data :: proc(
-    left: ^Type,
-    right: ^Type,
-    op: Token_Kind,
-    top_level: bool,
+    type:       ^Type,
+    left:       ^Type,
+    right:      ^Type,
+    op:         Token_Kind,
+    top_level:  bool,
 ) -> (result: Gen_Op_Data) {
-    #partial switch v in left.variant {
+    #partial switch v in type.variant {
     case Type_Basic:
         if !top_level {
             result.prefix = "("
@@ -638,6 +685,49 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
         if v.kind != .Fixed_Array do return
         if v.len > MAX_ARITMETIC_ARRAY_WIDTH do return
 
+        #partial switch vt in v.type.variant {
+        case Type_Basic:
+        case Type_Array:
+            if vt.kind != .Vector {
+                return
+            }
+
+            gen_printf(g, "static {} {}_set_scalar(Aos{}{} a)",
+                type.cname, type.cname_lower, v.len, vt.type.cname)
+            if defs {
+                gen_print(g, " { ")
+                gen_print(g, "return {{", )
+                dst_elem := v.type
+                for i in 0..<v.len {
+                    data := gen_cast_op_data(g,
+                        type = dst_elem,
+                        value = vt.type,
+                        op = .Conv,
+                    )
+
+                    gen_print(g, data.prefix)
+                    if data.sep != "" {
+                        gen_type(g, dst_elem)
+                        gen_print(g, data.sep)
+                    }
+
+                    gen_printf(g, "a.data[%i]", i)
+                    gen_print(g, data.suffix)
+
+                    if i + 1 < v.len {
+                        gen_print(g, ", ")
+                    }
+                }
+                gen_print(g, "}};")
+                gen_print(g, " }\n")
+            } else {
+                gen_print(g, ";\n")
+            }
+
+        case:
+            return
+        }
+
         gen_printf(g, "static {} {}_set1({} a)", type.cname, type.cname_lower, v.type.cname)
         if defs {
             gen_print(g, " { ")
@@ -745,6 +835,7 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
                 gen_printf(g, "return {{{{")
 
                 data := gen_binary_op_data(
+                    type = v.type,
                     left = v.type,
                     right = v.type,
                     op = op.op,
@@ -843,7 +934,7 @@ gen_value_decl :: proc(g: ^Gen, ast: ^Ast) {
     gen_print(g, " ")
     if decl.value != nil {
         gen_print(g, "= ")
-        gen_expr(g, decl.value, top_level = true)
+        gen_possible_auto_conv_expr(g, decl.type.type, decl.value, top_level = true)
     } else {
         gen_print(g, "= ")
         #partial switch v in decl.type.type.variant {
@@ -962,13 +1053,14 @@ gen_assign_stmt :: proc(g: ^Gen, ast: ^Ast) {
     op, op_ok := token_normalize_assign_op(stmt.op.kind)
     if op != .Assign && op_ok {
         gen_binary_op(g,
+            type = ast.type,
             left = stmt.left,
             right = stmt.right,
             op = op,
             top_level = true,
         )
     } else {
-        gen_possible_auto_conv_expr(g, stmt.left, stmt.right)
+        gen_possible_auto_conv_expr(g, stmt.left.type, stmt.right, top_level = true)
     }
 }
 

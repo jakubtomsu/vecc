@@ -398,8 +398,14 @@ check_urnary_expr :: proc(c: ^Checker, ast: ^Ast) {
     }
 }
 
-check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) -> ^Type {
-    check_expr(c, left)
+check_binary_op :: proc(
+    c:          ^Checker,
+    left:       ^Ast,
+    right:      ^Ast,
+    op:         Token_Kind,
+    type_hint:  ^Type,
+) -> (result: ^Type) {
+    check_expr(c, left, type_hint = type_hint)
 
     hint: ^Type
     #partial switch op {
@@ -422,15 +428,72 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
             checker_error(c, "Shift amount must be an integer")
         }
 
+        result = left.type
+
     case:
 
-        if left.type != right.type && left_elem != right.type {
-            checker_error(c, "Types in binary expression don't match: {} vs {}",
-                type_to_string(left_elem), type_to_string(right.type))
+        if left.type == right.type {
+            result = left.type
+        } else {
+            // this does not spark joy :(
+            // Allow ops between basic/array/vector/vector_array types with same element type
+            #partial switch vl in left.type.variant {
+            case Type_Basic:
+                #partial switch vr in right.type.variant {
+                case Type_Array:
+                    if left.type == vr.type {
+                        result = right.type
+                    }
+
+                    #partial switch vrt in vr.type.variant {
+                    case Type_Array:
+                        if vrt.kind != .Vector do break
+                        if vrt.type == left.type {
+                            result = right.type
+                        }
+                    }
+                }
+
+            case Type_Array:
+                #partial switch vr in right.type.variant {
+                case Type_Basic:
+                    if right.type == vl.type {
+                        result = left.type
+                    }
+
+                    #partial switch vlt in vl.type.variant {
+                    case Type_Array:
+                        if vlt.kind != .Vector do break
+                        if vlt.type == right.type {
+                            result = left.type
+                        }
+                    }
+
+                case Type_Array:
+                    #partial switch vlt in vl.type.variant {
+                    case Type_Basic:
+                        vrt := vr.type.variant.(Type_Array) or_break
+                        if vrt.kind != .Vector do break
+                        result = right.type
+
+                    case Type_Array:
+                        if vlt.kind != .Vector do break
+                        vrt := vr.type.variant.(Type_Basic) or_break
+                        result = left.type
+                    }
+                }
+            }
+        }
+
+        if result == nil {
+            checker_error(c, "Incompatible types in binary op '{}': {} vs {}",
+                _token_str[op],
+                type_to_string(left.type),
+                type_to_string(right.type),
+            )
         }
     }
 
-    type := left.type
 
     #partial switch op {
     case .Equal,
@@ -442,12 +505,12 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
 
         #partial switch v in left.type.variant {
         case Type_Basic:
-            type = c.basic_types[.B32]
+            result = c.basic_types[.B32] // TODO: type hint
         case Type_Array:
-            type = type_clone(left.type)
-            arr := &type.variant.(Type_Array)
+            result = type_clone(left.type)
+            arr := &result.variant.(Type_Array)
             arr.type = c.basic_types[.B32] // HACK
-            type = find_or_create_type(c, type)
+            result = find_or_create_type(c, result)
         }
 
         if op != .Equal && op != .Not_Equal && !type_is_numeric(left_elem) {
@@ -470,7 +533,7 @@ check_binary_op :: proc(c: ^Checker, left: ^Ast, right: ^Ast, op: Token_Kind) ->
          .Mod:
     }
 
-    return type
+    return result
 }
 
 // check_type_internal, check_type, add_type_info_internal, check_ident
@@ -658,7 +721,12 @@ check_binary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     assert(ast.type == nil)
 
     expr := ast.variant.(Ast_Binary_Expr)
-    ast.type = check_binary_op(c, expr.left, expr.right, expr.op.kind)
+    ast.type = check_binary_op(c,
+        expr.left,
+        expr.right,
+        expr.op.kind,
+        type_hint = type_hint,
+    )
 
     // Constant folding
     #partial switch l in expr.left.value {
@@ -713,10 +781,13 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
     }
 
     if decl.value != nil {
-        check_expr(c, decl.value)
+        check_expr(c, decl.value, type_hint = decl.type.type)
         // TODO check same as in assign stmt
-        if decl.type.type != decl.value.type {
-            checker_error(c, "Initializer value type doesn't match, expected {}, got {}", type_to_string(decl.type.type), type_to_string(decl.value.type))
+        if !check_are_types_assignable(c, decl.type.type, decl.value.type) {
+            checker_error(c, "Invalid initializer value, types aren't assignable: {} vs {}",
+                type_to_string(decl.type.type),
+                type_to_string(decl.value.type),
+            )
         }
         ast.value = decl.value.value
     }
@@ -728,6 +799,26 @@ check_proc_param_field :: proc(c: ^Checker, ast: ^Ast) {
     // check_type(c, decl.type)
     check_value_decl(c, ast)
     ast.type = decl.type.type
+}
+
+check_are_types_assignable :: proc(c: ^Checker, left: ^Type, right: ^Type) -> bool {
+    if left == right {
+        return true
+    }
+
+    if arr, ok := left.variant.(Type_Array); ok {
+        if arr.kind == .Vector && arr.type == right {
+            return true
+        }
+
+        if elem, ok := arr.type.variant.(Type_Array); ok &&
+           elem.kind == .Vector &&
+           elem.type == right {
+            return true
+        }
+    }
+
+    return false
 }
 
 check_stmt :: proc(c: ^Checker, ast: ^Ast) {
@@ -746,19 +837,15 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
             check_expr(c, v.left)
             check_expr(c, v.right, type_hint = v.left.type)
 
-            if v.left.type == v.right.type do return
-            if vec, ok := v.left.type.variant.(Type_Array);
-               ok && vec.kind == .Vector && vec.type == v.right.type {
-                return
+            if !check_are_types_assignable(c, v.left.type, v.right.type) {
+                checker_error(c, "Types aren't assignable: {} vs {}",
+                    type_to_string(v.left.type),
+                    type_to_string(v.right.type),
+                )
             }
-            // if t, ok := v.left.type.variant.(Type_Pointer);
-            //    ok && t.kind == .Multi && t.type == v.right.type {
-            //     return
-            // }
-            checker_error(c, "Assign statement types don't match")
 
         case:
-            ast.type = check_binary_op(c, v.left, v.right, op)
+            ast.type = check_binary_op(c, v.left, v.right, op, type_hint = nil)
         }
 
     case Ast_Return_Stmt:
@@ -831,7 +918,10 @@ check_return_stmt :: proc(c: ^Checker, ast: ^Ast) {
     proc_decl := c.curr_entity.ast.variant.(Ast_Proc_Decl)
     proc_type := proc_decl.type.variant.(Ast_Proc_Type)
     if stmt.value.type != proc_type.result.type {
-        checker_error(c, "Invalid return type")
+        checker_error(c, "Invalid return type, expected {}, got {}",
+            type_to_string(proc_type.result.type),
+            type_to_string(stmt.value.type),
+        )
     }
 }
 

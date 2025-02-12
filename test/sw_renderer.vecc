@@ -36,11 +36,6 @@ procedure export compute_frame (
             uv.x = conv(f32, pixel_x) * inv_res.x
             uv.y = conv(f32, y) * inv_res.y
 
-            mut vector col [4]f32
-            // col.r = uv.x
-            // col.g = (cos(uv.y * 50) * 0.5) + 0.5
-            col.a = 1.0
-
             mut vector p [2]f32
             p.x = conv(f32, pixel_x)
             p.y = conv(f32, y)
@@ -48,12 +43,9 @@ procedure export compute_frame (
             p.y = ((p.y * 2.0)-conv(f32, resolution.y)) * inv_res.y
 
             mut vector z [2]f32 = ((p-cen)*zoom) + cen
-            // z.x = ((p.x-cen.x)*zoom) + cen.x
-            // z.y = ((p.y-cen.y)*zoom) + cen.y
 
             // only derivative length version
-            mut vector ld2 f32
-            ld2 = 1.0
+            mut vector ld2 f32 = 1.0
             mut vector lz2 f32 = (z.x*z.x) + (z.y*z.y)
             mut vector break_mask b32 // hack
             for i i32; i < 256; i += 1 {
@@ -71,14 +63,11 @@ procedure export compute_frame (
 
             immut vector scol f32 = sqrt(clamp((conv(vector(8, f32), 150.0)/zoom)*d, 0.0, 1.0))
 
+            mut vector col [4]f32
             col.r = pow(scol, 0.9)
             col.g = pow(scol, 1.1)
             col.b = pow(scol, 1.4)
             col.a = 1
-
-            // col.r = fract(uv.x * 13)
-            // col.g = fract(uv.y * 13)
-            // col.b = conv(f32, (x + y) & 1)
 
             // Store
 
