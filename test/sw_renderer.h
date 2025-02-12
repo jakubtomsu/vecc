@@ -7,14 +7,21 @@
 #include <stdio.h>
 #include "vecc_builtin.h"
 
-typedef struct { i32 data[2]; } Aos2i32;
 typedef struct { f32 data[3]; } Aos3f32;
+typedef struct { i32 data[2]; } Aos2i32;
 typedef struct { f32 data[2]; } Aos2f32;
 typedef struct { v8f32 data[2]; } Aos2v8f32;
 typedef struct { f32 data[4]; } Aos4f32;
 typedef struct { v8f32 data[4]; } Aos4v8f32;
 typedef struct { u32 data[4]; } Aos4u32;
 typedef struct { v8u32 data[4]; } Aos4v8u32;
+static Aos3f32 aos3f32_set1(f32 a) { return {{a, a, a}}; }
+static Aos3f32 aos3f32_set(f32 v0, f32 v1, f32 v2) { return {{v0, v1, v2}}; }
+static Aos3f32 aos3f32_add(Aos3f32 a, Aos3f32 b) {return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2], }};}
+static Aos3f32 aos3f32_sub(Aos3f32 a, Aos3f32 b) {return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2], }};}
+static Aos3f32 aos3f32_mul(Aos3f32 a, Aos3f32 b) {return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2], }};}
+static Aos3f32 aos3f32_div(Aos3f32 a, Aos3f32 b) {return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2], }};}
+static Aos3f32 aos3f32_neg(Aos3f32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
 static Aos2i32 aos2i32_set1(i32 a) { return {{a, a}}; }
 static Aos2i32 aos2i32_set(i32 v0, i32 v1) { return {{v0, v1}}; }
 static Aos2f32 aos2i32_to_aos2f32(Aos2i32 a) { return {{(f32)a.data[0], (f32)a.data[1]}}; }
@@ -24,12 +31,7 @@ static Aos2i32 aos2i32_mul(Aos2i32 a, Aos2i32 b) {return {{a.data[0] * b.data[0]
 static Aos2i32 aos2i32_and(Aos2i32 a, Aos2i32 b) {return {{a.data[0] & b.data[0], a.data[1] & b.data[1], }};}
 static Aos2i32 aos2i32_or(Aos2i32 a, Aos2i32 b) {return {{a.data[0] | b.data[0], a.data[1] | b.data[1], }};}
 static Aos2i32 aos2i32_xor(Aos2i32 a, Aos2i32 b) {return {{a.data[0] ^ b.data[0], a.data[1] ^ b.data[1], }};}
-static Aos3f32 aos3f32_set1(f32 a) { return {{a, a, a}}; }
-static Aos3f32 aos3f32_set(f32 v0, f32 v1, f32 v2) { return {{v0, v1, v2}}; }
-static Aos3f32 aos3f32_add(Aos3f32 a, Aos3f32 b) {return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2], }};}
-static Aos3f32 aos3f32_sub(Aos3f32 a, Aos3f32 b) {return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2], }};}
-static Aos3f32 aos3f32_mul(Aos3f32 a, Aos3f32 b) {return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2], }};}
-static Aos3f32 aos3f32_div(Aos3f32 a, Aos3f32 b) {return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2], }};}
+static Aos2i32 aos2i32_neg(Aos2i32 a) { return {{-a.data[0], -a.data[1]}}; }
 static Aos2f32 aos2f32_set1(f32 a) { return {{a, a}}; }
 static Aos2f32 aos2f32_set(f32 v0, f32 v1) { return {{v0, v1}}; }
 static Aos2i32 aos2f32_to_aos2i32(Aos2f32 a) { return {{(i32)a.data[0], (i32)a.data[1]}}; }
@@ -37,6 +39,7 @@ static Aos2f32 aos2f32_add(Aos2f32 a, Aos2f32 b) {return {{a.data[0] + b.data[0]
 static Aos2f32 aos2f32_sub(Aos2f32 a, Aos2f32 b) {return {{a.data[0] - b.data[0], a.data[1] - b.data[1], }};}
 static Aos2f32 aos2f32_mul(Aos2f32 a, Aos2f32 b) {return {{a.data[0] * b.data[0], a.data[1] * b.data[1], }};}
 static Aos2f32 aos2f32_div(Aos2f32 a, Aos2f32 b) {return {{a.data[0] / b.data[0], a.data[1] / b.data[1], }};}
+static Aos2f32 aos2f32_neg(Aos2f32 a) { return {{-a.data[0], -a.data[1]}}; }
 static Aos2v8f32 aos2v8f32_set_scalar(Aos2f32 a) { return {{v8f32_set1(a.data[0]), v8f32_set1(a.data[1])}}; }
 static Aos2v8f32 aos2v8f32_set1(v8f32 a) { return {{a, a}}; }
 static Aos2v8f32 aos2v8f32_set(v8f32 v0, v8f32 v1) { return {{v0, v1}}; }
@@ -51,6 +54,7 @@ static Aos4f32 aos4f32_add(Aos4f32 a, Aos4f32 b) {return {{a.data[0] + b.data[0]
 static Aos4f32 aos4f32_sub(Aos4f32 a, Aos4f32 b) {return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2], a.data[3] - b.data[3], }};}
 static Aos4f32 aos4f32_mul(Aos4f32 a, Aos4f32 b) {return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2], a.data[3] * b.data[3], }};}
 static Aos4f32 aos4f32_div(Aos4f32 a, Aos4f32 b) {return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2], a.data[3] / b.data[3], }};}
+static Aos4f32 aos4f32_neg(Aos4f32 a) { return {{-a.data[0], -a.data[1], -a.data[2], -a.data[3]}}; }
 static Aos4v8f32 aos4v8f32_set_scalar(Aos4f32 a) { return {{v8f32_set1(a.data[0]), v8f32_set1(a.data[1]), v8f32_set1(a.data[2]), v8f32_set1(a.data[3])}}; }
 static Aos4v8f32 aos4v8f32_set1(v8f32 a) { return {{a, a, a, a}}; }
 static Aos4v8f32 aos4v8f32_set(v8f32 v0, v8f32 v1, v8f32 v2, v8f32 v3) { return {{v0, v1, v2, v3}}; }
@@ -67,6 +71,7 @@ static Aos4u32 aos4u32_mul(Aos4u32 a, Aos4u32 b) {return {{a.data[0] * b.data[0]
 static Aos4u32 aos4u32_and(Aos4u32 a, Aos4u32 b) {return {{a.data[0] & b.data[0], a.data[1] & b.data[1], a.data[2] & b.data[2], a.data[3] & b.data[3], }};}
 static Aos4u32 aos4u32_or(Aos4u32 a, Aos4u32 b) {return {{a.data[0] | b.data[0], a.data[1] | b.data[1], a.data[2] | b.data[2], a.data[3] | b.data[3], }};}
 static Aos4u32 aos4u32_xor(Aos4u32 a, Aos4u32 b) {return {{a.data[0] ^ b.data[0], a.data[1] ^ b.data[1], a.data[2] ^ b.data[2], a.data[3] ^ b.data[3], }};}
+static Aos4u32 aos4u32_neg(Aos4u32 a) { return {{-a.data[0], -a.data[1], -a.data[2], -a.data[3]}}; }
 static Aos4v8u32 aos4v8u32_set_scalar(Aos4u32 a) { return {{v8u32_set1(a.data[0]), v8u32_set1(a.data[1]), v8u32_set1(a.data[2]), v8u32_set1(a.data[3])}}; }
 static Aos4v8u32 aos4v8u32_set1(v8u32 a) { return {{a, a, a, a}}; }
 static Aos4v8u32 aos4v8u32_set(v8u32 v0, v8u32 v1, v8u32 v2, v8u32 v3) { return {{v0, v1, v2, v3}}; }
@@ -104,14 +109,9 @@ static f32 dot(Aos3f32 a, Aos3f32 b);
 void compute_frame(v8u32* framebuffer, Aos2i32 resolution, f32 time, f32 delta, i32 frame) {
 	const f32 ltime = (0.5f - (0.5f * f32_cos((time * 0.119999997f))));
 	const f32 zoom = f32_pow(0.89999998f, (50.0f * ltime));
-	Aos2f32 cen = {0};
-	cen.data[0] = 0.2655f;
-	cen.data[1] = 0.301f;
+	Aos2f32 cen = aos2f32_set(0.2655f, 0.301f);
 	cen = aos2f32_add(cen, aos2f32_set1(((zoom * 0.8f) * f32_cos((4.0f + (2.0f * ltime))))));
-	Aos2f32 c = {0};
-	c.data[0] = -0.745f;
-	c.data[1] = 0.186f;
-	c = aos2f32_sub(c, aos2f32_set1(((0.045f * zoom) * (1.0f - (ltime * 0.5f)))));
+	Aos2f32 c = aos2f32_sub(aos2f32_set(-0.745f, 0.186f), aos2f32_mul(aos2f32_mul(aos2f32_set1(0.045f), aos2f32_set1(zoom)), aos2f32_sub(aos2f32_set1(1.0f), aos2f32_set1((ltime * 0.5f)))));
 	Aos2f32 inv_res = aos2f32_div(aos2f32_set1(1.0f), aos2i32_to_aos2f32(resolution));
 	for (i32 y = 0; (y < resolution.data[1]); y = y + 1) {
 		for (i32 x = 0; (x < (resolution.data[0] / vector_width)); x = x + 1) {

@@ -256,7 +256,7 @@ check_compound_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
             checker_error(c, "Comopound literal is not valid for this type")
         }
 
-        check_expr(c, elem, type_hint)
+        check_expr(c, elem, hint)
     }
 }
 
@@ -401,24 +401,27 @@ check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
 
 }
 
-check_urnary_expr :: proc(c: ^Checker, ast: ^Ast) {
+check_urnary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
     assert(ast.type == nil)
 
     expr := ast.variant.(Ast_Unary_Expr)
+
     #partial switch expr.op.kind {
     case .Sub:
-        check_expr(c, expr.expr)
+        check_expr(c, expr.expr, type_hint = type_hint)
+        elem := type_elem_basic_type(expr.expr.type)
         ast.type = expr.expr.type
 
-        if !type_is_numeric(expr.expr.type) {
+        if !type_is_numeric(elem) {
             checker_error(c, "Unary 'Not' operator can be only applied to numeric values")
         }
 
     case .Not:
-        check_expr(c, expr.expr)
+        check_expr(c, expr.expr, type_hint = type_hint)
+        elem := type_elem_basic_type(expr.expr.type)
         ast.type = expr.expr.type
 
-        if !type_is_boolean(expr.expr.type) && !type_is_integer(expr.expr.type) {
+        if !type_is_boolean(elem) && !type_is_integer(elem) {
             checker_error(c, "Unary 'Not' operator can be only applied to boolean and integer values")
         }
 
@@ -587,13 +590,13 @@ check_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
         check_call_expr(c, ast)
 
     case Ast_Unary_Expr:
-        check_urnary_expr(c, ast)
+        check_urnary_expr(c, ast, type_hint = type_hint)
 
     case Ast_Cast_Expr:
         check_cast_expr(c, ast)
 
     case Ast_Binary_Expr:
-        check_binary_expr(c, ast)
+        check_binary_expr(c, ast, type_hint = type_hint)
 
     case Ast_Selector_Expr:
         check_selector_expr(c, ast)

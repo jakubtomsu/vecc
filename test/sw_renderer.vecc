@@ -15,16 +15,10 @@ procedure export compute_frame (
     immut ltime f32 = 0.5 - (0.5*cos(time*0.12))
     immut zoom f32 = pow(0.9, 50.0*ltime)
 
-    mut cen [2]f32
-    // NOTE: missing initializer lists and some array programming
-    cen.x = 0.2655
-    cen.y = 0.301
+    mut cen [2]f32 = {0.2655; 0.301}
     cen += (zoom*0.8) * cos(4.0+(2.0*ltime))
 
-    mut c [2]f32
-    c.x = -0.745
-    c.y = 0.186
-    c -= (0.045*zoom)*(1.0-(ltime*0.5))
+    mut c [2]f32 = {-0.745; 0.186} - ((0.045*zoom)*(1.0-(ltime*0.5)))
 
     mut inv_res [2]f32 = conv([2]f32, 1.0) / conv(f32, resolution)
 
