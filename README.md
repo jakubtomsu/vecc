@@ -24,3 +24,6 @@ https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/lectures/07_gpucore.p
     - exec mask vs active lane unordered array
 - first parameter overloading and self call expressions
 - combined vs underlying (native) vector types
+
+# Credits
+Many parts of this compiler are inspired by [Blaise](https://github.com/gingerBill/blaise) and the [Odin](https://github.com/odin-lang/Odin) compiler.
