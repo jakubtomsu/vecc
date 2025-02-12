@@ -54,6 +54,7 @@ main :: proc() {
         curr_scope = parser.file_scope,
         curr_file_scope = parser.file_scope,
         types = checker.types[:],
+        basic_types = checker.basic_types,
     }
     strings.builder_init_len_cap(&gen.source, 0, len(data))
 

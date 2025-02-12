@@ -12,8 +12,9 @@ procedure export compute_frame (
     immut frame                 i32
 ) {
     // non p dependent
-    immut ltime f32 = 0.5 - (0.5*cos(time*0.06))
+    immut ltime f32 = 0.5 - (0.5*cos(time*0.12))
     immut zoom f32 = pow(0.9, 50.0*ltime)
+
     mut cen [2]f32
     // NOTE: missing initializer lists and some array programming
     cen.x = 0.2655
@@ -23,20 +24,17 @@ procedure export compute_frame (
     mut c [2]f32
     c.x = -0.745
     c.y = 0.186
-    c.x -= (0.045*zoom)*(1.0-(ltime*0.5))
-    c.y -= (0.045*zoom)*(1.0-(ltime*0.5))
+    c -= (0.045*zoom)*(1.0-(ltime*0.5))
 
-    mut vector inv_res [2]f32
-    inv_res.x = rcp(conv(f32, resolution.x))
-    inv_res.y = rcp(conv(f32, resolution.y))
+    mut inv_res [2]f32 = conv([2]f32, 1.0) / conv(f32, resolution)
 
     for y i32; y < resolution.y; y += 1 {
         for x i32; x < (resolution.x / vector_width); x += 1 {
-            mut vector pixel_x i32 = (vector_index * 1) + (x * vector_width)
+            mut vector pixel_x i32 = vector_index + (x * vector_width)
 
             mut vector uv [2]f32
-            // uv.x = conv(f32, pixel_x) * inv_res.x
-            // uv.y = conv(f32, y) inv_res.y
+            uv.x = conv(f32, pixel_x) * inv_res.x
+            uv.y = conv(f32, y) * inv_res.y
 
             mut vector col [4]f32
             // col.r = uv.x
@@ -49,9 +47,9 @@ procedure export compute_frame (
             p.x = ((p.x * 2.0)-conv(f32, resolution.x)) * inv_res.y
             p.y = ((p.y * 2.0)-conv(f32, resolution.y)) * inv_res.y
 
-            mut vector z [2]f32
-            z.x = ((p.x-cen.x)*zoom) + cen.x
-            z.y = ((p.y-cen.y)*zoom) + cen.y
+            mut vector z [2]f32 = ((p-cen)*zoom) + cen
+            // z.x = ((p.x-cen.x)*zoom) + cen.x
+            // z.y = ((p.y-cen.y)*zoom) + cen.y
 
             // only derivative length version
             mut vector ld2 f32
@@ -77,6 +75,10 @@ procedure export compute_frame (
             col.g = pow(scol, 1.1)
             col.b = pow(scol, 1.4)
             col.a = 1
+
+            // col.r = fract(uv.x * 13)
+            // col.g = fract(uv.y * 13)
+            // col.b = conv(f32, (x + y) & 1)
 
             // Store
 

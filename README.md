@@ -16,6 +16,7 @@ https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/lectures/07_gpucore.p
 - array programming combined with SIMD and AoSoA
 - type vectorization
 - C codegen backend
+- optional semicolons
 
 
 # TODO

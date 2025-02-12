@@ -11,6 +11,7 @@ Gen :: struct {
     curr_scope:         ^Scope,
     curr_file_scope:    ^Scope,
     types:              []^Type,
+    basic_types:        [Type_Basic_Kind]^Type,
     curr_entity:        ^Entity,
     depth:              int,
     indent:             int,
@@ -198,67 +199,72 @@ gen_urnary_expr :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_cast_expr :: proc(g: ^Gen, ast: ^Ast) {
     expr := ast.variant.(Ast_Cast_Expr)
-    #partial switch expr.op.kind {
+    gen_cast_op(g, expr.type.type, expr.value, expr.op.kind)
+}
+
+// TODO: auto cast op
+gen_cast_op :: proc(g: ^Gen, type: ^Type, value: ^Ast, op: Token_Kind) {
+    data := gen_cast_op_data(g,
+        type = type,
+        value = value.type,
+        op = op,
+    )
+
+    gen_print(g, data.prefix)
+    if data.sep != "" {
+        gen_type(g, type)
+        gen_print(g, data.sep)
+    }
+    gen_expr(g, value)
+    gen_print(g, data.suffix)
+}
+
+gen_cast_op_data :: proc(
+    g:      ^Gen,
+    type:   ^Type,
+    value:  ^Type,
+    op:     Token_Kind,
+) -> (result: Gen_Op_Data) {
+    #partial switch op {
     case .Reinterpret:
-        gen_print(g, "(")
-        gen_print(g, "*(")
-        gen_type(g, expr.type.type)
-        gen_print(g, "*)&")
-        gen_expr(g, expr.value)
-        gen_print(g, ")")
+        result.prefix = "(*("
+        result.sep = "*)&"
+        result.suffix = ")"
 
     case .Conv:
-        #partial switch v in expr.value.type.variant {
+        #partial switch v in value.variant {
         case Type_Basic:
-            #partial switch tv in expr.type.type.variant {
+            #partial switch tv in type.variant {
             case Type_Basic:
-                gen_print(g, "(")
-                gen_type(g, expr.type.type)
-                gen_print(g, ")")
-                gen_expr(g, expr.value)
+                result.prefix = "("
+                result.sep = ")"
 
             case Type_Array:
-                switch tv.kind {
-                case .Vector:
-                    gen_printf(g, "{}_set1(", expr.type.type.cname_lower)
-                    gen_expr(g, expr.value)
-                    gen_print(g, ")")
-
-                case .Fixed_Array:
-                }
+                result.prefix = fmt.tprintf("{}_set1(", type.cname_lower)
+                result.suffix = ")"
             }
 
 
         case Type_Array:
+            dst := type.variant.(Type_Basic)
+            src := v.type.variant.(Type_Basic)
+
+            // HACK
+            prefix := ""
             switch v.kind {
-            case .Vector:
-                dst := expr.type.type.variant.(Type_Basic)
-                src := v.type.variant.(Type_Basic)
-
-                op_name := ""
-
-                #partial switch src.kind {
-                case .F32:
-                    #partial switch dst.kind {
-                    case .U8:
-                    }
-                }
-
-                // HACK
-                op_name = fmt.tprintf("{}_to_v{}{}", expr.value.type.cname, v.len, expr.type.type.cname)
-
-                assert(op_name != "")
-
-                gen_print(g, op_name)
-                gen_print(g, "(")
-                gen_expr(g, expr.value, top_level = true)
-                gen_print(g, ")")
-
-            case .Fixed_Array:
+            case .Vector: prefix = "v"
+            case .Fixed_Array: prefix = "aos"
             }
+
+            result.prefix = fmt.tprintf("{}_to_{}{}{}(",
+                value.cname_lower, prefix, v.len, type.cname_lower)
+            result.suffix = ")"
         }
     }
+
+    return result
 }
+
 
 gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     #partial switch v in ast.variant {
@@ -325,6 +331,9 @@ gen_possible_auto_conv_expr :: proc(g: ^Gen, left, right: ^Ast) {
 
 gen_binary_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     expr := ast.variant.(Ast_Binary_Expr)
+    if expr.op.kind == .Div {
+        fmt.println("div")
+    }
     gen_binary_op(g,
         left = expr.left,
         right = expr.right,
@@ -350,7 +359,7 @@ gen_binary_op :: proc(g: ^Gen, left: ^Ast, right: ^Ast, op: Token_Kind, top_leve
     gen_print(g, data.suffix)
 }
 
-Gen_Binary_Op_Data :: struct {
+Gen_Op_Data :: struct {
     prefix: string,
     sep:    string,
     suffix: string,
@@ -361,7 +370,7 @@ gen_binary_op_data :: proc(
     right: ^Type,
     op: Token_Kind,
     top_level: bool,
-) -> (result: Gen_Binary_Op_Data) {
+) -> (result: Gen_Op_Data) {
     #partial switch v in left.variant {
     case Type_Basic:
         if !top_level {
@@ -629,25 +638,111 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
         if v.kind != .Fixed_Array do return
         if v.len > MAX_ARITMETIC_ARRAY_WIDTH do return
 
-        gen_printf(g, "static {} {}_{}({} a)", type.cname, type.cname_lower, "set1", v.type.cname)
+        gen_printf(g, "static {} {}_set1({} a)", type.cname, type.cname_lower, v.type.cname)
         if defs {
-            gen_printf(g, " {{\n")
-            gen_printf(g, "\t{0} result;\n", type.cname)
+            gen_print(g, " { ")
+            gen_print(g, "return {{", )
             for i in 0..<v.len {
-                gen_printf(g, "\tresult.data[{0}] = a;\n", i)
+                gen_printf(g, "a")
+                if i + 1 < v.len {
+                    gen_print(g, ", ")
+                }
             }
-            gen_printf(g, "\treturn result;\n")
-            gen_printf(g, "}}\n")
+            gen_print(g, "}};")
+            gen_print(g, " }\n")
         } else {
             gen_print(g, ";\n")
+        }
+
+        gen_printf(g, "static {} {}_set(", type.cname, type.cname_lower)
+        for i in 0..<v.len {
+            gen_printf(g, "{} v{}", v.type.cname, i)
+            if i + 1 < v.len {
+                gen_print(g, ", ")
+            }
+        }
+        gen_printf(g, ")")
+        if defs {
+            gen_print(g, " { ")
+            gen_print(g, "return {{", )
+            for i in 0..<v.len {
+                gen_printf(g, "v%i", i)
+                if i + 1 < v.len {
+                    gen_print(g, ", ")
+                }
+            }
+            gen_print(g, "}};")
+            gen_print(g, " }\n")
+        } else {
+            gen_print(g, ";\n")
+        }
+
+        // THIS IS VERY SILLY
+        // Generating all possible conversion procs is not fun and it generates a shit ton of code.
+        // Alternative is remembering which ones get used during type checking? I don't like that either tho.
+        if basic, ok := v.type.variant.(Type_Basic); ok {
+            numeric := type_is_numeric(v.type)
+            for kind in Type_Basic_Kind {
+                if kind == basic.kind {
+                    continue
+                }
+
+                dst_elem := g.basic_types[kind]
+
+                if v.type.size != dst_elem.size {
+                    continue
+                }
+
+                if numeric != type_is_numeric(dst_elem) {
+                    continue
+                }
+
+                // HACK
+                dst_type := type_clone(type)
+                dst_arr := &dst_type.variant.(Type_Array)
+                dst_arr.type = dst_elem
+                dst_type = gen_find_type(g, dst_type)
+                if dst_type == nil {
+                    continue
+                }
+
+                gen_printf(g, "static Aos{2}{3} {1}_to_aos{2}{3}({0} a)",
+                    type.cname, type.cname_lower, v.len, dst_elem.cname_lower)
+                if defs {
+                    gen_print(g, " { ")
+                    gen_print(g, "return {{", )
+                    for i in 0..<v.len {
+                        data := gen_cast_op_data(g,
+                            type = dst_elem,
+                            value = v.type,
+                            op = .Conv,
+                        )
+                        gen_print(g, data.prefix)
+                        if data.sep != "" {
+                            gen_type(g, dst_elem)
+                            gen_print(g, data.sep)
+                        }
+                        gen_printf(g, "a.data[%i]", i)
+                        gen_print(g, data.suffix)
+
+                        if i + 1 < v.len {
+                            gen_print(g, ", ")
+                        }
+                    }
+                    gen_print(g, "}};")
+                    gen_print(g, " }\n")
+                } else {
+                    gen_printf(g, ";\n")
+                }
+            }
         }
 
         for op in _gen_named_binary_ops {
             if !_gen_type_matches_op_proc(type_elem_basic_type(v.type), op) do continue
             gen_printf(g, "static {0} {1}_{2}({0} a, {0} b)", type.cname, type.cname_lower, op.name)
             if defs {
-                gen_printf(g, " {{\n")
-                gen_printf(g, "\t{0} result;\n", type.cname)
+                gen_printf(g, " {{")
+                gen_printf(g, "return {{{{")
 
                 data := gen_binary_op_data(
                     left = v.type,
@@ -657,16 +752,16 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
                 )
 
                 for i in 0..<v.len {
-                    gen_printf(g, "\tresult.data[{0}] = ", i)
+                    // gen_printf(g, "\t\t")
                     gen_print(g, data.prefix)
                     gen_printf(g, "a.data[{0}]", i)
                     gen_print(g, data.sep)
                     gen_printf(g, "b.data[{0}]", i)
                     gen_print(g, data.suffix)
-                    gen_printf(g, ";\n")
+                    gen_printf(g, ", ")
                 }
 
-                gen_printf(g, "\treturn result;\n")
+                gen_printf(g, "}}}};")
                 gen_printf(g, "}}\n")
             } else {
                 gen_printf(g, ";\n")
@@ -715,7 +810,7 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
 
         case .Fixed_Array:
             name := gen_type_generate_cname(g, v.type)
-            return fmt.tprintf("Aos{}_{}", v.len, name)
+            return fmt.tprintf("Aos{}{}", v.len, name)
         }
 
     case Type_Pointer:
@@ -915,6 +1010,35 @@ gen_type_entity_cnames_recursive :: proc(g: ^Gen, scope: ^Scope) {
     }
 }
 
+// HACK
+// releated to find_or_create_type in checker
+gen_find_type :: proc(g: ^Gen, type: ^Type) -> ^Type {
+    switch &v in type.variant {
+    case Type_Basic:
+        return g.basic_types[v.kind]
+
+    case Type_Array:
+        v.type = gen_find_type(g, v.type)
+
+    case Type_Pointer:
+        v.type = gen_find_type(g, v.type)
+
+    case Type_Struct:
+        for &field in v.fields {
+            field.type = gen_find_type(g, field.type)
+        }
+    }
+
+    // Linear search, bit dumb. Could hash some type info to split into buckets.
+    for t in g.types {
+        if types_equal(t, type) {
+            return t
+        }
+    }
+
+    return nil
+}
+
 gen_program :: proc(g: ^Gen) {
     gen_print(g, "#ifndef VECC_DEFINED\n")
     gen_print(g, "#define VECC_DEFINED 1\n")
@@ -963,7 +1087,9 @@ gen_program :: proc(g: ^Gen) {
 
     for type in g.types {
         gen_type_decl(g, type)
-        gen_type_procs(g, type, defs = false)
+    }
+    for type in g.types {
+        gen_type_procs(g, type, defs = true)
     }
 
     gen_print(g, "\n// VECC exported constants\n\n")
@@ -997,9 +1123,9 @@ gen_program :: proc(g: ^Gen) {
 
     gen_print(g, "\n// VECC private function declarations\n\n")
 
-    for type in g.types {
-        gen_type_procs(g, type, defs = true)
-    }
+    // for type in g.types {
+    //     gen_type_procs(g, type, defs = true)
+    // }
 
     for sorted in sorted_entities {
         #partial switch v in sorted.entity.variant {
