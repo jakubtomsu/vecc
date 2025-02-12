@@ -289,3 +289,36 @@ type_vectorize :: proc(type: ^Type) -> ^Type {
 
     return result
 }
+
+type_scalarize :: proc(type: ^Type) -> ^Type {
+    result := new_clone(type^)
+
+    switch &v in result.variant {
+    case Type_Basic:
+        vec := new(Type)
+        vec.variant = Type_Array{
+            kind = .Vector,
+            len  = VECTOR_WIDTH,
+            type = result,
+        }
+        result = vec
+
+    case Type_Array:
+        if v.kind == .Vector {
+            result = type_clone(v.type)
+        } else {
+            v.type = type_scalarize(v.type)
+        }
+
+    case Type_Pointer:
+        v.type = type_scalarize(v.type)
+
+    case Type_Struct:
+        v.fields = slice.clone(v.fields)
+        for &field in v.fields {
+            field.type = type_scalarize(field.type)
+        }
+    }
+
+    return result
+}
