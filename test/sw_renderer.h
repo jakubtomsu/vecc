@@ -129,9 +129,7 @@ void compute_frame(v8u32* framebuffer, Aos2i32 resolution, f32 time, f32 delta, 
 			v8b32 break_mask = {0};
 			for (i32 i = 0; (i < 256); i = i + 1) {
 				ld2 = v8f32_blend(v8f32_mul(ld2, v8f32_mul(lz2, v8f32_set1(4.0f))), ld2, break_mask);
-				const Aos2v8f32 old_z = z;
-				z.data[0] = v8f32_add(v8f32_sub(v8f32_mul(old_z.data[0], old_z.data[0]), v8f32_mul(old_z.data[1], old_z.data[1])), v8f32_set1(c.data[0]));
-				z.data[1] = v8f32_add(v8f32_mul(v8f32_mul(old_z.data[0], old_z.data[1]), v8f32_set1(2.0f)), v8f32_set1(c.data[1]));
+				z = aos2v8f32_add(aos2v8f32_set(v8f32_sub(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1])), v8f32_mul(v8f32_mul(z.data[0], z.data[1]), v8f32_set1(2.0f))), aos2v8f32_set_scalar(c));
 				lz2 = v8f32_blend(v8f32_add(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1])), lz2, break_mask);
 				break_mask = v8b32_or(break_mask, v8f32_gt(lz2, v8f32_set1(200.0f)));
 				if (v8b32_reduce_all(break_mask)) {

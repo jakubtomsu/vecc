@@ -45,9 +45,10 @@ procedure export compute_frame (
             mut vector break_mask b32 // hack
             for i i32; i < 256; i += 1 {
                 ld2 = blend(ld2 * (lz2*4.0), ld2, break_mask)
-                immut vector old_z [2]f32 = z
-                z.x = ((old_z.x*old_z.x) - (old_z.y*old_z.y)) + c.x
-                z.y = ((old_z.x*old_z.y)*2) + c.y
+                // immut vector old_z [2]f32 = z
+                // z.x = ((old_z.x*old_z.x) - (old_z.y*old_z.y)) + c.x
+                // z.y = ((old_z.x*old_z.y)*2) + c.y
+                z = {(z.x*z.x) - (z.y*z.y); (z.x*z.y)*2} + c
                 lz2 = blend((z.x*z.x) + (z.y*z.y), lz2, break_mask)
                 break_mask |= lz2 > 200.0
 
