@@ -9,6 +9,7 @@ import "core:reflect"
 
 g_entity_order_counter: int
 g_ast_order_counter: int
+g_scope_order_counter: int
 
 Parser :: struct {
     filename:               string,
@@ -539,6 +540,8 @@ parse_begin_scope :: proc(p: ^Parser) {
     scope := new(Scope)
     scope.parent = p.curr_scope
     scope.depth = p.curr_scope.depth + 1
+    scope.local_id = g_scope_order_counter
+    g_scope_order_counter += 1
 
     append(&p.curr_scope.children, scope)
 
@@ -780,6 +783,8 @@ parse_proc_decl :: proc(p: ^Parser) -> ^Ast {
     ast := create_ast()
     proc_decl: Ast_Proc_Decl
 
+    g_scope_order_counter = 0
+
     expect(p, .Proc)
 
     proc_decl.export = allow(p, .Export)
@@ -905,6 +910,7 @@ create_ast :: proc() -> ^Ast {
 
 parse_file :: proc(p: ^Parser) {
     p.file_scope = new(Scope)
+    p.file_scope.flags += {.Global}
 
     p.curr_scope = p.file_scope
     defer assert(p.curr_scope == p.file_scope)
