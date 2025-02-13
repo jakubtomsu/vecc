@@ -1,4 +1,7 @@
 // Hand-written target for VecC C code compilation backend.
+//
+// TODO:
+// https://github.com/reyoung/avx_mathfun/blob/master/avx_mathfun.h
 #ifndef VECC_BUILTIN_DEFINED
 #define VECC_BUILTIN_DEFINED 1
 
@@ -49,10 +52,54 @@ vecc_op F32 f32_cos(F32 a) { return cosf(a); }
 vecc_op F64 f64_cos(F64 a) { return cos(a); }
 vecc_op F32 f32_rcp(F32 a) { return 1.0 / a; }
 vecc_op F64 f64_rcp(F64 a) { return 1.0 / a; }
-
 vecc_op F32 f32_pow(F32 a, F32 b) { return powf(a, b); }
 vecc_op F64 f64_pow(F64 a, F64 b) { return pow(a, b); }
 
+
+vecc_op I8  i8_min (I8  a, I8  b) { return a < b ? a : b; }
+vecc_op I16 i16_min(I16 a, I16 b) { return a < b ? a : b; }
+vecc_op I32 i32_min(I32 a, I32 b) { return a < b ? a : b; }
+vecc_op I64 i64_min(I64 a, I64 b) { return a < b ? a : b; }
+vecc_op U8  u8_min (U8  a, U8  b) { return a < b ? a : b; }
+vecc_op U16 u16_min(U16 a, U16 b) { return a < b ? a : b; }
+vecc_op U32 u32_min(U32 a, U32 b) { return a < b ? a : b; }
+vecc_op U64 u64_min(U64 a, U64 b) { return a < b ? a : b; }
+vecc_op B8  b8_min (B8  a, B8  b) { return a < b ? a : b; }
+vecc_op B16 b16_min(B16 a, B16 b) { return a < b ? a : b; }
+vecc_op B32 b32_min(B32 a, B32 b) { return a < b ? a : b; }
+vecc_op B64 b64_min(B64 a, B64 b) { return a < b ? a : b; }
+vecc_op F32 f32_min(F32 a, F32 b) { return a < b ? a : b; }
+vecc_op F64 f64_min(F64 a, F64 b) { return a < b ? a : b; }
+
+vecc_op I8  i8_max (I8  a, I8  b) { return a > b ? a : b; }
+vecc_op I16 i16_max(I16 a, I16 b) { return a > b ? a : b; }
+vecc_op I32 i32_max(I32 a, I32 b) { return a > b ? a : b; }
+vecc_op I64 i64_max(I64 a, I64 b) { return a > b ? a : b; }
+vecc_op U8  u8_max (U8  a, U8  b) { return a > b ? a : b; }
+vecc_op U16 u16_max(U16 a, U16 b) { return a > b ? a : b; }
+vecc_op U32 u32_max(U32 a, U32 b) { return a > b ? a : b; }
+vecc_op U64 u64_max(U64 a, U64 b) { return a > b ? a : b; }
+vecc_op B8  b8_max (B8  a, B8  b) { return a > b ? a : b; }
+vecc_op B16 b16_max(B16 a, B16 b) { return a > b ? a : b; }
+vecc_op B32 b32_max(B32 a, B32 b) { return a > b ? a : b; }
+vecc_op B64 b64_max(B64 a, B64 b) { return a > b ? a : b; }
+vecc_op F32 f32_max(F32 a, F32 b) { return a > b ? a : b; }
+vecc_op F64 f64_max(F64 a, F64 b) { return a > b ? a : b; }
+
+vecc_op I8  i8_clamp (I8  a, I8  lo, I8  hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op I16 i16_clamp(I16 a, I16 lo, I16 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op I32 i32_clamp(I32 a, I32 lo, I32 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op I64 i64_clamp(I64 a, I64 lo, I64 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op U8  u8_clamp (U8  a, U8  lo, U8  hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op U16 u16_clamp(U16 a, U16 lo, U16 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op U32 u32_clamp(U32 a, U32 lo, U32 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op U64 u64_clamp(U64 a, U64 lo, U64 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op B8  b8_clamp (B8  a, B8  lo, B8  hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op B16 b16_clamp(B16 a, B16 lo, B16 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op B32 b32_clamp(B32 a, B32 lo, B32 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op B64 b64_clamp(B64 a, B64 lo, B64 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op F32 f32_clamp(F32 a, F32 lo, F32 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
+vecc_op F64 f64_clamp(F64 a, F64 lo, F64 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
 
 #define VECC_AVX2 1
 
@@ -280,6 +327,8 @@ vecc_op V8B32 v8f32_ge(V8F32 a, V8F32 b) { return {{_mm256_castps_si256(_mm256_c
 vecc_op V8B32 v8f32_lt(V8F32 a, V8F32 b) { return {{_mm256_castps_si256(_mm256_cmp_ps(a.data[0], b.data[0], _CMP_LT_OQ))}}; }
 vecc_op V8B32 v8f32_le(V8F32 a, V8F32 b) { return {{_mm256_castps_si256(_mm256_cmp_ps(a.data[0], b.data[0], _CMP_LE_OQ))}}; }
 
+vecc_op V8I32 v8i32_abs(V8I32 a) { return {{_mm256_abs_epi32(a.data[0])}}; }
+
 vecc_op V8B32 v8i32_eq(V8I32 a, V8I32 b) { return {{_mm256_cmpeq_epi32(a.data[0], b.data[0])}}; }
 vecc_op V8B32 v8i32_neq(V8I32 a, V8I32 b){ return {{_mm256_xor_si256(_mm256_cmpeq_epi32(a.data[0], b.data[0]), _mm256_set1_epi32(0xffffffff))}}; }
 vecc_op V8B32 v8i32_gt(V8I32 a, V8I32 b) { return {{_mm256_cmpgt_epi32(a.data[0], b.data[0])}}; }
@@ -344,6 +393,15 @@ vecc_op V8F32 v8f32_log(V8F32 a) {
     _mm256_store_ps(data, a.data[0]);
     for (int i = 0; i < VECC_LEN(data); i++) {
         data[i] = logf(data[i]);
+    }
+    return {{_mm256_load_ps(data)}};
+}
+
+vecc_op V8F32 v8f32_exp(V8F32 a) {
+    VECC_ALIGNED(32) F32 data[8];
+    _mm256_store_ps(data, a.data[0]);
+    for (int i = 0; i < VECC_LEN(data); i++) {
+        data[i] = expf(data[i]);
     }
     return {{_mm256_load_ps(data)}};
 }
