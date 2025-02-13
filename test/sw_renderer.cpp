@@ -8,7 +8,7 @@
 #include "sw_renderer.h"
 
 LARGE_INTEGER g_frequency = {0};
-v8u32* g_framebuffer;
+V8U32* g_framebuffer;
 uint64_t g_start_clock;
 uint64_t g_prev_clock;
 uint32_t g_frame;

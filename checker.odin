@@ -1150,20 +1150,20 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
     #partial switch v in ast.variant {
     case Ast_Ident:
         switch v.token.text {
-        case "b8", "bool"   : result = c.basic_types[.B8 ]
-        case "b16"          : result = c.basic_types[.B16]
-        case "b32"          : result = c.basic_types[.B32]
-        case "b64"          : result = c.basic_types[.B64]
-        case "i8"           : result = c.basic_types[.I8 ]
-        case "i16"          : result = c.basic_types[.I16]
-        case "i32"          : result = c.basic_types[.I32]
-        case "i64"          : result = c.basic_types[.I64]
-        case "u8"           : result = c.basic_types[.U8 ]
-        case "u16"          : result = c.basic_types[.U16]
-        case "u32"          : result = c.basic_types[.U32]
-        case "u64"          : result = c.basic_types[.U64]
-        case "f32", "float" : result = c.basic_types[.F32]
-        case "f64"          : result = c.basic_types[.F64]
+        case "B8", "Bool"   : result = c.basic_types[.B8 ]
+        case "B16"          : result = c.basic_types[.B16]
+        case "B32"          : result = c.basic_types[.B32]
+        case "B64"          : result = c.basic_types[.B64]
+        case "I8"           : result = c.basic_types[.I8 ]
+        case "I16"          : result = c.basic_types[.I16]
+        case "I32"          : result = c.basic_types[.I32]
+        case "I64"          : result = c.basic_types[.I64]
+        case "U8"           : result = c.basic_types[.U8 ]
+        case "U16"          : result = c.basic_types[.U16]
+        case "U32"          : result = c.basic_types[.U32]
+        case "U64"          : result = c.basic_types[.U64]
+        case "F32", "Float" : result = c.basic_types[.F32]
+        case "F64"          : result = c.basic_types[.F64]
 
         case:
             if ent, _, ok := find_entity(c.curr_scope, v.token.text); ok {

@@ -241,7 +241,18 @@ gen_compound_literal :: proc(g: ^Gen, ast: ^Ast) {
     gen_printf(g, "{}_set(", ast.type.cname_lower)
 
     for elem, i in lit.elems {
-        gen_expr(g, elem, top_level = true)
+        type: ^Type
+        #partial switch v in ast.type.variant {
+        case Type_Array:
+            type = v.type
+        case Type_Struct:
+            type = v.fields[i].type
+        case:
+            assert(false)
+        }
+
+        gen_possible_auto_conv_expr(g, type, elem, top_level = true)
+
         if i + 1 < len(lit.elems) {
             gen_print(g, ", ")
         }
@@ -936,8 +947,8 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
                     continue
                 }
 
-                gen_printf(g, "static Aos{2}{3} {1}_to_aos{2}{3}({0} a)",
-                    type.cname, type.cname_lower, v.len, dst_elem.cname_lower)
+                gen_printf(g, "static Aos{2}{3} {1}_to_aos{2}{4}({0} a)",
+                    type.cname, type.cname_lower, v.len, dst_elem.cname, dst_elem.cname_lower)
                 if defs {
                     gen_print(g, " { ")
                     gen_print(g, "return {{", )
@@ -1026,26 +1037,26 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
     #partial switch v in type.variant {
     case Type_Basic:
         switch v.kind {
-        case .B8:   return "b8"
-        case .B16:  return "b16"
-        case .B32:  return "b32"
-        case .B64:  return "b64"
-        case .I8:   return "i8"
-        case .I16:  return "i16"
-        case .I32:  return "i32"
-        case .I64:  return "i64"
-        case .U8:   return "u8"
-        case .U16:  return "u16"
-        case .U32:  return "u32"
-        case .U64:  return "u64"
-        case .F32:  return "f32"
-        case .F64:  return "f64"
+        case .B8:   return "B8"
+        case .B16:  return "B16"
+        case .B32:  return "B32"
+        case .B64:  return "B64"
+        case .I8:   return "I8"
+        case .I16:  return "I16"
+        case .I32:  return "I32"
+        case .I64:  return "I64"
+        case .U8:   return "U8"
+        case .U16:  return "U16"
+        case .U32:  return "U32"
+        case .U64:  return "U64"
+        case .F32:  return "F32"
+        case .F64:  return "F64"
         }
 
     case Type_Array:
         switch v.kind {
         case .Vector:
-            return fmt.tprintf("v{}{}", v.len, gen_type_generate_cname(g, v.type))
+            return fmt.tprintf("V{}{}", v.len, gen_type_generate_cname(g, v.type))
 
         case .Fixed_Array:
             name := gen_type_generate_cname(g, v.type)
@@ -1188,20 +1199,21 @@ gen_if_stmt :: proc(g: ^Gen, ast: ^Ast) {
             }
             if parent_masked_id == -1 {
                 gen_printf(g,
-                    "v{1}{2} vecc_mask{0} = ",
+                    "V{1}{2} vecc_mask{0} = ",
                     if_block.scope.local_id,
                     v.len,
-                    v.type.cname_lower,
+                    v.type.cname,
                 )
                 gen_expr(g, stmt.cond, top_level = true)
                 gen_print(g, "; ")
             } else {
                 gen_printf(g,
-                    "v{1}{2} vecc_mask{0} = v{1}{2}_and(vecc_mask{3}, ",
+                    "V{1}{2} vecc_mask{0} = v{1}{4}_and(vecc_mask{3}, ",
                     if_block.scope.local_id,
                     v.len,
-                    v.type.cname_lower,
+                    v.type.cname,
                     parent_masked_id,
+                    v.type.cname_lower,
                 )
                 gen_expr(g, stmt.cond, top_level = true)
                 gen_print(g, "); ")
@@ -1228,20 +1240,22 @@ gen_if_stmt :: proc(g: ^Gen, ast: ^Ast) {
             }
             if parent_masked_id == -1 {
                 gen_printf(g,
-                    "v{1}{2} vecc_mask{0} = v{1}{2}_not(vecc_mask{3}); ",
+                    "V{1}{2} vecc_mask{0} = v{1}{4}_not(vecc_mask{3}); ",
                     block.scope.local_id,
                     v.len,
-                    v.type.cname_lower,
+                    v.type.cname,
                     if_block.scope.local_id,
+                    v.type.cname_lower,
                 )
             } else {
                 gen_printf(g,
-                    "v{1}{2} vecc_mask{0} = v{1}{2}_andnot(vecc_mask{3}, vecc_mask{4}); ",
+                    "v{1}{2} vecc_mask{0} = v{1}{5}_andnot(vecc_mask{3}, vecc_mask{4}); ",
                     block.scope.local_id,
                     v.len,
                     v.type.cname_lower,
                     parent_masked_id,
                     if_block.scope.local_id,
+                    v.type.cname,
                 )
             }
 

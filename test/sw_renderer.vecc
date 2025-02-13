@@ -1,67 +1,65 @@
 // Julia set fractal by iq:
 // https://www.shadertoy.com/view/Mss3R8
 
-const export RESOLUTION_X i32 = 320 * 4
-const export RESOLUTION_Y i32 = 184 * 4
+const export RESOLUTION_X I32 = 320 * 4
+const export RESOLUTION_Y I32 = 184 * 4
 
 procedure export compute_frame (
-    immut vector framebuffer    [^]u32
-    immut resolution            [2]i32
-    immut time                  f32
-    immut delta                 f32
-    immut frame                 i32
+    immut vector framebuffer    [^]U32
+    immut resolution            [2]I32
+    immut time                  F32
+    immut delta                 F32
+    immut frame                 I32
 ) {
     // non p dependent
-    immut ltime f32 = 0.5 - (0.5*cos(time*0.12))
-    immut zoom f32 = pow(0.9, 50.0*ltime)
+    immut ltime F32 = 0.5 - (0.5*cos(time*0.12))
+    immut zoom F32 = pow(0.9, 50.0*ltime)
 
-    mut cen [2]f32 = {0.2655; 0.301}
+    mut cen [2]F32 = {0.2655; 0.301}
     cen += (zoom*0.8) * cos(4.0+(2.0*ltime))
 
-    mut c [2]f32 = {-0.745; 0.186} - ((0.045*zoom)*(1.0-(ltime*0.5)))
+    mut c [2]F32 = {-0.745; 0.186} - ((0.045*zoom)*(1.0-(ltime*0.5)))
 
-    mut inv_res [2]f32 = conv([2]f32, 1.0) / conv(f32, resolution)
+    mut inv_res [2]F32 = conv([2]F32, 1.0) / conv(F32, resolution)
 
-    for y i32; y < resolution.y; y += 1 {
-        for x i32; x < (resolution.x / vector_width); x += 1 {
-            mut vector pixel_x i32 = vector_index + (x * vector_width)
+    for y I32; y < resolution.y; y += 1 {
+        for x I32; x < (resolution.x / vector_width); x += 1 {
+            mut vector pixel_x I32 = vector_index + (x * vector_width)
 
-            mut vector uv [2]f32
-            uv.x = conv(f32, pixel_x) * inv_res.x
-            uv.y = conv(f32, y) * inv_res.y
+            mut vector uv [2]F32
+            uv.x = conv(F32, pixel_x) * inv_res.x
+            uv.y = conv(F32, y) * inv_res.y
 
-            mut vector p [2]f32
-            p.x = conv(f32, pixel_x)
-            p.y = conv(f32, y)
-            p = ((p * 2.0)-conv(f32, resolution)) * inv_res.y
+            mut vector p [2]F32 = {conv(F32, pixel_x); conv(F32, y)}
+            p = ((p * 2.0)-conv(F32, resolution)) * inv_res.y
 
-            mut vector z [2]f32 = ((p-cen)*zoom) + cen
+            mut vector z [2]F32 = ((p-cen)*zoom) + cen
 
-            // immut fooo [2]f32 = [2]f32{1; 2}
+            // immut fooo [2]F32 = [2]F32{1; 2}
 
             // only derivative length version
-            mut vector ld2 f32 = 1.0
-            mut vector lz2 f32 = (z.x*z.x) + (z.y*z.y)
-            mut vector break_mask b32 // hack
-            for i i32; i < 256; i += 1 {
+            mut vector ld2 F32 = 1.0
+            mut vector lz2 F32 = (z.x*z.x) + (z.y*z.y)
+            mut vector break_mask B32 // hack
+            for i I32; i < 256; i += 1 {
                 z = {(z.x*z.x) - (z.y*z.y); (z.x*z.y)*2} + c
                 if !break_mask {
                     ld2 = ld2 * (lz2*4.0)
                     lz2 = (z.x*z.x) + (z.y*z.y)
-                    if lz2 < 200 {
-                        break_mask = true
-                    }
+                }
+                if lz2 > 200 {
+                    break_mask = true
                 }
 
                 if reduce_all(break_mask) {
                     break
                 }
             }
-            mut vector d f32 = sqrt(lz2/ld2) * log(lz2)
+            mut vector d F32 = sqrt(lz2/ld2) * log(lz2)
 
-            immut vector scol f32 = sqrt(clamp((conv(vector(8, f32), 150.0)/zoom)*d, 0.0, 1.0))
+            immut vector scol F32 = sqrt(clamp((conv(vector(8, F32), 150.0)/zoom)*d, 0.0, 1.0))
 
-            mut vector col [4]f32
+            mut vector col [4]F32
             col.r = pow(scol, 0.9)
             col.g = pow(scol, 1.1)
             col.b = pow(scol, 1.4)
@@ -69,36 +67,36 @@ procedure export compute_frame (
 
             // Store
 
-            mut vector col_int [4]u32
-            col_int.r = conv(u32, clamp(col.r, 0, 1) * 255.0)
-            col_int.g = conv(u32, clamp(col.g, 0, 1) * 255.0)
-            col_int.b = conv(u32, clamp(col.b, 0, 1) * 255.0)
-            col_int.a = conv(u32, clamp(col.a, 0, 1) * 255.0)
+            mut vector col_int [4]U32
+            col_int.r = conv(U32, clamp(col.r, 0, 1) * 255.0)
+            col_int.g = conv(U32, clamp(col.g, 0, 1) * 255.0)
+            col_int.b = conv(U32, clamp(col.b, 0, 1) * 255.0)
+            col_int.a = conv(U32, clamp(col.a, 0, 1) * 255.0)
 
-            mut vector col_rgba u32
+            mut vector col_rgba U32
             col_rgba = col_int.b
             col_rgba |= col_int.g << 8
             col_rgba |= col_int.r << 16
             col_rgba |= col_int.a << 24
 
-            immut index i32 = x + (y * (resolution.x / vector_width))
+            immut index I32 = x + (y * (resolution.x / vector_width))
             framebuffer[index] = col_rgba
         }
     }
 }
 
-procedure normalize(immut x [3]f32) [3]f32 {
+procedure normalize(immut x [3]F32) [3]F32 {
     return x * rsqrt(length2(x))
 }
 
-procedure length2(immut x [3]f32) f32 {
+procedure length2(immut x [3]F32) F32 {
     return (x.x*x.x) + ((x.y*x.y) + (x.z*x.z))
 }
 
-procedure length(immut x [3]f32) f32 {
+procedure length(immut x [3]F32) F32 {
     return sqrt((x.x*x.x) + ((x.y*x.y) + (x.z*x.z)))
 }
 
-procedure dot(immut a [3]f32; immut b [3]f32) f32 {
+procedure dot(immut a [3]F32; immut b [3]F32) F32 {
     return (a.x*b.x) + ((a.y*b.y) + (a.z*b.z))
 }
