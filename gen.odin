@@ -23,13 +23,13 @@ gen_indent :: proc(g: ^Gen) {
     fmt.sbprint(&g.source, ind[:clamp(g.indent, 0, len(ind) - 1)])
 }
 
-gen_begin_scope :: proc(g: ^Gen, scope: ^Scope, visible := true) {
+gen_begin_scope :: proc(g: ^Gen, scope: ^Scope, visible := true, msg := "") {
     assert(scope.parent == g.curr_scope)
     g.depth += 1
     g.curr_scope = scope
     if visible {
         g.indent += 1
-        gen_print(g, "{\n")
+        gen_printf(g, "{{{}\n", msg)
     }
 }
 
@@ -51,13 +51,84 @@ gen_printf :: proc(g: ^Gen, format: string, args: ..any) {
     fmt.sbprintf(&g.source, fmt = format, args = args)
 }
 
+/*
+for i in 0..<100 {
+    if a {
+        x = 1
+        if b {
+            x = 2
+            if c {
+                break
+                x = 10000 // unreachable, compile time error
+            }
+        } else {
+            x = 3
+            continue
+        }
+    }
+}
+
+mask0 := 0xffffffff
+
+for i in 0..<100 {
+    mask1 := mask0 & a
+    {
+        x = blend(x, 1, mask1)
+        mask2 := mask1 & b
+        {
+            x = blend(x, 2, mask2)
+            {
+                mask3 := mask2 & c
+                // break:
+                // remove mask3 bits from all affected parent masks,
+                // including the persistent loop mask
+                mask2 &= ~mask3
+                mask1 &= ~mask3
+                mask0 &= ~mask3
+            }
+        }
+        // mask4 := mask1 & ~b
+        mask4 := mask1 & ~mask2
+        {
+            x = blend(x, 3, mask4)
+            // continue:
+            // remove mask4 bits from all affected parent masks,
+            // except the persistent loop mask
+            mask1 &= ~mask4
+        }
+    }
+}
+
+*/
+
 gen_value :: proc(g: ^Gen, value: Value, type: ^Type) {
     switch v in value {
     case bool:
-        gen_printf(g, "{}_{}", type.cname_lower, v)
+        #partial switch tv in type.variant {
+        case Type_Basic:
+            gen_printf(g, "{}_{}", type.cname_lower, v)
+
+        case Type_Array:
+            elem := type_elem_basic_type(type)
+            data := gen_cast_op_data(g,
+                type = type,
+                value = elem,
+                op = .Conv,
+            )
+
+            gen_print(g, data.prefix)
+            if data.sep != "" {
+                gen_type(g, type)
+                gen_print(g, data.sep)
+            }
+            gen_printf(g, "{}_{}", elem.cname_lower, v)
+            gen_print(g, data.suffix)
+
+        case:
+            assert(false)
+        }
 
     case i128:
-
         #partial switch tv in type.variant {
         case Type_Basic:
             gen_print(g, v)
@@ -372,6 +443,29 @@ gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
     case:
         assert(false)
     }
+}
+
+gen_find_root_assignable_expr_entity :: proc(scope: ^Scope, ast: ^Ast) -> (^Entity, ^Scope, bool) {
+    #partial switch v in ast.variant {
+    case Ast_Ident:
+        return find_entity(scope, v.token.text)
+
+    // case Ast_Call_Expr:
+
+    case Ast_Selector_Expr:
+        return gen_find_root_assignable_expr_entity(scope, v.left)
+
+    case Ast_Index_Expr:
+        return gen_find_root_assignable_expr_entity(scope, v.left)
+
+    case Ast_Address_Expr:
+        return gen_find_root_assignable_expr_entity(scope, v.expr)
+
+    case Ast_Deref_Expr:
+        return gen_find_root_assignable_expr_entity(scope, v.expr)
+    }
+
+    return nil, nil, false
 }
 
 // Left is assumed to be already checked
@@ -1038,11 +1132,12 @@ gen_stmt :: proc(g: ^Gen, ast: ^Ast) {
     }
 }
 
-gen_block_stmt :: proc(g: ^Gen, ast: ^Ast) {
+gen_block_stmt :: proc(g: ^Gen, ast: ^Ast, scope := true) {
     stmt := ast.variant.(Ast_Block_Stmt)
 
-    gen_begin_scope(g, stmt.scope)
-    defer gen_end_scope(g)
+    if scope {
+        gen_begin_scope(g, stmt.scope)
+    }
 
     for s in stmt.statements {
         #partial switch _ in s.variant {
@@ -1053,17 +1148,70 @@ gen_block_stmt :: proc(g: ^Gen, ast: ^Ast) {
             gen_print(g, ";\n")
         }
     }
+
+    if scope {
+        gen_end_scope(g)
+    }
 }
 
 gen_if_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_If_Stmt)
-    gen_print(g, "if (")
-    gen_expr(g, stmt.cond, top_level = true)
-    gen_print(g, ") ")
-    gen_block_stmt(g, stmt.if_body)
-    if stmt.else_body != nil {
-        gen_print(g, " else ")
-        gen_block_stmt(g, stmt.else_body)
+
+    #partial switch v in stmt.cond.type.variant {
+    case Type_Basic:
+        gen_print(g, "if (")
+        gen_expr(g, stmt.cond, top_level = true)
+        gen_print(g, ") ")
+        gen_block_stmt(g, stmt.if_body)
+        if stmt.else_body != nil {
+            gen_print(g, " else ")
+            gen_block_stmt(g, stmt.else_body)
+        }
+
+    case Type_Array:
+        assert(v.kind == .Vector)
+
+        block := stmt.if_body.variant.(Ast_Block_Stmt)
+
+        gen_begin_scope(g, block.scope, msg = " // vector if")
+
+        assert(.Masked in block.scope.flags)
+        assert(block.scope.vector_width > 1)
+
+        gen_indent(g)
+        parent_masked_id := -1
+        for s := block.scope.parent; s != nil; s = s.parent {
+            if .Masked in s.flags {
+                parent_masked_id = s.local_id
+            }
+        }
+        if parent_masked_id == -1 {
+            gen_printf(g,
+                "v{1}{2} vecc_mask{0} = ",
+                block.scope.local_id,
+                v.len,
+                v.type.cname_lower,
+            )
+            gen_expr(g, stmt.cond, top_level = true)
+            gen_print(g, ";\n")
+        } else {
+            gen_printf(g,
+                "v{1}{2} vecc_mask{0} = v{1}{2}_and(vecc_mask{3}, ",
+                block.scope.local_id,
+                v.len,
+                v.type.cname_lower,
+                parent_masked_id,
+            )
+            gen_expr(g, stmt.cond, top_level = true)
+            gen_print(g, ");\n")
+        }
+
+        gen_block_stmt(g, stmt.if_body, scope = false)
+
+        gen_end_scope(g)
+
+    case:
+        assert(false)
     }
 }
 
@@ -1101,6 +1249,35 @@ gen_assign_stmt :: proc(g: ^Gen, ast: ^Ast) {
     gen_expr(g, stmt.left)
     gen_print(g, " = ")
 
+    suffix := ""
+    #partial switch v in  stmt.left.type.variant {
+    case Type_Array:
+        masked_id := -1
+        masked_scope := g.curr_scope
+        for ; masked_scope != nil; masked_scope = masked_scope.parent {
+            if .Masked in masked_scope.flags {
+                masked_id = masked_scope.local_id
+                break
+            }
+        }
+
+        if masked_id == -1 {
+            break
+        }
+
+        root_entity, root_scope, ok := gen_find_root_assignable_expr_entity(g.curr_scope, stmt.left)
+        assert(ok)
+
+        is_root_parent := root_scope.depth < g.curr_scope.depth
+
+        if is_root_parent {
+            gen_printf(g, "v{}{}_blend(", v.len, v.type.cname_lower)
+            gen_expr(g, stmt.left)
+            gen_print(g, ", ")
+            suffix = fmt.tprintf(", vecc_mask{})", masked_id)
+        }
+    }
+
     op, op_ok := token_normalize_assign_op(stmt.op.kind)
     if op != .Assign && op_ok {
         gen_binary_op(g,
@@ -1113,6 +1290,9 @@ gen_assign_stmt :: proc(g: ^Gen, ast: ^Ast) {
     } else {
         gen_possible_auto_conv_expr(g, stmt.left.type, stmt.right, top_level = true)
     }
+
+    gen_print(g, suffix)
+
 }
 
 gen_return_stmt :: proc(g: ^Gen, ast: ^Ast) {
