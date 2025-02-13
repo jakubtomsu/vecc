@@ -129,14 +129,13 @@ void compute_frame(v8u32* framebuffer, Aos2i32 resolution, f32 time, f32 delta, 
 			v8b32 break_mask = {0};
 			for (i32 i = 0; (i < 256); i = i + 1) {
 				z = aos2v8f32_add(aos2v8f32_set(v8f32_sub(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1])), v8f32_mul(v8f32_mul(z.data[0], z.data[1]), v8f32_set1(2.0f))), aos2v8f32_set_scalar(c));
-				{ // vector if
-					v8b32 vecc_mask7 = v8b32_not(break_mask);
+				v8b32 vecc_mask7 = v8b32_not(break_mask); { // vector if
 					ld2 = v8f32_blend(ld2, v8f32_mul(ld2, v8f32_mul(lz2, v8f32_set1(4.0f))), vecc_mask7);
 					lz2 = v8f32_blend(lz2, v8f32_add(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1])), vecc_mask7);
-				};
-				{ // vector if
-					v8b32 vecc_mask8 = v8f32_gt(lz2, v8f32_set1(200.0f));
-					break_mask = v8b32_blend(break_mask, v8b32_set1(b32_true), vecc_mask8);
+					v8b32 vecc_mask8 = v8b32_and(vecc_mask7, v8f32_lt(lz2, v8f32_set1(200.0f))); { // vector if
+					}v8b32 vecc_mask9 = v8b32_andnot(vecc_mask7, vecc_mask8); { // vector else
+						break_mask = v8b32_blend(break_mask, v8b32_set1(b32_true), vecc_mask9);
+					};
 				};
 				if (v8b32_reduce_all(break_mask)) {
 					break;

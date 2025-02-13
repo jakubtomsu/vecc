@@ -52,6 +52,9 @@ gen_printf :: proc(g: ^Gen, format: string, args: ..any) {
 }
 
 /*
+Here is the general idea with masked scopes.
+First is the pseudo code which is followed by what the generated code semantics roughly look like.
+
 for i in 0..<100 {
     if a {
         x = 1
@@ -1171,44 +1174,83 @@ gen_if_stmt :: proc(g: ^Gen, ast: ^Ast) {
     case Type_Array:
         assert(v.kind == .Vector)
 
-        block := stmt.if_body.variant.(Ast_Block_Stmt)
+        if_block := stmt.if_body.variant.(Ast_Block_Stmt)
+        {
 
-        gen_begin_scope(g, block.scope, msg = " // vector if")
+            assert(.Masked in if_block.scope.flags)
+            assert(if_block.scope.vector_width > 1)
 
-        assert(.Masked in block.scope.flags)
-        assert(block.scope.vector_width > 1)
-
-        gen_indent(g)
-        parent_masked_id := -1
-        for s := block.scope.parent; s != nil; s = s.parent {
-            if .Masked in s.flags {
-                parent_masked_id = s.local_id
+            parent_masked_id := -1
+            for s := if_block.scope.parent; s != nil; s = s.parent {
+                if .Masked in s.flags {
+                    parent_masked_id = s.local_id
+                }
             }
-        }
-        if parent_masked_id == -1 {
-            gen_printf(g,
-                "v{1}{2} vecc_mask{0} = ",
-                block.scope.local_id,
-                v.len,
-                v.type.cname_lower,
-            )
-            gen_expr(g, stmt.cond, top_level = true)
-            gen_print(g, ";\n")
-        } else {
-            gen_printf(g,
-                "v{1}{2} vecc_mask{0} = v{1}{2}_and(vecc_mask{3}, ",
-                block.scope.local_id,
-                v.len,
-                v.type.cname_lower,
-                parent_masked_id,
-            )
-            gen_expr(g, stmt.cond, top_level = true)
-            gen_print(g, ");\n")
+            if parent_masked_id == -1 {
+                gen_printf(g,
+                    "v{1}{2} vecc_mask{0} = ",
+                    if_block.scope.local_id,
+                    v.len,
+                    v.type.cname_lower,
+                )
+                gen_expr(g, stmt.cond, top_level = true)
+                gen_print(g, "; ")
+            } else {
+                gen_printf(g,
+                    "v{1}{2} vecc_mask{0} = v{1}{2}_and(vecc_mask{3}, ",
+                    if_block.scope.local_id,
+                    v.len,
+                    v.type.cname_lower,
+                    parent_masked_id,
+                )
+                gen_expr(g, stmt.cond, top_level = true)
+                gen_print(g, "); ")
+            }
+
+            gen_begin_scope(g, if_block.scope, msg = " // vector if")
+
+            gen_block_stmt(g, stmt.if_body, scope = false)
+
+            gen_end_scope(g)
         }
 
-        gen_block_stmt(g, stmt.if_body, scope = false)
+        if stmt.else_body != nil {
+            block := stmt.else_body.variant.(Ast_Block_Stmt)
 
-        gen_end_scope(g)
+            assert(.Masked in block.scope.flags)
+            assert(block.scope.vector_width > 1)
+
+            parent_masked_id := -1
+            for s := block.scope.parent; s != nil; s = s.parent {
+                if .Masked in s.flags {
+                    parent_masked_id = s.local_id
+                }
+            }
+            if parent_masked_id == -1 {
+                gen_printf(g,
+                    "v{1}{2} vecc_mask{0} = v{1}{2}_not(vecc_mask{3}); ",
+                    block.scope.local_id,
+                    v.len,
+                    v.type.cname_lower,
+                    if_block.scope.local_id,
+                )
+            } else {
+                gen_printf(g,
+                    "v{1}{2} vecc_mask{0} = v{1}{2}_andnot(vecc_mask{3}, vecc_mask{4}); ",
+                    block.scope.local_id,
+                    v.len,
+                    v.type.cname_lower,
+                    parent_masked_id,
+                    if_block.scope.local_id,
+                )
+            }
+
+            gen_begin_scope(g, block.scope, msg = " // vector else")
+
+            gen_block_stmt(g, stmt.else_body, scope = false)
+
+            gen_end_scope(g)
+        }
 
     case:
         assert(false)

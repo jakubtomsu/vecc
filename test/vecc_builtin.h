@@ -1,3 +1,4 @@
+// Hand-written target for VecC C code compilation backend.
 #ifndef VECC_BUILTIN_DEFINED
 #define VECC_BUILTIN_DEFINED 1
 
@@ -230,7 +231,7 @@ vecc_op v8i32 v8i32_mul (v8i32 a, v8i32 b)  { return {{_mm256_mullo_epi32(a.data
 vecc_op v8i32 v8i32_and (v8i32 a, v8i32 b)  { return {{_mm256_and_si256(a.data[0], b.data[0])}}; }
 vecc_op v8i32 v8i32_or  (v8i32 a, v8i32 b)  { return {{_mm256_or_si256(a.data[0], b.data[0])}}; }
 vecc_op v8i32 v8i32_xor (v8i32 a, v8i32 b)  { return {{_mm256_xor_si256(a.data[0], b.data[0])}}; }
-vecc_op v8i32 v8i32_andnot(v8i32 a, v8i32 b)  { return {{_mm256_andnot_si256(a.data[0], b.data[0])}}; }
+vecc_op v8i32 v8i32_andnot(v8i32 a, v8i32 b)  { return {{_mm256_andnot_si256(b.data[0], a.data[0])}}; }
 
 vecc_op v8u32 v8u32_add (v8u32 a, v8u32 b)  { return {{_mm256_add_epi32(a.data[0], b.data[0])}}; }
 vecc_op v8u32 v8u32_sub (v8u32 a, v8u32 b)  { return {{_mm256_sub_epi32(a.data[0], b.data[0])}}; }
@@ -240,12 +241,12 @@ vecc_op v8u32 v8u32_or  (v8u32 a, v8u32 b)  { return {{_mm256_or_si256(a.data[0]
 vecc_op v8u32 v8u32_xor (v8u32 a, v8u32 b)  { return {{_mm256_xor_si256(a.data[0], b.data[0])}}; }
 vecc_op v8u32 v8u32_sl  (v8u32 a, int b)    { return {{_mm256_slli_epi32(a.data[0], b)}}; }
 vecc_op v8u32 v8u32_sr  (v8u32 a, int b)    { return {{_mm256_srli_epi32(a.data[0], b)}}; }
-vecc_op v8u32 v8u32_andnot(v8u32 a, v8u32 b)  { return {{_mm256_andnot_si256(a.data[0], b.data[0])}}; }
+vecc_op v8u32 v8u32_andnot(v8u32 a, v8u32 b)  { return {{_mm256_andnot_si256(b.data[0], a.data[0])}}; }
 
 vecc_op v8b32 v8b32_and (v8b32 a, v8b32 b)  { return {{_mm256_and_si256(a.data[0], b.data[0])}}; }
 vecc_op v8b32 v8b32_or  (v8b32 a, v8b32 b)  { return {{_mm256_or_si256(a.data[0], b.data[0])}}; }
 vecc_op v8b32 v8b32_xor (v8b32 a, v8b32 b)  { return {{_mm256_xor_si256(a.data[0], b.data[0])}}; }
-vecc_op v8b32 v8b32_andnot(v8b32 a, v8b32 b)  { return {{_mm256_andnot_si256(a.data[0], b.data[0])}}; }
+vecc_op v8b32 v8b32_andnot(v8b32 a, v8b32 b)  { return {{_mm256_andnot_si256(b.data[0], a.data[0])}}; }
 vecc_op v8b32 v8b32_not(v8b32 a)  { return {{_mm256_xor_si256(a.data[0], _mm256_set1_epi32(0xffffffff))}}; }
 
 vecc_op v8u16 v8u16_add (v8u16 a, v8u16 b)  { return {{_mm_add_epi16(a.data[0], b.data[0])}}; }
@@ -256,7 +257,7 @@ vecc_op v8u16 v8u16_or  (v8u16 a, v8u16 b)  { return {{_mm_or_si128(a.data[0], b
 vecc_op v8u16 v8u16_xor (v8u16 a, v8u16 b)  { return {{_mm_xor_si128(a.data[0], b.data[0])}}; }
 vecc_op v8u16 v8u16_sl  (v8u16 a, int b)    { return {{_mm_slli_epi16(a.data[0], b)}}; }
 vecc_op v8u16 v8u16_sr  (v8u16 a, int b)    { return {{_mm_srli_epi16(a.data[0], b)}}; }
-vecc_op v8u16 v8u16_andnot(v8u16 a, v8u16 b)  { return {{_mm_andnot_si128(a.data[0], b.data[0])}}; }
+vecc_op v8u16 v8u16_andnot(v8u16 a, v8u16 b)  { return {{_mm_andnot_si128(b.data[0], a.data[0])}}; }
 
 vecc_op v8i32 v8i32_min (v8i32 a, v8i32 b)  { return {{_mm256_min_epi32(a.data[0], b.data[0])}}; }
 vecc_op v8i32 v8i32_max (v8i32 a, v8i32 b)  { return {{_mm256_max_epi32(a.data[0], b.data[0])}}; }

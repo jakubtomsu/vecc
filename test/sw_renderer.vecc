@@ -48,9 +48,9 @@ procedure export compute_frame (
                 if !break_mask {
                     ld2 = ld2 * (lz2*4.0)
                     lz2 = (z.x*z.x) + (z.y*z.y)
-                }
-                if lz2 > 200 {
-                    break_mask = true
+                    if lz2 < 200 {
+                        break_mask = true
+                    }
                 }
 
                 if reduce_all(break_mask) {
