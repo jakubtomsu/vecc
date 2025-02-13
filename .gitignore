@@ -4,5 +4,6 @@
 *.o
 *.pdb
 *.ilk
+test/*.s
 
 .vscode/
