@@ -145,7 +145,11 @@ gen_value :: proc(g: ^Gen, value: Value, type: ^Type) {
                 gen_print(g, ")")
 
             case .Fixed_Array:
-                unimplemented()
+                gen_print(g, "{{")
+                for i in 0..<tv.len {
+                    gen_print(g, v)
+                }
+                gen_print(g, "}}")
             }
 
         case:
@@ -268,7 +272,7 @@ gen_compound_literal :: proc(g: ^Gen, ast: ^Ast) {
             field := v.fields[i]
             gen_possible_auto_conv_expr(g, field.type, elem, top_level = true)
             if i + 1 < len(lit.elems) {
-                gen_print(g, ",")
+                gen_print(g, ", ")
             }
         }
         gen_print(g, "}")
@@ -697,13 +701,12 @@ gen_index_expr :: proc(g: ^Gen, ast: ^Ast) {
         switch v.kind {
         case .Vector:
             index := 0
-            // switch val in expr.index.value {
-            // case i128:
-            //     index = int(val)
-            // case:
-            //     panic("currently the index has to be a constant")
-            // }
-
+            #partial switch val in expr.index.value {
+            case i128:
+                index = int(val)
+            case:
+                panic("currently the index has to be a constant")
+            }
 
             op_name := ""
 
@@ -712,7 +715,7 @@ gen_index_expr :: proc(g: ^Gen, ast: ^Ast) {
 
         case .Fixed_Array:
             gen_expr(g, expr.left)
-            gen_print(g, "[")
+            gen_print(g, ".data[")
             gen_expr(g, expr.index)
             gen_print(g, "]")
         }
@@ -805,6 +808,7 @@ Gen_Op_Proc_Flag :: enum u8 {
     Integer,
     Float,
     Boolean,
+    Scalar_Only, // TEMP
 }
 
 @(rodata)
@@ -818,7 +822,7 @@ _gen_named_binary_ops := [?]Gen_Op_Proc{
     {name = "add", op = .Add,                flags = {.Integer, .Float}},
     {name = "sub", op = .Sub,                flags = {.Integer, .Float}},
     {name = "mul", op = .Mul,                flags = {.Integer, .Float}},
-    {name = "div", op = .Div,                flags = {.Float}},
+    {name = "div", op = .Div,                flags = {.Integer, .Float, .Scalar_Only}},
     {name = "mod", op = .Mod,                flags = {}},
     {name = "and", op = .Bit_And,            flags = {.Integer}},
     {name = "or" , op = .Bit_Or,             flags = {.Integer}},
@@ -829,14 +833,20 @@ _gen_named_binary_ops := [?]Gen_Op_Proc{
 
 @(rodata)
 _gen_named_unary_ops := [?]Gen_Op_Proc{
-    {name = "not", op = .Not, flags = {.Boolean}},
-    {name = "neg", op = .Sub, flags = {.Integer, .Float}},
+    {name = "not", op = .Not, flags = {.Boolean, .Scalar_Only}},
+    {name = "neg", op = .Sub, flags = {.Integer, .Float, .Scalar_Only}},
 }
 
 _gen_type_matches_op_proc :: proc(type: ^Type, op: Gen_Op_Proc) -> bool {
-    if      type_is_integer(type) && .Integer in op.flags do return true
-    else if type_is_float  (type) && .Float   in op.flags do return true
-    else if type_is_boolean(type) && .Boolean in op.flags do return true
+    elem := type_elem_basic_type(type)
+    if .Scalar_Only in op.flags {
+        if _, ok := type.variant.(Type_Basic); !ok {
+            return false
+        }
+    }
+    if      type_is_integer(elem) && .Integer in op.flags do return true
+    else if type_is_float  (elem) && .Float   in op.flags do return true
+    else if type_is_boolean(elem) && .Boolean in op.flags do return true
     return false
 }
 
@@ -1010,12 +1020,19 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
             }
         }
 
+        // HACK
+        if basic, ok := v.type.variant.(Type_Basic); ok {
+            if basic.kind == .U8 {
+                return
+            }
+        }
+
         for op in _gen_named_binary_ops {
-            if !_gen_type_matches_op_proc(type_elem_basic_type(v.type), op) do continue
+            if !_gen_type_matches_op_proc(v.type, op) do continue
             gen_printf(g, "static {0} {1}_{2}({0} a, {0} b)", type.cname, type.cname_lower, op.name)
             if defs {
-                gen_printf(g, " {{")
-                gen_printf(g, "return {{{{")
+                gen_print(g, " { ")
+                gen_print(g, "return {{")
 
                 data := gen_binary_op_data(
                     type = v.type,
@@ -1032,11 +1049,13 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
                     gen_print(g, data.sep)
                     gen_printf(g, "b.data[{0}]", i)
                     gen_print(g, data.suffix)
-                    gen_printf(g, ", ")
+                    if i + 1 < v.len {
+                        gen_printf(g, ", ")
+                    }
                 }
 
-                gen_printf(g, "}}}};")
-                gen_printf(g, "}}\n")
+                gen_print(g, "}};")
+                gen_print(g, " }\n")
             } else {
                 gen_printf(g, ";\n")
             }
@@ -1492,7 +1511,7 @@ gen_program :: proc(g: ^Gen) {
 
     gen_print(g, "#include <stdint.h>\n")
     gen_print(g, "#include <stdio.h>\n")
-    gen_print(g, "#include \"vecc_builtin.h\"\n")
+    gen_print(g, "#include <vecc_builtin.h>\n")
     gen_print(g, "\n")
 
     Sorted_Entity :: struct {

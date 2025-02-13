@@ -464,9 +464,11 @@ parse_for_stmt :: proc(p: ^Parser) -> ^Ast {
     parse_begin_scope(p)
     for_stmt.scope = p.curr_scope
 
-    for_stmt.init = parse_value_decl(p, .Mutable)
+    if !allow(p, .Semicolon) {
+        for_stmt.init = parse_value_decl(p, .Mutable)
+        expect(p, .Semicolon)
+    }
 
-    expect(p, .Semicolon)
     for_stmt.cond = parse_expr(p)
     expect(p, .Semicolon)
     for_stmt.post = parse_stmt(p)

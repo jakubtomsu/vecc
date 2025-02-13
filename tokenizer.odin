@@ -451,6 +451,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         .Break,
         .Continue,
         .Close_Brace,
+        .Close_Bracket,
         .Close_Paren:
         t.insert_semicolon = true
     case:

@@ -304,12 +304,13 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
 
     #partial switch v in ent.variant {
     case Entity_Proc:
-        for arg, i in call_expr.args {
-            check_expr(c, arg)
-        }
-
         proc_decl := ent.ast.variant.(Ast_Proc_Decl)
         proc_type := proc_decl.type.variant.(Ast_Proc_Type)
+
+        for arg, i in call_expr.args {
+            hint := proc_type.params[i].type
+            check_expr(c, arg, hint)
+        }
 
         for arg, i in call_expr.args {
             if arg.type != proc_type.params[i].type {
@@ -419,20 +420,35 @@ check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
     check_type(c, expr.type)
     check_expr(c, expr.value)
 
-    // lil hack :P
-    #partial switch v in expr.value.type.variant {
-    case Type_Array:
-        basic := expr.type.type.variant.(Type_Basic)
+    #partial switch expr.op.kind {
+    case .Conv:
+        // lil hack :P
+        #partial switch v in expr.value.type.variant {
+        case Type_Array:
+            basic := expr.type.type.variant.(Type_Basic)
 
-        temp := type_clone(expr.value.type)
-        temp_arr := &temp.variant.(Type_Array)
-        temp_arr.type = expr.type.type
-        ast.type = find_or_create_type(c, temp)
+            temp := type_clone(expr.value.type)
+            temp_arr := &temp.variant.(Type_Array)
+            temp_arr.type = expr.type.type
+            ast.type = find_or_create_type(c, temp)
 
-    case:
+        case:
+            ast.type = expr.type.type
+        }
+
+    case .Reinterpret:
+        if expr.type.type.size != expr.value.type.size {
+            checker_error(c,
+                "Cannot reinterpret between types of varying size: target type {} is {} bytes, value type {} is {} bytes)",
+                type_to_string(expr.type.type),
+                expr.type.type.size,
+                type_to_string(expr.value.type),
+                expr.value.type.size,
+            )
+        }
+
         ast.type = expr.type.type
     }
-
 }
 
 check_urnary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
@@ -826,8 +842,15 @@ check_binary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
                 assert(false)
             }
 
-        case: assert(false)
+        case nil:
+
+        case:
+            checker_error(c, "Invalid constant binary operation, got {} and {}",
+                l, r,
+            )
         }
+
+    case nil:
     }
 }
 
@@ -858,7 +881,9 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
                 type_to_string(decl.value.type),
             )
         }
-        ast.value = decl.value.value
+        if decl.mut == .Constant {
+            ast.value = decl.value.value
+        }
     }
     ast.type = decl.type.type
 }
@@ -1133,7 +1158,6 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
 
     case Ast_Array_Type:
         result = new(Type)
-        result.size = 0 // TODO
         length := 0
         #partial switch l in v.len.value {
         case i128:
@@ -1142,10 +1166,14 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
             assert(false)
         }
         assert(length > 0)
+        elem := find_or_create_type_ast(c, v.type, type_hint = type_hint)
+
+        result.size = elem.size * length
+
         result.variant = Type_Array{
             kind = v.kind,
             len = length,
-            type = find_or_create_type_ast(c, v.type, type_hint = type_hint),
+            type = elem,
         }
 
     case Ast_Struct_Type:

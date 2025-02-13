@@ -11,6 +11,7 @@ Type :: struct {
     cname:          string,
     cname_lower:    string,
     vectorized:     map[u8]^Type,
+    scalarized:     ^Type,
 }
 
 Type_Variant :: union {
@@ -306,12 +307,19 @@ type_vectorize :: proc(type: ^Type, width := VECTOR_WIDTH) -> ^Type {
         }
     }
 
+    result.scalarized = type
     type.vectorized[u8(width)] = result
 
     return result
 }
 
 type_scalarize :: proc(type: ^Type) -> ^Type {
+    assert(type != nil)
+
+    if type.scalarized != nil {
+        return type.scalarized
+    }
+
     result := new_clone(type^)
 
     switch &v in result.variant {
