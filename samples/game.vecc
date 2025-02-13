@@ -1,0 +1,168 @@
+// Small 2d game
+
+const export RESOLUTION_X I32 = 320
+const export RESOLUTION_Y I32 = 184
+const export RESOLUTION_SCALE I32 = 3
+
+const export KEY_LEFT_BIT   U32 = 1 << 0
+const export KEY_RIGHT_BIT  U32 = 1 << 1
+const export KEY_UP_BIT     U32 = 1 << 2
+const export KEY_DOWN_BIT   U32 = 1 << 3
+const export KEY_Z_BIT      U32 = 1 << 4
+const export KEY_X_BIT      U32 = 1 << 5
+
+struct Player {
+    pos         [2]F32
+    vel         [2]F32
+    dir         [2]F32
+    health      F32
+    gun_timer   F32
+}
+
+mut player Player
+
+struct Bullet {
+    used    B8
+    pos     [2]F32
+    vel     [2]F32
+    timer   F32
+}
+
+mut g_bullets [64]Bullet
+
+procedure export compute_frame (
+    immut vector framebuffer    [^]U32
+    immut resolution            [2]I32
+    immut time                  F32
+    immut delta                 F32
+    immut frame                 I32
+    immut keys                  U32
+) {
+    for i I32; i < ((resolution.x * resolution.y) / vector_width); i += 1 {
+        framebuffer[i] = (framebuffer[i] << 8)
+    }
+
+    {
+        mut dir [2]F32
+        mut aiming Bool
+        if (keys & KEY_LEFT_BIT ) != 0 { dir.x += -1; aiming = true }
+        if (keys & KEY_RIGHT_BIT) != 0 { dir.x +=  1; aiming = true }
+        if (keys & KEY_UP_BIT   ) != 0 { dir.y += -1; aiming = true }
+        if (keys & KEY_DOWN_BIT ) != 0 { dir.y +=  1; aiming = true }
+
+        player.gun_timer += delta
+        if ((keys & KEY_X_BIT) != 0) & (player.gun_timer > 0.25) {
+            player.gun_timer = 0
+            for i I32; i < 64; i += 1 {
+                if !g_bullets[i].used {
+                    g_bullets[i] = {
+                        true
+                        player.pos + (player.dir * 10)
+                        player.dir * 1000
+                        0
+                    }
+                    break
+                }
+            }
+        }
+
+        if aiming {
+            player.dir = dir
+        }
+        player.vel *= 0.9
+        player.vel += dir * (delta * 1000)
+        player.pos += player.vel * delta
+
+        draw_octagon(framebuffer, resolution, conv(I32, player.pos), 30, 35, {255; 0; 205; 255})
+    }
+
+    for i I32; i < 64; i += 1 {
+        mut bullet Bullet = g_bullets[i]
+
+        if bullet.timer > 1 {
+            bullet.timer = 0
+            bullet.used = false
+        }
+
+        if bullet.used {
+            bullet.pos += bullet.vel * delta
+            bullet.timer += delta
+
+            draw_octagon(framebuffer, resolution, conv(I32, bullet.pos), 5, 5, {255; 255; 255; 255})
+        }
+
+        g_bullets[i] = bullet
+    }
+
+    immut w I32 = conv(I32, 150.0 + (100.0 * sin(time * 0.5)))
+}
+
+procedure draw_rect (
+    immut vector framebuffer    [^]U32
+    immut resolution            [2]I32
+    immut pos                   [2]I32
+    immut size                  [2]I32
+    immut color                 [4]U8
+) {
+    immut col U32 = reinterpret(U32, color)
+    immut x_end I32 = pos.x + size.x
+    immut x_range [2]I32 = {
+        clamp(pos.x, 0, resolution.x) / vector_width
+        ((clamp(x_end, 0, resolution.x) + vector_width) - 1) / vector_width
+    }
+    immut y_range [2]I32 = {
+        clamp(pos.y         , 0, resolution.y)
+        clamp(pos.y + size.y, 0, resolution.y)
+    }
+    for y I32 = y_range[0]; y < y_range[1]; y += 1 {
+        immut y_offset I32 = y * (resolution.x / vector_width)
+        // Note: this could be split into two loops
+        for xv I32 = x_range[0]; xv < x_range[1]; xv += 1 {
+            immut vector x I32 = vector_index + (xv * vector_width)
+            if x > pos.x {
+                if x < x_end {
+                    framebuffer[y_offset + xv] = col
+                }
+            }
+        }
+    }
+}
+
+procedure draw_octagon (
+    immut vector framebuffer    [^]U32
+    immut resolution            [2]I32
+    immut pos                   [2]I32
+    immut size                  I32
+    immut rad                   I32
+    immut color                 [4]U8
+) {
+    immut col U32 = reinterpret(U32, color)
+    immut x_start I32 = pos.x - size
+    immut x_end   I32 = pos.x + size
+    immut x_range [2]I32 = {
+        clamp(x_start, 0, resolution.x) / vector_width
+        ((clamp(x_end  , 0, resolution.x) + vector_width) - 1) / vector_width
+    }
+    immut y_range [2]I32 = {
+        clamp(pos.y - size, 0, resolution.y)
+        clamp(pos.y + size, 0, resolution.y)
+    }
+    for y I32 = y_range[0]; y < y_range[1]; y += 1 {
+        immut y_offset I32 = y * (resolution.x / vector_width)
+        // Note: this could be split into two loops
+        for xv I32 = x_range[0]; xv < x_range[1]; xv += 1 {
+            immut vector x I32 = vector_index + (xv * vector_width)
+
+            immut vector rel [2]I32 = {x; y} - pos
+            immut vector dist I32 = abs(rel.x) + abs(rel.y)
+
+            if dist < rad {
+                if x > x_start {
+                    if x < x_end {
+                        framebuffer[y_offset + xv] = col
+                    }
+                }
+            }
+        }
+    }
+}

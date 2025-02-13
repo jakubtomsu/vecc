@@ -3,11 +3,14 @@
 
 const export RESOLUTION_X I32 = 320 * 4
 const export RESOLUTION_Y I32 = 184 * 4
+const export RESOLUTION_SCALE I32 = 1
 
-struct Foo {
-    pos     [2]F32
-    health  I32
-}
+const export KEY_LEFT_BIT   I32 = 1 << 0
+const export KEY_RIGHT_BIT  I32 = 1 << 1
+const export KEY_UP_BIT     I32 = 1 << 2
+const export KEY_DOWN_BIT   I32 = 1 << 3
+const export KEY_Z_BIT      I32 = 1 << 4
+const export KEY_X_BIT      I32 = 1 << 5
 
 procedure export compute_frame (
     immut vector framebuffer    [^]U32
@@ -15,18 +18,10 @@ procedure export compute_frame (
     immut time                  F32
     immut delta                 F32
     immut frame                 I32
+    immut keys                  U32
 ) {
-    // non p dependent
     immut ltime F32 = 0.5 - (0.5*cos(time*0.12))
     immut zoom F32 = pow(0.9, 50.0*ltime)
-
-    mut vector idk Foo = {
-        {
-            {0; 1; 2; 3; 4; 5; 6; 7}
-            {0; 1; 2; 3; 4; 5; 6; 7}
-        }
-        {0; 1; 2; 3; 4; 5; 6; 7.2}
-    }
 
     mut cen [2]F32 = {0.2655; 0.301}
     cen += (zoom*0.8) * cos(4.0+(2.0*ltime))

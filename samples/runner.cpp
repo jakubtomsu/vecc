@@ -4,14 +4,12 @@
 #pragma comment(lib, "Gdi32.lib")
 #pragma comment(lib, "User32.lib")
 
-#define VECC_IMPL
-#include "sw_renderer.h"
-
 LARGE_INTEGER g_frequency = {0};
 V8U32* g_framebuffer;
 uint64_t g_start_clock;
 uint64_t g_prev_clock;
 uint32_t g_frame;
+uint32_t g_keys;
 
 HBITMAP g_framebuffer_bitmap;
 
@@ -46,20 +44,43 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_framebuffer_bitmap = CreateDIBSection(dc, (BITMAPINFO*)&bitmap_info, DIB_RGB_COLORS, (void**)&g_framebuffer, 0, 0);
         } break;
 
-        case WM_PAINT: {
+        case WM_KEYDOWN: {
+            switch (wParam) {
+            case VK_LEFT:  g_keys |= KEY_LEFT_BIT; break;
+            case VK_RIGHT: g_keys |= KEY_RIGHT_BIT; break;
+            case VK_UP:    g_keys |= KEY_UP_BIT; break;
+            case VK_DOWN:  g_keys |= KEY_DOWN_BIT; break;
+            case 'Z':      g_keys |= KEY_Z_BIT; break;
+            case 'X':      g_keys |= KEY_X_BIT; break;
+            }
+            return 0;
+        } break;
 
+        case WM_KEYUP: {
+            switch (wParam) {
+            case VK_LEFT:  g_keys &= ~KEY_LEFT_BIT; break;
+            case VK_RIGHT: g_keys &= ~KEY_RIGHT_BIT; break;
+            case VK_UP:    g_keys &= ~KEY_UP_BIT; break;
+            case VK_DOWN:  g_keys &= ~KEY_DOWN_BIT; break;
+            case 'Z':      g_keys &= ~KEY_Z_BIT; break;
+            case 'X':      g_keys &= ~KEY_X_BIT; break;
+            }
+            return 0;
+        } break;
+
+        case WM_PAINT: {
             uint64_t begin_clock = time_clock();
             double delta = time_diff(begin_clock, g_prev_clock);
             double time = time_diff(begin_clock, g_start_clock);
             g_prev_clock = begin_clock;
-            Sleep(1);
 
             compute_frame(
                 g_framebuffer,
                 {{RESOLUTION_X, RESOLUTION_Y}},
                 (float)time,
                 (float)delta,
-                g_frame);
+                g_frame,
+                g_keys);
 
             uint64_t end_clock = time_clock();
             double compute_time = time_diff(end_clock, begin_clock);
@@ -99,10 +120,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpszClassName = "SoftwareRenderer";
     RegisterClass(&wc);
 
-    HWND hwnd = CreateWindow(wc.lpszClassName, "VecC software rendering sample",
-                             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                             CW_USEDEFAULT, CW_USEDEFAULT, RESOLUTION_X, RESOLUTION_Y,
-                             NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindow(
+        wc.lpszClassName, "VecC software rendering sample",
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        CW_USEDEFAULT, CW_USEDEFAULT, RESOLUTION_X * RESOLUTION_SCALE, RESOLUTION_Y * RESOLUTION_SCALE,
+        NULL, NULL, hInstance, NULL);
 
     QueryPerformanceFrequency(&g_frequency);
     g_start_clock = time_clock();
