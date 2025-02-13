@@ -3,12 +3,14 @@ package vecc
 import "core:reflect"
 import "core:fmt"
 import "core:slice"
+import "core:strings"
 
 Type :: struct {
     size:           int,
     variant:        Type_Variant,
     cname:          string,
     cname_lower:    string,
+    vectorized:     map[u8]^Type,
 }
 
 Type_Variant :: union {
@@ -200,7 +202,18 @@ type_to_string :: proc(type: ^Type) -> string {
         }
 
     case Type_Struct:
-        return type.cname
+        if type.cname != "" {
+            return type.cname
+        }
+
+        fields: [dynamic]string
+        append(&fields, "struct{")
+        for field, i in v.fields {
+            format := i + 1 >= len(v.fields) ? "{} {}" : "{} {}, "
+            append(&fields, fmt.tprintf(format, field.name, type_to_string(field.type)))
+        }
+        append(&fields, "}")
+        return strings.concatenate(fields[:])
     }
 
     assert(false)
@@ -260,7 +273,13 @@ type_clone :: proc(type: ^Type) -> ^Type {
 
 VECTOR_WIDTH :: 8
 
-type_vectorize :: proc(type: ^Type) -> ^Type {
+type_vectorize :: proc(type: ^Type, width := VECTOR_WIDTH) -> ^Type {
+    assert(type != nil)
+
+    if vec, ok := type.vectorized[u8(width)]; ok {
+        return vec
+    }
+
     result := new_clone(type^)
 
     switch &v in result.variant {
@@ -286,6 +305,8 @@ type_vectorize :: proc(type: ^Type) -> ^Type {
             field.type = type_vectorize(field.type)
         }
     }
+
+    type.vectorized[u8(width)] = result
 
     return result
 }

@@ -255,6 +255,32 @@ check_compound_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
         checker_error(c, "Invalid compound type literal")
     }
 
+    #partial switch v in ast.type.variant {
+    case Type_Array:
+        if len(lit.elems) != v.len {
+            checker_error(c,
+                "Comopound literal contains wrong number of elements, expected {}, got {}",
+                v.len,
+                len(lit.elems)
+            )
+        }
+
+    case Type_Struct:
+        if len(lit.elems) != len(v.fields) {
+            checker_error(c,
+                "Comopound literal contains wrong number of elements, expected {}, got {}",
+                len(v.fields),
+                len(lit.elems),
+            )
+        }
+
+    case:
+        checker_error(c,
+            "Comopound literal is not valid for {}, expected array or struct",
+            type_to_string(ast.type),
+        )
+    }
+
     for elem, i in lit.elems {
         hint: ^Type
         #partial switch v in ast.type.variant {
@@ -262,8 +288,6 @@ check_compound_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
             hint = v.type
         case Type_Struct:
             hint = v.fields[i].type
-        case:
-            checker_error(c, "Comopound literal is not valid for this type")
         }
 
         check_expr(c, elem, hint)
@@ -1061,7 +1085,8 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
                         "Integer literal cannot be assigned to non-float-element type ({} from {})",
                         type_to_string(hint_basic),
                         type_to_string(type_hint),
-                    )                }
+                    )
+                }
 
             case .True, .False:
                 if type_is_boolean(hint_basic) {
@@ -1165,18 +1190,38 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
         case "F32", "Float" : result = c.basic_types[.F32]
         case "F64"          : result = c.basic_types[.F64]
 
+        case "b8", "bool",
+             "b16",
+             "b32",
+             "b64",
+             "i8",
+             "i16",
+             "i32",
+             "i64",
+             "u8",
+             "u16",
+             "u32",
+             "u64",
+             "f32", "float",
+             "f64":
+            checker_error(c,
+                "Basic types are uppercase, please use {} instead of {}",
+                strings.to_upper(v.token.text),
+                v.token.text,
+            )
+
         case:
             if ent, _, ok := find_entity(c.curr_scope, v.token.text); ok {
-                #partial switch v in ent.variant {
+                #partial switch ev in ent.variant {
                 // TODO: alias
                 case Entity_Struct:
-                    result = v.type
+                    result = ev.type
 
                 case:
-                    assert(false)
+                    checker_error(c, "Entity {} is not a type", v.token.text)
                 }
             } else {
-                assert(false)
+                checker_error(c, "Unknown type: {}", v.token.text)
             }
         }
 

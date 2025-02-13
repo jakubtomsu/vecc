@@ -4,6 +4,11 @@
 const export RESOLUTION_X I32 = 320 * 4
 const export RESOLUTION_Y I32 = 184 * 4
 
+struct Foo {
+    pos     [2]F32
+    health  I32
+}
+
 procedure export compute_frame (
     immut vector framebuffer    [^]U32
     immut resolution            [2]I32
@@ -14,6 +19,14 @@ procedure export compute_frame (
     // non p dependent
     immut ltime F32 = 0.5 - (0.5*cos(time*0.12))
     immut zoom F32 = pow(0.9, 50.0*ltime)
+
+    mut vector idk Foo = {
+        {
+            {0; 1; 2; 3; 4; 5; 6; 7}
+            {0; 1; 2; 3; 4; 5; 6; 7}
+        }
+        {0; 1; 2; 3; 4; 5; 6; 7.2}
+    }
 
     mut cen [2]F32 = {0.2655; 0.301}
     cen += (zoom*0.8) * cos(4.0+(2.0*ltime))

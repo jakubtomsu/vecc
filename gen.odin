@@ -238,27 +238,41 @@ gen_compound_literal :: proc(g: ^Gen, ast: ^Ast) {
 
     assert(ast.type != nil)
 
-    gen_printf(g, "{}_set(", ast.type.cname_lower)
+    #partial switch v in ast.type.variant {
+    case Type_Array:
+        prefix := ""
+        suffix := ""
 
-    for elem, i in lit.elems {
-        type: ^Type
-        #partial switch v in ast.type.variant {
-        case Type_Array:
-            type = v.type
-        case Type_Struct:
-            type = v.fields[i].type
-        case:
-            assert(false)
+        switch v.kind {
+        case .Vector:
+            prefix = fmt.tprintf("{}_set(", ast.type.cname_lower)
+            suffix = ")"
+
+        case .Fixed_Array:
+            prefix = "{{"
+            suffix = "}}"
         }
 
-        gen_possible_auto_conv_expr(g, type, elem, top_level = true)
-
-        if i + 1 < len(lit.elems) {
-            gen_print(g, ", ")
+        gen_print(g, prefix)
+        for elem, i in lit.elems {
+            gen_possible_auto_conv_expr(g, v.type, elem, top_level = true)
+            if i + 1 < len(lit.elems) {
+                gen_print(g, ", ")
+            }
         }
+        gen_print(g, suffix)
+
+    case Type_Struct:
+        gen_print(g, "{")
+        for elem, i in lit.elems {
+            field := v.fields[i]
+            gen_possible_auto_conv_expr(g, field.type, elem, top_level = true)
+            if i + 1 < len(lit.elems) {
+                gen_print(g, ",")
+            }
+        }
+        gen_print(g, "}")
     }
-
-    gen_print(g, ")")
 }
 
 gen_ident :: proc(g: ^Gen, ast: ^Ast) {
@@ -827,17 +841,61 @@ _gen_type_matches_op_proc :: proc(type: ^Type, op: Gen_Op_Proc) -> bool {
 }
 
 // TEMP just so we don't generate arithmetic procs for big fixed array buffers etc
-MAX_ARITMETIC_ARRAY_WIDTH :: 64
+MAX_ARITMETIC_ARRAY_WIDTH :: 4
+// derived from avx512 8-bit vector
+MAX_VECTOR_WIDTH :: 64
 
 // TODO: scalar 2nd arg versions?
+// This is a big fucking mess.
 gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
     #partial switch v in type.variant {
     case Type_Array:
-        if v.kind != .Fixed_Array do return
-        if v.len > MAX_ARITMETIC_ARRAY_WIDTH do return
+        switch v.kind {
+        case .Fixed_Array:
+            if v.len > MAX_ARITMETIC_ARRAY_WIDTH {
+                return
+            }
+        case .Vector:
+            if v.len > MAX_VECTOR_WIDTH {
+                return
+            }
+        }
+
+        if v.kind != .Fixed_Array {
+            return
+        }
+
+        gen_printf(g, "static {} {}_set(", type.cname, type.cname_lower)
+        for i in 0..<v.len {
+            gen_printf(g, "{} v{}", v.type.cname, i)
+            if i + 1 < v.len {
+                gen_print(g, ", ")
+            }
+        }
+        gen_printf(g, ")")
+        if defs {
+            gen_print(g, " { ")
+            gen_print(g, "return {{", )
+            for i in 0..<v.len {
+                gen_printf(g, "v%i", i)
+                if i + 1 < v.len {
+                    gen_print(g, ", ")
+                }
+            }
+            gen_print(g, "}};")
+            gen_print(g, " }\n")
+        } else {
+            gen_print(g, ";\n")
+        }
 
         #partial switch vt in v.type.variant {
         case Type_Basic:
+        case Type_Array:
+        case:
+            return
+        }
+
+        #partial switch vt in v.type.variant {
         case Type_Array:
             if vt.kind != .Vector {
                 return
@@ -874,9 +932,6 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
             } else {
                 gen_print(g, ";\n")
             }
-
-        case:
-            return
         }
 
         gen_printf(g, "static {} {}_set1({} a)", type.cname, type.cname_lower, v.type.cname)
@@ -885,29 +940,6 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
             gen_print(g, "return {{", )
             for i in 0..<v.len {
                 gen_printf(g, "a")
-                if i + 1 < v.len {
-                    gen_print(g, ", ")
-                }
-            }
-            gen_print(g, "}};")
-            gen_print(g, " }\n")
-        } else {
-            gen_print(g, ";\n")
-        }
-
-        gen_printf(g, "static {} {}_set(", type.cname, type.cname_lower)
-        for i in 0..<v.len {
-            gen_printf(g, "{} v{}", v.type.cname, i)
-            if i + 1 < v.len {
-                gen_print(g, ", ")
-            }
-        }
-        gen_printf(g, ")")
-        if defs {
-            gen_print(g, " { ")
-            gen_print(g, "return {{", )
-            for i in 0..<v.len {
-                gen_printf(g, "v%i", i)
                 if i + 1 < v.len {
                     gen_print(g, ", ")
                 }
@@ -1026,13 +1058,41 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
                 gen_print(g, ";\n")
             }
         }
+
+    case Type_Struct:
+        // gen_printf(g, "static {} {}_set(", type.cname, type.cname_lower)
+        // for field in v.fields {
+        //     gen_printf(g, "{} v{}", field.type.cname, field.name)
+        //     if i + 1 < v.len {
+        //         gen_print(g, ", ")
+        //     }
+        // }
+        // gen_printf(g, ")")
+        // if defs {
+        //     gen_print(g, " { ")
+        //     gen_print(g, "return {{", )
+        //     for i in 0..<v.len {
+        //         gen_printf(g, "v%i", i)
+        //         if i + 1 < v.len {
+        //             gen_print(g, ", ")
+        //         }
+        //     }
+        //     gen_print(g, "}};")
+        //     gen_print(g, " }\n")
+        // } else {
+        //     gen_print(g, ";\n")
+        // }
+
     }
 }
 
 gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
+    assert(type != nil)
     if type.cname != "" {
         return type.cname
     }
+
+    fmt.println("GEN CNAME", type_to_string(type))
 
     #partial switch v in type.variant {
     case Type_Basic:
@@ -1379,6 +1439,10 @@ gen_type_entity_cnames_recursive :: proc(g: ^Gen, scope: ^Scope) {
         #partial switch v in ent.variant {
         case Entity_Struct:
             v.type.cname = name
+
+            for width, vec in v.type.vectorized {
+                vec.cname = fmt.tprintf("V{}{}", width, v.type.cname)
+            }
         }
     }
 
