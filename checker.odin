@@ -97,9 +97,19 @@ Entity_Alias :: struct {
 Scope :: struct {
     ast:            ^Ast,
     parent:         ^Scope,
+    flags:          bit_set[Scope_Flag],
+    vector_width:   int,
+    local_id:       int,
     children:       [dynamic]^Scope,
     depth:          int,
     entities:       map[string]^Entity,
+}
+
+Scope_Flag :: enum u8 {
+    Conditional,
+    Loop,
+    Masked,
+    Global,
 }
 
 checker_error :: proc(c: ^Checker, format: string, args: ..any) -> ! {
@@ -914,10 +924,12 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
     }
 }
 
-check_block_stmt :: proc(c: ^Checker, ast: ^Ast) {
+check_block_stmt :: proc(c: ^Checker, ast: ^Ast, scope := true) {
     block := ast.variant.(Ast_Block_Stmt)
 
-    check_begin_scope(c, block.scope)
+    if scope {
+        check_begin_scope(c, block.scope)
+    }
 
     for stmt, i in block.statements {
         check_stmt(c, stmt)
@@ -930,20 +942,60 @@ check_block_stmt :: proc(c: ^Checker, ast: ^Ast) {
         }
     }
 
-    check_end_scope(c)
+    if scope {
+        check_end_scope(c)
+    }
 }
 
 check_if_stmt :: proc(c: ^Checker, ast: ^Ast) {
     stmt := ast.variant.(Ast_If_Stmt)
     check_expr(c, stmt.cond)
 
-    if !type_is_boolean(stmt.cond.type) {
-        checker_error(c, "Condition in an if statement must have boolean type")
+    is_vector := false
+    #partial switch v in stmt.cond.type.variant {
+    case Type_Basic:
+        if !type_is_boolean(stmt.cond.type) {
+            checker_error(c, "Condition in a scalar if statement must have boolean type")
+        }
+
+    case Type_Array:
+        if v.kind != .Vector {
+            checker_error(c, "If statements don't accept non-vector ")
+        }
+
+        if !type_is_boolean(v.type) {
+            checker_error(c, "Condition in an vector if statement must have boolean element type")
+        }
+
+        is_vector = true
+
+    case:
+        checker_error(c, "Unexpected type in an if statement, expected vector or scalar boolean, got {}",
+            type_to_string(stmt.cond.type)
+        )
     }
 
-    check_block_stmt(c, stmt.if_body)
+    _check_cond_block(c, stmt.if_body, is_vector)
+
     if stmt.else_body != nil {
-        check_stmt(c, stmt.else_body)
+        _check_cond_block(c, stmt.else_body, is_vector)
+    }
+
+    return
+
+    _check_cond_block :: proc(c: ^Checker, ast: ^Ast, is_vector: bool) {
+        block := ast.variant.(Ast_Block_Stmt)
+        check_begin_scope(c, block.scope)
+
+        block.scope.flags += {.Conditional}
+        if is_vector {
+            block.scope.flags += {.Masked}
+            block.scope.vector_width = VECTOR_WIDTH
+        }
+
+        check_block_stmt(c, ast, scope = false)
+
+        check_end_scope(c)
     }
 }
 
@@ -960,11 +1012,9 @@ check_return_stmt :: proc(c: ^Checker, ast: ^Ast) {
     }
 }
 
-check_begin_scope :: proc(c: ^Checker, scope: ^Scope) -> ^Scope {
+check_begin_scope :: proc(c: ^Checker, scope: ^Scope) {
     assert(scope.parent == c.curr_scope)
-    prev_scope := c.curr_scope
     c.curr_scope = scope
-    return prev_scope
 }
 
 check_end_scope :: proc(c: ^Checker) {
