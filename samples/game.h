@@ -8,12 +8,20 @@
 #include <vecc_builtin.h>
 
 typedef struct { F32 data[2]; } Aos2F32;
+typedef struct Item {
+	Aos2F32 pos;
+	I32 powerup;
+} Item;
+typedef struct { F32 data[3]; } Aos3F32;
+typedef struct { B8 data[3]; } Aos3B8;
 typedef struct Player {
 	Aos2F32 pos;
 	Aos2F32 vel;
 	Aos2F32 dir;
 	F32 health;
 	F32 gun_timer;
+	Aos3F32 powerup_timer;
+	Aos3B8 powerups;
 } Player;
 typedef struct Bullet {
 	B8 used;
@@ -21,7 +29,30 @@ typedef struct Bullet {
 	Aos2F32 vel;
 	F32 timer;
 } Bullet;
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
+typedef struct Enemy {
+	Aos2F32 pos;
+	Aos2F32 vel;
+	F32 speed;
+	F32 health;
+	F32 damage_timer;
+	U8 size;
+	U8 state;
+} Enemy;
+typedef struct Explosion {
+	Aos2F32 pos;
+	F32 rad;
+	F32 timer;
+	F32 dur;
+} Explosion;
+typedef struct { Enemy data[64]; } Aos64Enemy;
+typedef struct { Explosion data[128]; } Aos128Explosion;
 typedef struct { Bullet data[64]; } Aos64Bullet;
+typedef struct { Item data[64]; } Aos64Item;
 typedef struct { I32 data[2]; } Aos2I32;
 typedef struct { U8 data[4]; } Aos4U8;
 typedef struct { V8I32 data[2]; } Aos2V8I32;
@@ -33,6 +64,16 @@ static Aos2F32 aos2f32_sub(Aos2F32 a, Aos2F32 b) { return {{a.data[0] - b.data[0
 static Aos2F32 aos2f32_mul(Aos2F32 a, Aos2F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1]}}; }
 static Aos2F32 aos2f32_div(Aos2F32 a, Aos2F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1]}}; }
 static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
+static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
+static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
+static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
+static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2]}}; }
+static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
+static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
+static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
+static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
+static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
+static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
 static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
@@ -58,9 +99,9 @@ static Aos2V8I32 aos2v8i32_xor(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_xor(a.
 
 // VECC exported constants
 
-const I32 RESOLUTION_X = (8 * 36);
-const I32 RESOLUTION_Y = (8 * 20);
-const I32 RESOLUTION_SCALE = 6;
+const I32 RESOLUTION_X = (8 * 30);
+const I32 RESOLUTION_Y = (8 * 30);
+const I32 RESOLUTION_SCALE = 4;
 const U32 KEY_LEFT_BIT = (1 << 0);
 const U32 KEY_RIGHT_BIT = (1 << 1);
 const U32 KEY_UP_BIT = (1 << 2);
@@ -78,17 +119,28 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 // VECC private function declarations
 
 static U32 hash(U32 n);
+static void spawn_item(Aos2F32 pos, I32 powerup);
 static void draw_rect(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, Aos2I32 size, Aos4U8 color);
 static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color, V8B32 mask);
 static Aos2F32 normalize(Aos2F32 x);
 static F32 length2(Aos2F32 x);
 static F32 length(Aos2F32 x);
 static F32 dot(Aos2F32 a, Aos2F32 b);
+static Hit intersect_ray_aabb(Aos2F32 pos, Aos2F32 dir, Aos2F32 box_min, Aos2F32 box_max);
 
 // VECC global variable declarations
 
+const I32 PLAYER_POWERUP_FAST_FIRE = 0;
+const I32 PLAYER_POWERUP_SHOTGUN = 1;
+const I32 PLAYER_POWERUP_EXPLOSIVE = 2;
 Player player = {0};
+Aos64Item g_items = {0};
 Aos64Bullet g_bullets = {0};
+Aos128Explosion g_explosions = {0};
+const U8 ENEMY_STATE_DEAD = 0;
+const U8 ENEMY_STATE_ALIVE = 1;
+Aos64Enemy g_enemies = {0};
+F32 g_enemy_spawn_timer = 5.0f;
 U32 g_rnd = 12093812093;
 
 // VECC function definitions
@@ -100,41 +152,124 @@ static U32 hash(U32 n) {
 	return n;
 }
 
+static void spawn_item(Aos2F32 pos, I32 powerup) {
+	for (I32 i = 0; (i < 64); i = i + 1) {
+		Item item = g_items.data[i];
+		if ((item.powerup == -1)) {
+			item.pos = pos;
+			item.powerup = powerup;
+			g_items.data[i] = item;
+			break;
+		};
+	};
+}
+
 void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys) {
+	if ((frame == 0)) {
+		string_println({"hello", 5});
+		for (I32 i = 0; (i < 64); i = i + 1) {
+			Item item = g_items.data[i];
+			item.powerup = -1;
+			g_items.data[i] = item;
+		};
+	};
 	g_rnd = hash(g_rnd);
 	U32 clear_mask = (*(U32*)&delta);
 	clear_mask = ~clear_mask;
 	for (I32 i = 0; (i < ((resolution.data[0] * resolution.data[1]) / vector_width)); i = i + 1) {
 		const V8U32 c = framebuffer[i];
-		framebuffer[i] = v8u32_set1(0);
+		framebuffer[i] = v8u32_mul(c, v8u32_set1(8));
+	};
+	for (I32 i = 0; (i < 64); i = i + 1) {
+		Enemy enemy = g_enemies.data[i];
+		if ((enemy.state != ENEMY_STATE_DEAD)) {
+			continue;
+		};
+		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, {{50, 100, 0, 0}}, v8b32_set1(b32_true));
+	};
+	for (I32 i = 0; (i < 64); i = i + 1) {
+		Item item = g_items.data[i];
+		if ((item.powerup == -1)) {
+			continue;
+		};
+		F32 rad = f32_round((2.0f + (f32_sin(((time + (F32)(i * 13)) * 12.0f)) * 2.0f)));
+		Aos4U8 color = {0};
+		if ((item.powerup == PLAYER_POWERUP_FAST_FIRE)) {
+			color = {{255, 255, 0, 0}};
+		};
+		if ((item.powerup == PLAYER_POWERUP_SHOTGUN)) {
+			color = {{0, 255, 255, 0}};
+		};
+		if ((item.powerup == PLAYER_POWERUP_EXPLOSIVE)) {
+			color = {{255, 0, 255, 0}};
+		};
+		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(item.pos), (I32)rad, 100, color, v8b32_set(b32_true, b32_false, b32_true, b32_false, b32_true, b32_false, b32_true, b32_false));
+	};
+	F32 max_enemy_damage_timer = 0.0f;
+	I32 oldest_corpse = -1;
+	for (I32 i = 0; (i < 64); i = i + 1) {
+		Enemy enemy = g_enemies.data[i];
+		enemy.damage_timer = enemy.damage_timer + delta;
+		if ((enemy.state == ENEMY_STATE_DEAD)) {
+			if ((enemy.damage_timer > max_enemy_damage_timer)) {
+				max_enemy_damage_timer = enemy.damage_timer;
+				oldest_corpse = i;
+			};
+			g_enemies.data[i] = enemy;
+			continue;
+		};
+		if ((enemy.state == ENEMY_STATE_ALIVE)) {
+			enemy.vel = aos2f32_add(enemy.vel, aos2f32_mul(normalize(aos2f32_sub(player.pos, enemy.pos)), aos2f32_set1((delta * (enemy.speed * 5.0f)))));
+			enemy.vel = aos2f32_mul(normalize(enemy.vel), aos2f32_set1(f32_clamp(length(enemy.vel), 0.0f, enemy.speed)));
+			enemy.pos = aos2f32_add(enemy.pos, aos2f32_mul(enemy.vel, aos2f32_set1(delta)));
+		};
+		if ((enemy.health <= 0.0f)) {
+			enemy.state = ENEMY_STATE_DEAD;
+			spawn_item(enemy.pos, PLAYER_POWERUP_FAST_FIRE);
+		};
+		Aos4U8 color = {0};
+		color = {{100, 255, 10, 0}};
+		if ((enemy.damage_timer < 0.05f)) {
+			color = {{255, 255, 255, 255}};
+		};
+		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, color, v8b32_set1(b32_true));
+		g_enemies.data[i] = enemy;
+	};
+	g_enemy_spawn_timer = g_enemy_spawn_timer + delta;
+	if (((g_enemy_spawn_timer > 5.0f) & (oldest_corpse != -1))) {
+		g_enemy_spawn_timer = 0.0f;
+		Enemy enemy = g_enemies.data[oldest_corpse];
+		enemy.state = ENEMY_STATE_ALIVE;
+		enemy.pos = {{10.0f, 10.0f}};
+		enemy.size = 5;
+		enemy.health = 5.0f;
+		enemy.speed = 10.0f;
+		g_enemies.data[oldest_corpse] = enemy;
 	};
 	{
 		Aos2F32 dir = {0};
 		B8 aiming = false;
 		if (((keys & KEY_LEFT_BIT) != 0)) {
 			dir.data[0] = dir.data[0] + -1.0f;
-			aiming = b8_true;
 		};
 		if (((keys & KEY_RIGHT_BIT) != 0)) {
 			dir.data[0] = dir.data[0] + 1.0f;
-			aiming = b8_true;
 		};
 		if (((keys & KEY_UP_BIT) != 0)) {
 			dir.data[1] = dir.data[1] + -1.0f;
-			aiming = b8_true;
 		};
 		if (((keys & KEY_DOWN_BIT) != 0)) {
 			dir.data[1] = dir.data[1] + 1.0f;
-			aiming = b8_true;
 		};
+		aiming = (B8)(length2(dir) > 0.0f);
 		player.gun_timer = player.gun_timer + delta;
 		const B32 shooting = ((keys & KEY_X_BIT) != 0);
-		if ((shooting & (player.gun_timer > 0.1f))) {
+		if ((shooting & (player.gun_timer > 0.119999997f))) {
 			player.gun_timer = 0.0f;
-			player.vel = aos2f32_sub(player.vel, aos2f32_mul(player.dir, aos2f32_set1(50.0f)));
+			player.vel = aos2f32_sub(player.vel, aos2f32_mul(player.dir, aos2f32_set1(45.0f)));
 			for (I32 i = 0; (i < 64); i = i + 1) {
 				if (!g_bullets.data[i].used) {
-					g_bullets.data[i] = {b8_true, aos2f32_add(player.pos, aos2f32_mul(player.dir, aos2f32_set1(3.0f))), aos2f32_mul(player.dir, aos2f32_set1(200.0f)), 0.0f};
+					g_bullets.data[i] = {b8_true, aos2f32_add(player.pos, aos2f32_mul(player.dir, aos2f32_set1(3.0f))), aos2f32_mul(player.dir, aos2f32_set1(300.0f)), 0.0f};
 					break;
 				};
 			};
@@ -147,7 +282,9 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		player.vel = aos2f32_mul(player.vel, aos2f32_set1(0.89999998f));
 		player.vel = aos2f32_add(player.vel, aos2f32_mul(dir, aos2f32_set1((delta * 1000.0f))));
 		player.pos = aos2f32_add(player.pos, aos2f32_mul(player.vel, aos2f32_set1(delta)));
-		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(player.pos), 3, 5, {{255, 255, 0, 0}}, v8b32_set1(b32_true));
+		Aos2F32 player_pos = player.pos;
+		player_pos.data[1] = player_pos.data[1] - f32_round(((0.5f + (0.5f * f32_sin((time * 25.0f)))) * f32_clamp(length(player.vel), 0.0f, 1.0f)));
+		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(player_pos), 3, 5, {{255, 255, 0, 0}}, v8b32_set1(b32_true));
 		Aos2I32 gun_pos = aos2f32_to_aos2i32(player.pos);
 		gun_pos.data[0] = gun_pos.data[0] + (I32)((player.dir.data[0] * 3.0f) * f32_min((player.gun_timer * 10.0f), 1.0f));
 		gun_pos.data[1] = gun_pos.data[1] + (I32)((player.dir.data[1] * 3.0f) * f32_min((player.gun_timer * 10.0f), 1.0f));
@@ -165,8 +302,32 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			bullet.used = b8_false;
 		};
 		if (bullet.used) {
-			bullet.pos = aos2f32_add(bullet.pos, aos2f32_mul(bullet.vel, aos2f32_set1(delta)));
 			bullet.timer = bullet.timer + delta;
+			const Aos2F32 move = aos2f32_mul(bullet.vel, aos2f32_set1(delta));
+			const Aos2F32 move_dir = normalize(move);
+			F32 tmin = length(move);
+			I32 hit_enemy = -1;
+			for (I32 ei = 0; (ei < 64); ei = ei + 1) {
+				const Enemy enemy = g_enemies.data[ei];
+				if ((enemy.state != ENEMY_STATE_ALIVE)) {
+					continue;
+				};
+				const Hit hit = intersect_ray_aabb(bullet.pos, move_dir, aos2f32_sub(enemy.pos, aos2f32_set1(5.0f)), aos2f32_add(enemy.pos, aos2f32_set1(5.0f)));
+				if ((hit.hit & (B8)(hit.tmin < tmin))) {
+					tmin = hit.tmin;
+					hit_enemy = ei;
+				};
+			};
+			if ((hit_enemy == -1)) {
+				bullet.pos = aos2f32_add(bullet.pos, move);
+			} else {
+				bullet.pos = aos2f32_add(bullet.pos, aos2f32_mul(move_dir, aos2f32_set1(tmin)));
+				bullet.used = b8_false;
+				Enemy enemy = g_enemies.data[hit_enemy];
+				enemy.health = enemy.health - 1.0f;
+				enemy.damage_timer = 0.0f;
+				g_enemies.data[hit_enemy] = enemy;
+			};
 			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(bullet.pos), 2, 2, {{0, 255, 255, 0}}, v8b32_set1(b32_true));
 		};
 		g_bullets.data[i] = bullet;
@@ -197,17 +358,19 @@ static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I3
 	const I32 x_start = (pos.data[0] - size);
 	const I32 x_end = (pos.data[0] + size);
 	const Aos2I32 x_range = {{(i32_clamp(x_start, 0, resolution.data[0]) / vector_width), (((i32_clamp(x_end, 0, resolution.data[0]) + vector_width) - 1) / vector_width)}};
-	const Aos2I32 y_range = {{i32_clamp((pos.data[1] - size), 0, resolution.data[1]), i32_clamp((pos.data[1] + size), 0, resolution.data[1])}};
+	const Aos2I32 y_range = {{i32_clamp((pos.data[1] - (size - 1)), 0, resolution.data[1]), i32_clamp((pos.data[1] + size), 0, resolution.data[1])}};
 	for (I32 y = y_range.data[0]; (y < y_range.data[1]); y = y + 1) {
 		const I32 y_offset = (y * (resolution.data[0] / vector_width));
 		for (I32 xv = x_range.data[0]; (xv < x_range.data[1]); xv = xv + 1) {
 			const V8I32 x = v8i32_add(vector_index, v8i32_set1((xv * vector_width)));
 			const Aos2V8I32 rel = aos2v8i32_sub({{x, v8i32_set1(y)}}, aos2v8i32_set_scalar(pos));
 			const V8I32 dist = v8i32_add(v8i32_abs(rel.data[0]), v8i32_abs(rel.data[1]));
-			V8B32 vecc_mask5 = v8i32_lt(dist, v8i32_set1(rad)); { // vector if
-				V8B32 vecc_mask6 = v8b32_and(vecc_mask5, v8i32_gt(x, v8i32_set1(x_start))); { // vector if
-					V8B32 vecc_mask7 = v8b32_and(vecc_mask6, v8i32_lt(x, v8i32_set1(x_end))); { // vector if
-						framebuffer[(y_offset + xv)] = v8u32_blend(framebuffer[(y_offset + xv)], v8u32_set1(col), vecc_mask7);
+			V8B32 vecc_mask5 = mask; { // vector if
+				V8B32 vecc_mask6 = v8b32_and(vecc_mask5, v8i32_lt(dist, v8i32_set1(rad))); { // vector if
+					V8B32 vecc_mask7 = v8b32_and(vecc_mask6, v8i32_gt(x, v8i32_set1(x_start))); { // vector if
+						V8B32 vecc_mask8 = v8b32_and(vecc_mask7, v8i32_lt(x, v8i32_set1(x_end))); { // vector if
+							framebuffer[(y_offset + xv)] = v8u32_blend(framebuffer[(y_offset + xv)], v8u32_set1(col), vecc_mask8);
+						};
 					};
 				};
 			};
@@ -229,6 +392,17 @@ static F32 length(Aos2F32 x) {
 
 static F32 dot(Aos2F32 a, Aos2F32 b) {
 	return ((a.data[0] * b.data[0]) + (a.data[1] * b.data[1]));
+}
+
+static Hit intersect_ray_aabb(Aos2F32 pos, Aos2F32 dir, Aos2F32 box_min, Aos2F32 box_max) {
+	const Aos2F32 inv_dir = aos2f32_div(aos2f32_set1(1.0f), dir);
+	const Aos2F32 t1 = aos2f32_mul(aos2f32_sub(box_min, pos), inv_dir);
+	const Aos2F32 t2 = aos2f32_mul(aos2f32_sub(box_max, pos), inv_dir);
+	Hit result = {0};
+	result.tmin = f32_max(f32_min(t1.data[0], t2.data[0]), f32_min(t1.data[1], t2.data[1]));
+	result.tmax = f32_min(f32_max(t1.data[0], t2.data[0]), f32_max(t1.data[1], t2.data[1]));
+	result.hit = (B8)(result.tmax >= f32_max(0.0f, result.tmin));
+	return result;
 }
 
 #endif // VECC_IMPL

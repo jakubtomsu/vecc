@@ -1,8 +1,10 @@
 // Small 2d game
 
-const export RESOLUTION_X I32 = 8 * 36
-const export RESOLUTION_Y I32 = 8 * 20
-const export RESOLUTION_SCALE I32 = 6
+// MANY THINGS ARE A TOTAL HACK AND WILL NEED TO BE CHANGED LATER!!!
+
+const export RESOLUTION_X I32 = 8 * 30
+const export RESOLUTION_Y I32 = 8 * 30
+const export RESOLUTION_SCALE I32 = 4
 
 const export KEY_LEFT_BIT   U32 = 1 << 0
 const export KEY_RIGHT_BIT  U32 = 1 << 1
@@ -11,15 +13,28 @@ const export KEY_DOWN_BIT   U32 = 1 << 3
 const export KEY_Z_BIT      U32 = 1 << 4
 const export KEY_X_BIT      U32 = 1 << 5
 
+const PLAYER_POWERUP_FAST_FIRE  I32 = 0
+const PLAYER_POWERUP_SHOTGUN    I32 = 1
+const PLAYER_POWERUP_EXPLOSIVE  I32 = 2
+
 struct Player {
-    pos         [2]F32
-    vel         [2]F32
-    dir         [2]F32
-    health      F32
-    gun_timer   F32
+    pos             [2]F32
+    vel             [2]F32
+    dir             [2]F32
+    health          F32
+    gun_timer       F32
+    powerup_timer   [3]F32
+    powerups        [3]Bool
 }
 
 mut player Player
+
+struct Item {
+    pos     [2]F32
+    powerup I32
+}
+
+mut g_items [64]Item
 
 struct Bullet {
     used    B8
@@ -30,6 +45,35 @@ struct Bullet {
 
 mut g_bullets [64]Bullet
 
+// Only the effect
+struct Explosion {
+    pos     [2]F32
+    rad     F32
+    timer   F32
+    dur     F32
+}
+
+mut g_explosions [128]Explosion
+
+struct Enemy {
+    pos             [2]F32
+    vel             [2]F32
+    speed           F32
+    health          F32
+    damage_timer    F32
+    size            U8
+    state           U8
+}
+
+const ENEMY_STATE_DEAD      U8 = 0
+const ENEMY_STATE_ALIVE     U8 = 1
+
+mut g_enemies [64]Enemy
+
+mut g_enemy_spawn_timer F32 = 5
+
+mut g_rnd U32 = 12093812093
+
 procedure hash (mut n U32) U32 {
     n = (n << 13) ^ n
     n *= (((n * n) * 15731) + 789221)
@@ -37,7 +81,20 @@ procedure hash (mut n U32) U32 {
     return n
 }
 
-mut g_rnd U32 = 12093812093
+procedure spawn_item (
+    immut pos     [2]F32
+    immut powerup I32
+) {
+    for i I32; i < 64; i += 1 {
+        mut item Item = g_items[i]
+        if item.powerup == -1 {
+            item.pos = pos
+            item.powerup = powerup
+            g_items[i] = item
+            break
+        }
+    }
+}
 
 procedure export compute_frame (
     immut vector framebuffer    [^]U32
@@ -47,6 +104,15 @@ procedure export compute_frame (
     immut frame                 I32
     immut keys                  U32
 ) {
+    if frame == 0 {
+        println("hello")
+        for i I32; i < 64; i += 1 {
+            mut item Item = g_items[i]
+            item.powerup = -1
+            g_items[i] = item
+        }
+    }
+
     g_rnd = hash(g_rnd)
     mut clear_mask U32 = reinterpret(U32, delta)
     clear_mask = !clear_mask
@@ -56,29 +122,114 @@ procedure export compute_frame (
         // framebuffer[i] = (framebuffer[i] & 0x12345678)
         immut vector c U32 = framebuffer[i]
         // framebuffer[i] = c & 0x22222222
-        framebuffer[i] = 0
+        // framebuffer[i] = 0x33333333
+        framebuffer[i] = (c * 8)
         // framebuffer[i] = (framebuffer[i] & (conv(U32, i + (frame & 31))))
     }
+
+    for i I32; i < 64; i += 1 {
+        mut enemy Enemy = g_enemies[i]
+
+        if enemy.state != ENEMY_STATE_DEAD {
+            continue
+        }
+
+        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {50; 100; 0; 0}, true)
+    }
+
+    for i I32; i < 64; i += 1 {
+        mut item Item = g_items[i]
+
+        if item.powerup == -1 {
+            continue
+        }
+
+        mut rad F32 = round(2.0 + (sin((time + conv(F32, i * 13)) * 12) * 2))
+
+        mut color [4]U8
+        if item.powerup == PLAYER_POWERUP_FAST_FIRE  { color = {255; 255; 0; 0} }
+        if item.powerup == PLAYER_POWERUP_SHOTGUN    { color = {0; 255; 255; 0} }
+        if item.powerup == PLAYER_POWERUP_EXPLOSIVE  { color = {255; 0; 255; 0} }
+
+        draw_octagon(framebuffer, resolution,
+            conv(I32, item.pos), conv(I32, rad), 100, color,
+            {true; false; true; false; true; false; true; false})
+    }
+
+    mut max_enemy_damage_timer F32
+    mut oldest_corpse I32 = -1
+    for i I32; i < 64; i += 1 {
+        mut enemy Enemy = g_enemies[i]
+
+        enemy.damage_timer += delta
+
+        if enemy.state == ENEMY_STATE_DEAD {
+            if enemy.damage_timer > max_enemy_damage_timer {
+                max_enemy_damage_timer = enemy.damage_timer
+                oldest_corpse = i
+            }
+            g_enemies[i] = enemy
+            continue
+        }
+
+        if enemy.state == ENEMY_STATE_ALIVE {
+            enemy.vel += normalize(player.pos - enemy.pos) * (delta * (enemy.speed * 5))
+            enemy.vel = normalize(enemy.vel) * clamp(length(enemy.vel), 0, enemy.speed)
+
+            enemy.pos += enemy.vel * delta
+        }
+
+        if enemy.health <= 0 {
+            enemy.state = ENEMY_STATE_DEAD
+            spawn_item(enemy.pos, PLAYER_POWERUP_FAST_FIRE)
+        }
+
+        mut color [4]U8
+        color = {100; 255; 10; 0}
+        if enemy.damage_timer < 0.05 {
+            color = {255; 255; 255; 255}
+        }
+
+        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, color, true)
+
+        g_enemies[i] = enemy
+    }
+
+    g_enemy_spawn_timer += delta
+    if (g_enemy_spawn_timer > 5) & (oldest_corpse != -1) {
+        g_enemy_spawn_timer = 0
+
+        mut enemy Enemy = g_enemies[oldest_corpse]
+        enemy.state = ENEMY_STATE_ALIVE
+        enemy.pos = {10; 10}
+        enemy.size = 5
+        enemy.health = 5
+        enemy.speed = 10
+
+        g_enemies[oldest_corpse] = enemy
+    }
+
 
     {
         mut dir [2]F32
         mut aiming Bool
-        if (keys & KEY_LEFT_BIT ) != 0 { dir.x += -1; aiming = true }
-        if (keys & KEY_RIGHT_BIT) != 0 { dir.x +=  1; aiming = true }
-        if (keys & KEY_UP_BIT   ) != 0 { dir.y += -1; aiming = true }
-        if (keys & KEY_DOWN_BIT ) != 0 { dir.y +=  1; aiming = true }
+        if (keys & KEY_LEFT_BIT ) != 0 { dir.x += -1 }
+        if (keys & KEY_RIGHT_BIT) != 0 { dir.x +=  1 }
+        if (keys & KEY_UP_BIT   ) != 0 { dir.y += -1 }
+        if (keys & KEY_DOWN_BIT ) != 0 { dir.y +=  1 }
+        aiming = conv(Bool, length2(dir) > 0)
 
         player.gun_timer += delta
         immut shooting B32 = (keys & KEY_X_BIT) != 0
-        if shooting & (player.gun_timer > 0.1) {
+        if shooting & (player.gun_timer > 0.12) {
             player.gun_timer = 0
-            player.vel -= player.dir * 50
+            player.vel -= player.dir * 45
             for i I32; i < 64; i += 1 {
                 if !g_bullets[i].used {
                     g_bullets[i] = {
                         true
                         player.pos + (player.dir * 3)
-                        player.dir * 200
+                        player.dir * 300
                         0
                     }
                     break
@@ -91,11 +242,14 @@ procedure export compute_frame (
                 player.dir = dir
             }
         }
-        player.vel *= 0.9
+
+        player.vel *= 0.9 // HACK
         player.vel += dir * (delta * 1000)
         player.pos += player.vel * delta
 
-        draw_octagon(framebuffer, resolution, conv(I32, player.pos), 3, 5, {255; 255; 0; 0}, true)
+        mut player_pos [2]F32 = player.pos
+        player_pos.y -= round((0.5 + (0.5 * sin(time * 25))) * clamp(length(player.vel), 0, 1))
+        draw_octagon(framebuffer, resolution, conv(I32, player_pos), 3, 5, {255; 255; 0; 0}, true)
 
         mut gun_pos [2]I32 = conv(I32, player.pos)
         gun_pos.x += conv(I32, (player.dir.x * 3) * min(player.gun_timer * 10, 1.0))
@@ -119,8 +273,43 @@ procedure export compute_frame (
         }
 
         if bullet.used {
-            bullet.pos += bullet.vel * delta
             bullet.timer += delta
+
+            immut move [2]F32 = bullet.vel * delta
+
+            immut move_dir [2]F32 = normalize(move)
+
+            mut tmin F32 = length(move)
+            mut hit_enemy I32 = -1
+            for ei I32; ei < 64; ei += 1 {
+                immut enemy Enemy = g_enemies[ei]
+                if enemy.state != ENEMY_STATE_ALIVE {
+                    continue
+                }
+                immut hit Hit = intersect_ray_aabb(
+                    bullet.pos,
+                    move_dir,
+                    enemy.pos - 5,
+                    enemy.pos + 5,
+                )
+
+                if hit.hit & conv(B8, hit.tmin < tmin) {
+                    tmin = hit.tmin
+                    hit_enemy = ei
+                }
+            }
+
+            if hit_enemy == -1 {
+                bullet.pos += move
+            } else {
+                bullet.pos += move_dir * tmin
+                bullet.used = false
+
+                mut enemy Enemy = g_enemies[hit_enemy]
+                enemy.health -= 1
+                enemy.damage_timer = 0
+                g_enemies[hit_enemy] = enemy
+            }
 
             draw_octagon(framebuffer, resolution, conv(I32, bullet.pos), 2, 2, {0; 255; 255; 0}, true)
         }
@@ -179,7 +368,7 @@ procedure draw_octagon (
         ((clamp(x_end  , 0, resolution.x) + vector_width) - 1) / vector_width
     }
     immut y_range [2]I32 = {
-        clamp(pos.y - size, 0, resolution.y)
+        clamp(pos.y - (size - 1), 0, resolution.y)
         clamp(pos.y + size, 0, resolution.y)
     }
     for y I32 = y_range[0]; y < y_range[1]; y += 1 {
@@ -191,10 +380,12 @@ procedure draw_octagon (
             immut vector rel [2]I32 = {x; y} - pos
             immut vector dist I32 = abs(rel.x) + abs(rel.y)
 
-            if dist < rad {
-                if x > x_start {
-                    if x < x_end {
-                        framebuffer[y_offset + xv] = col
+            if mask {
+                if dist < rad {
+                    if x > x_start {
+                        if x < x_end {
+                            framebuffer[y_offset + xv] = col
+                        }
                     }
                 }
             }
@@ -216,4 +407,38 @@ procedure length(immut x [2]F32) F32 {
 
 procedure dot(immut a [2]F32; immut b [2]F32) F32 {
     return (a.x*b.x) + (a.y*b.y)
+}
+
+struct Hit {
+    tmin    F32
+    tmax    F32
+    hit     Bool
+}
+
+procedure intersect_ray_aabb (
+    immut pos     [2]F32
+    immut dir     [2]F32
+    immut box_min [2]F32
+    immut box_max [2]F32
+) Hit {
+    // https://tavianator.com/cgit/dimension.git/tree/libdimension/bvh/bvh.c#n196
+
+    // This is actually correct, even though it appears not to handle edge cases
+    // (dir.{x,y,z} == 0).  It works because the infinities that result from
+    // dividing by zero will still behave correctly in the comparisons.  Rays
+    // which are parallel to an axis and outside the box will have tmin == inf
+    // or tmax == -inf, while rays inside the box will have tmin and tmax
+    // unchanged.
+
+    immut inv_dir [2]F32 = 1.0 / dir
+
+    immut t1 [2]F32 = (box_min - pos) * inv_dir
+    immut t2 [2]F32 = (box_max - pos) * inv_dir
+
+    mut result Hit
+    result.tmin = max(min(t1.x, t2.x), min(t1.y, t2.y))
+    result.tmax = min(max(t1.x, t2.x), max(t1.y, t2.y))
+    result.hit = conv(B8, result.tmax >= max(0.0, result.tmin))
+
+    return result
 }

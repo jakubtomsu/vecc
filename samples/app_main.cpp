@@ -9,7 +9,7 @@ LARGE_INTEGER g_frequency = {0};
 V8U32* g_framebuffer;
 uint64_t g_start_clock;
 uint64_t g_prev_clock;
-uint32_t g_frame;
+uint32_t g_frame = 0;
 uint32_t g_keys;
 
 HBITMAP g_framebuffer_bitmap;
