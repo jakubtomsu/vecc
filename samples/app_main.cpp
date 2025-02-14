@@ -3,6 +3,7 @@
 
 #pragma comment(lib, "Gdi32.lib")
 #pragma comment(lib, "User32.lib")
+#pragma comment(lib, "Winmm.lib")
 
 LARGE_INTEGER g_frequency = {0};
 V8U32* g_framebuffer;
@@ -74,6 +75,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             double time = time_diff(begin_clock, g_start_clock);
             g_prev_clock = begin_clock;
 
+            if (delta < 0.01) {
+                // printf("sleep %i\n", frame_ms_left);
+                int frame_ms_left = 15 - (int)(delta * 1000);
+                Sleep(frame_ms_left / 2);
+            }
+
+            uint64_t compute_clock = time_clock();
+
             compute_frame(
                 g_framebuffer,
                 {{RESOLUTION_X, RESOLUTION_Y}},
@@ -83,9 +92,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_keys);
 
             uint64_t end_clock = time_clock();
-            double compute_time = time_diff(end_clock, begin_clock);
+            double compute_time = time_diff(end_clock, compute_clock);
 
-            printf("delta time: %g ms (%g fps), compute: %g ms\n", delta * 1e3, 1.0 / delta, compute_time * 1e3);
+            if ((g_frame % 60) == 0) {
+                printf("delta time: %g ms (%g fps), compute: %g ms\n", delta * 1e3, 1.0 / delta, compute_time * 1e3);
+            }
 
             PAINTSTRUCT ps;
             HDC dc = BeginPaint(hwnd, &ps);
@@ -114,6 +125,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Help sleep precision
+    timeBeginPeriod(1);
+
     WNDCLASS wc = {0};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;

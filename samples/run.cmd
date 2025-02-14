@@ -1,0 +1,1 @@
+call build.cmd %1 && %1.exe

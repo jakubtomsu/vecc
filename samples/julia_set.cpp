@@ -1,3 +1,3 @@
 #define VECC_IMPL
 #include "julia_set.h"
-#include "runner.cpp"
+#include "app_main.cpp"

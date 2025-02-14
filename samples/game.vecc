@@ -1,8 +1,8 @@
 // Small 2d game
 
-const export RESOLUTION_X I32 = 320
-const export RESOLUTION_Y I32 = 184
-const export RESOLUTION_SCALE I32 = 3
+const export RESOLUTION_X I32 = 8 * 36
+const export RESOLUTION_Y I32 = 8 * 20
+const export RESOLUTION_SCALE I32 = 6
 
 const export KEY_LEFT_BIT   U32 = 1 << 0
 const export KEY_RIGHT_BIT  U32 = 1 << 1
@@ -30,6 +30,15 @@ struct Bullet {
 
 mut g_bullets [64]Bullet
 
+procedure hash (mut n U32) U32 {
+    n = (n << 13) ^ n
+    n *= (((n * n) * 15731) + 789221)
+    n += 1376312589
+    return n
+}
+
+mut g_rnd U32 = 12093812093
+
 procedure export compute_frame (
     immut vector framebuffer    [^]U32
     immut resolution            [2]I32
@@ -38,8 +47,17 @@ procedure export compute_frame (
     immut frame                 I32
     immut keys                  U32
 ) {
+    g_rnd = hash(g_rnd)
+    mut clear_mask U32 = reinterpret(U32, delta)
+    clear_mask = !clear_mask
+
     for i I32; i < ((resolution.x * resolution.y) / vector_width); i += 1 {
-        framebuffer[i] = (framebuffer[i] << 8)
+        // immut offs U32 = conv(U32, (i + frame) & 127)
+        // framebuffer[i] = (framebuffer[i] & 0x12345678)
+        immut vector c U32 = framebuffer[i]
+        // framebuffer[i] = c & 0x22222222
+        framebuffer[i] = 0
+        // framebuffer[i] = (framebuffer[i] & (conv(U32, i + (frame & 31))))
     }
 
     {
@@ -51,14 +69,16 @@ procedure export compute_frame (
         if (keys & KEY_DOWN_BIT ) != 0 { dir.y +=  1; aiming = true }
 
         player.gun_timer += delta
-        if ((keys & KEY_X_BIT) != 0) & (player.gun_timer > 0.25) {
+        immut shooting B32 = (keys & KEY_X_BIT) != 0
+        if shooting & (player.gun_timer > 0.1) {
             player.gun_timer = 0
+            player.vel -= player.dir * 50
             for i I32; i < 64; i += 1 {
                 if !g_bullets[i].used {
                     g_bullets[i] = {
                         true
-                        player.pos + (player.dir * 10)
-                        player.dir * 1000
+                        player.pos + (player.dir * 3)
+                        player.dir * 200
                         0
                     }
                     break
@@ -67,13 +87,27 @@ procedure export compute_frame (
         }
 
         if aiming {
-            player.dir = dir
+            if !shooting {
+                player.dir = dir
+            }
         }
         player.vel *= 0.9
         player.vel += dir * (delta * 1000)
         player.pos += player.vel * delta
 
-        draw_octagon(framebuffer, resolution, conv(I32, player.pos), 30, 35, {255; 0; 205; 255})
+        draw_octagon(framebuffer, resolution, conv(I32, player.pos), 3, 5, {255; 255; 0; 0}, true)
+
+        mut gun_pos [2]I32 = conv(I32, player.pos)
+        gun_pos.x += conv(I32, (player.dir.x * 3) * min(player.gun_timer * 10, 1.0))
+        gun_pos.y += conv(I32, (player.dir.y * 3) * min(player.gun_timer * 10, 1.0))
+        gun_pos.y += 1
+
+        mut gun_size [2]I32 = {6; 2}
+        if player.dir.x == 0 {
+            gun_size = {gun_size.y + 1; gun_size.x - 1}
+        }
+
+        draw_rect(framebuffer, resolution, gun_pos - {gun_size.x / 2; gun_size.y/2}, gun_size, {255; 255; 255; 255})
     }
 
     for i I32; i < 64; i += 1 {
@@ -88,7 +122,7 @@ procedure export compute_frame (
             bullet.pos += bullet.vel * delta
             bullet.timer += delta
 
-            draw_octagon(framebuffer, resolution, conv(I32, bullet.pos), 5, 5, {255; 255; 255; 255})
+            draw_octagon(framebuffer, resolution, conv(I32, bullet.pos), 2, 2, {0; 255; 255; 0}, true)
         }
 
         g_bullets[i] = bullet
@@ -135,6 +169,7 @@ procedure draw_octagon (
     immut size                  I32
     immut rad                   I32
     immut color                 [4]U8
+    immut vector mask           B32
 ) {
     immut col U32 = reinterpret(U32, color)
     immut x_start I32 = pos.x - size
@@ -165,4 +200,20 @@ procedure draw_octagon (
             }
         }
     }
+}
+
+procedure normalize(immut x [2]F32) [2]F32 {
+    return x * rsqrt(length2(x))
+}
+
+procedure length2(immut x [2]F32) F32 {
+    return (x.x*x.x) + (x.y*x.y)
+}
+
+procedure length(immut x [2]F32) F32 {
+    return sqrt((x.x*x.x) + (x.y*x.y))
+}
+
+procedure dot(immut a [2]F32; immut b [2]F32) F32 {
+    return (a.x*b.x) + (a.y*b.y)
 }

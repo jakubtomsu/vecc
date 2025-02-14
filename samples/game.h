@@ -58,9 +58,9 @@ static Aos2V8I32 aos2v8i32_xor(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_xor(a.
 
 // VECC exported constants
 
-const I32 RESOLUTION_X = 320;
-const I32 RESOLUTION_Y = 184;
-const I32 RESOLUTION_SCALE = 3;
+const I32 RESOLUTION_X = (8 * 36);
+const I32 RESOLUTION_Y = (8 * 20);
+const I32 RESOLUTION_SCALE = 6;
 const U32 KEY_LEFT_BIT = (1 << 0);
 const U32 KEY_RIGHT_BIT = (1 << 1);
 const U32 KEY_UP_BIT = (1 << 2);
@@ -77,19 +77,36 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 
 // VECC private function declarations
 
+static U32 hash(U32 n);
 static void draw_rect(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, Aos2I32 size, Aos4U8 color);
-static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color);
+static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color, V8B32 mask);
+static Aos2F32 normalize(Aos2F32 x);
+static F32 length2(Aos2F32 x);
+static F32 length(Aos2F32 x);
+static F32 dot(Aos2F32 a, Aos2F32 b);
 
 // VECC global variable declarations
 
 Player player = {0};
 Aos64Bullet g_bullets = {0};
+U32 g_rnd = 12093812093;
 
 // VECC function definitions
 
+static U32 hash(U32 n) {
+	n = ((n << 13) ^ n);
+	n = n * (((n * n) * 15731) + 789221);
+	n = n + 1376312589;
+	return n;
+}
+
 void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys) {
+	g_rnd = hash(g_rnd);
+	U32 clear_mask = (*(U32*)&delta);
+	clear_mask = ~clear_mask;
 	for (I32 i = 0; (i < ((resolution.data[0] * resolution.data[1]) / vector_width)); i = i + 1) {
-		framebuffer[i] = v8u32_sl(framebuffer[i], 8);
+		const V8U32 c = framebuffer[i];
+		framebuffer[i] = v8u32_set1(0);
 	};
 	{
 		Aos2F32 dir = {0};
@@ -111,22 +128,35 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			aiming = b8_true;
 		};
 		player.gun_timer = player.gun_timer + delta;
-		if ((((keys & KEY_X_BIT) != 0) & (player.gun_timer > 0.25f))) {
+		const B32 shooting = ((keys & KEY_X_BIT) != 0);
+		if ((shooting & (player.gun_timer > 0.1f))) {
 			player.gun_timer = 0.0f;
+			player.vel = aos2f32_sub(player.vel, aos2f32_mul(player.dir, aos2f32_set1(50.0f)));
 			for (I32 i = 0; (i < 64); i = i + 1) {
 				if (!g_bullets.data[i].used) {
-					g_bullets.data[i] = {b8_true, aos2f32_add(player.pos, aos2f32_mul(player.dir, aos2f32_set1(10.0f))), aos2f32_mul(player.dir, aos2f32_set1(1000.0f)), 0.0f};
+					g_bullets.data[i] = {b8_true, aos2f32_add(player.pos, aos2f32_mul(player.dir, aos2f32_set1(3.0f))), aos2f32_mul(player.dir, aos2f32_set1(200.0f)), 0.0f};
 					break;
 				};
 			};
 		};
 		if (aiming) {
-			player.dir = dir;
+			if (!shooting) {
+				player.dir = dir;
+			};
 		};
 		player.vel = aos2f32_mul(player.vel, aos2f32_set1(0.89999998f));
 		player.vel = aos2f32_add(player.vel, aos2f32_mul(dir, aos2f32_set1((delta * 1000.0f))));
 		player.pos = aos2f32_add(player.pos, aos2f32_mul(player.vel, aos2f32_set1(delta)));
-		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(player.pos), 30, 35, {{255, 0, 205, 255}});
+		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(player.pos), 3, 5, {{255, 255, 0, 0}}, v8b32_set1(b32_true));
+		Aos2I32 gun_pos = aos2f32_to_aos2i32(player.pos);
+		gun_pos.data[0] = gun_pos.data[0] + (I32)((player.dir.data[0] * 3.0f) * f32_min((player.gun_timer * 10.0f), 1.0f));
+		gun_pos.data[1] = gun_pos.data[1] + (I32)((player.dir.data[1] * 3.0f) * f32_min((player.gun_timer * 10.0f), 1.0f));
+		gun_pos.data[1] = gun_pos.data[1] + 1;
+		Aos2I32 gun_size = {{6, 2}};
+		if ((player.dir.data[0] == 0.0f)) {
+			gun_size = {{(gun_size.data[1] + 1), (gun_size.data[0] - 1)}};
+		};
+		draw_rect(framebuffer, resolution, aos2i32_sub(gun_pos, {{(gun_size.data[0] / 2), (gun_size.data[1] / 2)}}), gun_size, {{255, 255, 255, 255}});
 	};
 	for (I32 i = 0; (i < 64); i = i + 1) {
 		Bullet bullet = g_bullets.data[i];
@@ -137,7 +167,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		if (bullet.used) {
 			bullet.pos = aos2f32_add(bullet.pos, aos2f32_mul(bullet.vel, aos2f32_set1(delta)));
 			bullet.timer = bullet.timer + delta;
-			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(bullet.pos), 5, 5, {{255, 255, 255, 255}});
+			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(bullet.pos), 2, 2, {{0, 255, 255, 0}}, v8b32_set1(b32_true));
 		};
 		g_bullets.data[i] = bullet;
 	};
@@ -162,7 +192,7 @@ static void draw_rect(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, Aos2I
 	};
 }
 
-static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color) {
+static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color, V8B32 mask) {
 	const U32 col = (*(U32*)&color);
 	const I32 x_start = (pos.data[0] - size);
 	const I32 x_end = (pos.data[0] + size);
@@ -176,13 +206,29 @@ static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I3
 			const V8I32 dist = v8i32_add(v8i32_abs(rel.data[0]), v8i32_abs(rel.data[1]));
 			V8B32 vecc_mask5 = v8i32_lt(dist, v8i32_set1(rad)); { // vector if
 				V8B32 vecc_mask6 = v8b32_and(vecc_mask5, v8i32_gt(x, v8i32_set1(x_start))); { // vector if
-					V8B32 vecc_mask7 = v8b32_and(vecc_mask5, v8i32_lt(x, v8i32_set1(x_end))); { // vector if
+					V8B32 vecc_mask7 = v8b32_and(vecc_mask6, v8i32_lt(x, v8i32_set1(x_end))); { // vector if
 						framebuffer[(y_offset + xv)] = v8u32_blend(framebuffer[(y_offset + xv)], v8u32_set1(col), vecc_mask7);
 					};
 				};
 			};
 		};
 	};
+}
+
+static Aos2F32 normalize(Aos2F32 x) {
+	return aos2f32_mul(x, aos2f32_set1(f32_rsqrt(length2(x))));
+}
+
+static F32 length2(Aos2F32 x) {
+	return ((x.data[0] * x.data[0]) + (x.data[1] * x.data[1]));
+}
+
+static F32 length(Aos2F32 x) {
+	return f32_sqrt(((x.data[0] * x.data[0]) + (x.data[1] * x.data[1])));
+}
+
+static F32 dot(Aos2F32 a, Aos2F32 b) {
+	return ((a.data[0] * b.data[0]) + (a.data[1] * b.data[1]));
 }
 
 #endif // VECC_IMPL

@@ -92,19 +92,3 @@ procedure export compute_frame (
         }
     }
 }
-
-procedure normalize(immut x [3]F32) [3]F32 {
-    return x * rsqrt(length2(x))
-}
-
-procedure length2(immut x [3]F32) F32 {
-    return (x.x*x.x) + ((x.y*x.y) + (x.z*x.z))
-}
-
-procedure length(immut x [3]F32) F32 {
-    return sqrt((x.x*x.x) + ((x.y*x.y) + (x.z*x.z)))
-}
-
-procedure dot(immut a [3]F32; immut b [3]F32) F32 {
-    return (a.x*b.x) + ((a.y*b.y) + (a.z*b.z))
-}
