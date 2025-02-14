@@ -40,6 +40,7 @@ Type_Basic_Kind :: enum u8 {
     U64,
     F32,
     F64,
+    String,
 }
 
 Type_Array :: struct {
@@ -285,6 +286,11 @@ type_vectorize :: proc(type: ^Type, width := VECTOR_WIDTH) -> ^Type {
 
     switch &v in result.variant {
     case Type_Basic:
+        #partial switch v.kind {
+        case .String:
+            assert(false)
+        }
+
         vec := new(Type)
         vec.variant = Type_Array{
             kind = .Vector,

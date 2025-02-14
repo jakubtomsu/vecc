@@ -26,6 +26,11 @@ typedef int64_t  B64;
 typedef float    F32;
 typedef double   F64;
 
+typedef struct {
+    const char* data;
+    int64_t     len;
+} String;
+
 #define b8_false  (B8)0
 #define b16_false (B16)0
 #define b32_false (B32)0
@@ -53,7 +58,18 @@ vecc_op F64 f64_cos(F64 a) { return cos(a); }
 vecc_op F32 f32_rcp(F32 a) { return 1.0 / a; }
 vecc_op F64 f64_rcp(F64 a) { return 1.0 / a; }
 vecc_op F32 f32_pow(F32 a, F32 b) { return powf(a, b); }
-vecc_op F64 f64_pow(F64 a, F64 b) { return pow(a, b); }
+
+vecc_op F32 f32_round(F32 a) { return roundf(a); }
+vecc_op F32 f32_floor(F32 a) { return floorf(a); }
+vecc_op F32 f32_ceil (F32 a) { return ceilf(a); }
+vecc_op F32 f32_trunc(F32 a) { return truncf(a); }
+vecc_op F32 f32_fract(F32 a) { return a - floorf(a); }
+
+vecc_op F64 f64_round(F64 a) { return round(a); }
+vecc_op F64 f64_floor(F64 a) { return floor(a); }
+vecc_op F64 f64_ceil (F64 a) { return ceil(a); }
+vecc_op F64 f64_trunc(F64 a) { return trunc(a); }
+vecc_op F64 f64_fract(F64 a) { return a - floor(a); }
 
 
 vecc_op I8  i8_min (I8  a, I8  b) { return a < b ? a : b; }
@@ -101,6 +117,37 @@ vecc_op B64 b64_clamp(B64 a, B64 lo, B64 hi) { if(a < lo) return lo; if(a > hi) 
 vecc_op F32 f32_clamp(F32 a, F32 lo, F32 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
 vecc_op F64 f64_clamp(F64 a, F64 lo, F64 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
 
+vecc_big_op void string_print   (String a) { printf("%.*s"  , int(a.len), a.data); }
+vecc_big_op void string_println (String a) { printf("%.*s\n", int(a.len), a.data); }
+vecc_big_op void i8_print       (I8     a) { printf("%i"  , (I32)a); }
+vecc_big_op void i8_println     (I8     a) { printf("%i\n", (I32)a); }
+vecc_big_op void i16_print      (I16    a) { printf("%hi"  , a); }
+vecc_big_op void i16_println    (I16    a) { printf("%hi\n", a); }
+vecc_big_op void i32_print      (I32    a) { printf("%i"  , a); }
+vecc_big_op void i32_println    (I32    a) { printf("%i\n", a); }
+vecc_big_op void i64_print      (I64    a) { printf("%lli"  , a); }
+vecc_big_op void i64_println    (I64    a) { printf("%lli\n", a); }
+vecc_big_op void u8_print       (U8     a) { printf("%u"  , (U32)a); }
+vecc_big_op void u8_println     (U8     a) { printf("%u\n", (U32)a); }
+vecc_big_op void u16_print      (U16    a) { printf("%hu"  , a); }
+vecc_big_op void u16_println    (U16    a) { printf("%hu\n", a); }
+vecc_big_op void u32_print      (U32    a) { printf("%u"  , a); }
+vecc_big_op void u32_println    (U32    a) { printf("%u\n", a); }
+vecc_big_op void u64_print      (U64    a) { printf("%llu"  , a); }
+vecc_big_op void u64_println    (U64    a) { printf("%llu\n", a); }
+vecc_big_op void b8_print       (B8     a) { printf("%s"  , a ? "true" : "false"); }
+vecc_big_op void b8_println     (B8     a) { printf("%s\n", a ? "true" : "false"); }
+vecc_big_op void b16_print      (B16    a) { printf("%s"  , a ? "true" : "false"); }
+vecc_big_op void b16_println    (B16    a) { printf("%s\n", a ? "true" : "false"); }
+vecc_big_op void b32_print      (B32    a) { printf("%s"  , a ? "true" : "false"); }
+vecc_big_op void b32_println    (B32    a) { printf("%s\n", a ? "true" : "false"); }
+vecc_big_op void b64_print      (B64    a) { printf("%s"  , a ? "true" : "false"); }
+vecc_big_op void b64_println    (B64    a) { printf("%s\n", a ? "true" : "false"); }
+vecc_big_op void f32_print      (F32    a) { printf("%f"  , a); }
+vecc_big_op void f32_println    (F32    a) { printf("%f\n", a); }
+vecc_big_op void f64_print      (F64    a) { printf("%g"  , a); }
+vecc_big_op void f64_println    (F64    a) { printf("%g\n", a); }
+
 #define VECC_AVX2 1
 
 #ifdef VECC_AVX2
@@ -109,18 +156,21 @@ vecc_op F64 f64_clamp(F64 a, F64 lo, F64 hi) { if(a < lo) return lo; if(a > hi) 
 
 typedef struct { I8      data[2]; } V2I8;
 typedef struct { I8      data[4]; } V4I8;
+typedef struct { I8      data[8]; } V8I8;
 typedef struct { __m128i data[1]; } V16I8;
 typedef struct { __m256i data[1]; } V32I8;
 typedef struct { __m256i data[2]; } V64I8;
 
 typedef struct { U8      data[2]; } V2U8;
 typedef struct { U8      data[4]; } V4U8;
+typedef struct { U8      data[8]; } V8U8;
 typedef struct { __m128i data[1]; } V16U8;
 typedef struct { __m256i data[1]; } V32U8;
 typedef struct { __m256i data[2]; } V64U8;
 
 typedef struct { B8      data[2]; } V2B8;
 typedef struct { B8      data[4]; } V4B8;
+typedef struct { B8      data[8]; } V8B8;
 typedef struct { __m128i data[1]; } V16B8;
 typedef struct { __m256i data[1]; } V32B8;
 typedef struct { __m256i data[2]; } V64B8;
@@ -208,11 +258,11 @@ typedef struct { __m256d data[16]; } V64B64;
 vecc_op F32 f32_rsqrt(F32 a) { return _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(a))); }
 vecc_op F64 f64_rsqrt(F64 a) { return 1.0 / sqrt(a); }
 
-vecc_big_op V8I32 v8f32_to_v8i32(V8F32 a) {
+vecc_op V8I32 v8f32_to_v8i32(V8F32 a) {
     return {{_mm256_cvtps_epi32(a.data[0])}};
 }
 
-vecc_big_op V8U32 v8f32_to_v8u32(V8F32 a) {
+vecc_op V8U32 v8f32_to_v8u32(V8F32 a) {
     return {{_mm256_cvtps_epi32(a.data[0])}};
 }
 
@@ -226,7 +276,10 @@ vecc_big_op V8I16 v8f32_to_v8i16(V8F32 a) {
     return {{_mm256_castsi256_si128(_mm256_packs_epi32(a32, a32))}};
 }
 
-vecc_big_op V8F32 v8i32_to_v8f32(V8I32 a) { return {{_mm256_cvtepi32_ps(a.data[0])}}; }
+vecc_op V8F32 v8i32_to_v8f32(V8I32 a) { return {{_mm256_cvtepi32_ps(a.data[0])}}; }
+
+vecc_op V8U32 v8i32_to_v8u32(V8I32 a) { return {{a.data[0]}}; }
+vecc_op V8I32 v8u32_to_v8i32(V8U32 a) { return {{a.data[0]}}; }
 
 vecc_op V8F32 v8f32_set1(F32 a) { return {{_mm256_set1_ps(a)}}; }
 vecc_op V4F64 v4f64_set1(F64 a) { return {{_mm256_set1_pd(a)}}; }
@@ -282,7 +335,8 @@ vecc_op V8U32 v8u32_or  (V8U32 a, V8U32 b)  { return {{_mm256_or_si256(a.data[0]
 vecc_op V8U32 v8u32_xor (V8U32 a, V8U32 b)  { return {{_mm256_xor_si256(a.data[0], b.data[0])}}; }
 vecc_op V8U32 v8u32_sl  (V8U32 a, int b)    { return {{_mm256_slli_epi32(a.data[0], b)}}; }
 vecc_op V8U32 v8u32_sr  (V8U32 a, int b)    { return {{_mm256_srli_epi32(a.data[0], b)}}; }
-vecc_op V8U32 v8u32_andnot(V8U32 a, V8U32 b)  { return {{_mm256_andnot_si256(b.data[0], a.data[0])}}; }
+vecc_op V8U32 v8u32_andnot(V8U32 a, V8U32 b){ return {{_mm256_andnot_si256(b.data[0], a.data[0])}}; }
+vecc_op V8U32 v8u32_not (V8U32 a)           { return {{_mm256_xor_si256(a.data[0], _mm256_set1_epi32(0xffffffff))}}; }
 
 vecc_op V8B32 v8b32_and (V8B32 a, V8B32 b)  { return {{_mm256_and_si256(a.data[0], b.data[0])}}; }
 vecc_op V8B32 v8b32_or  (V8B32 a, V8B32 b)  { return {{_mm256_or_si256(a.data[0], b.data[0])}}; }

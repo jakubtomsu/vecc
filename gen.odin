@@ -181,6 +181,9 @@ gen_value :: proc(g: ^Gen, value: Value, type: ^Type) {
             assert(false)
         }
 
+    case string:
+        gen_printf(g, "{{\"%s\", %i}}", v, len(v))
+
     // HACK
 
     case [8]i32:
@@ -319,7 +322,11 @@ gen_urnary_expr :: proc(g: ^Gen, ast: ^Ast) {
             prefix = "-"
 
         case .Not:
-            prefix = "!"
+            if type_is_boolean(ast.type) {
+                prefix = "!"
+            } else {
+                prefix = "~"
+            }
 
         case:
             assert(false)
@@ -375,8 +382,6 @@ gen_cast_op_data :: proc(
         return {}
     }
 
-    fmt.println("CAST OP:", type_to_string(type), "<-", type_to_string(value))
-
     #partial switch op {
     case .Reinterpret:
         result.prefix = "(*("
@@ -397,7 +402,6 @@ gen_cast_op_data :: proc(
 
             case Type_Array:
                 sub: Gen_Op_Data
-                fmt.print("\t")
                 sub = gen_cast_op_data(g,
                     type = tv.type,
                     value = value,
@@ -782,7 +786,6 @@ gen_type_decl :: proc(g: ^Gen, type: ^Type) {
             // None, defined in builtin
 
         case .Fixed_Array:
-            fmt.println(type_to_string(type), ":", type_to_string(v.type))
             assert(v.type.cname != "")
             gen_printf(g, "typedef struct {{ ")
             gen_printf(g, "{} data[{}]; ", v.type.cname, v.len)
@@ -1111,8 +1114,6 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
         return type.cname
     }
 
-    fmt.println("GEN CNAME", type_to_string(type))
-
     #partial switch v in type.variant {
     case Type_Basic:
         switch v.kind {
@@ -1130,6 +1131,7 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
         case .U64:  return "U64"
         case .F32:  return "F32"
         case .F64:  return "F64"
+        case .String:return "String"
         }
 
     case Type_Array:
@@ -1199,6 +1201,9 @@ gen_value_decl :: proc(g: ^Gen, ast: ^Ast) {
 
             case .F64:
                 gen_print(g, "0.0")
+
+            case .String:
+                gen_print(g, "{0}")
             }
 
         case:
@@ -1274,6 +1279,7 @@ gen_if_stmt :: proc(g: ^Gen, ast: ^Ast) {
             for s := if_block.scope.parent; s != nil; s = s.parent {
                 if .Masked in s.flags {
                     parent_masked_id = s.local_id
+                    break
                 }
             }
             if parent_masked_id == -1 {
@@ -1315,6 +1321,7 @@ gen_if_stmt :: proc(g: ^Gen, ast: ^Ast) {
             for s := block.scope.parent; s != nil; s = s.parent {
                 if .Masked in s.flags {
                     parent_masked_id = s.local_id
+                    break
                 }
             }
             if parent_masked_id == -1 {
@@ -1627,8 +1634,6 @@ gen_program :: proc(g: ^Gen) {
     gen_print(g, "\n// VECC function definitions\n\n")
 
     for sorted in sorted_entities {
-        ast_print(sorted.entity.ast, sorted.name, 0)
-
         #partial switch v in sorted.entity.variant {
         case Entity_Proc:
             decl := sorted.entity.ast.variant.(Ast_Proc_Decl)

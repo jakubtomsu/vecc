@@ -54,6 +54,8 @@ Entity_Builtin_Kind :: enum u8 {
     Vector_Width,
     Vector_Index,
     // Procs
+    Print,
+    Println,
     Min,
     Max,
     Clamp,
@@ -201,7 +203,7 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     return
 
     _to_value :: proc(c: ^Checker, basic: Type_Basic_Kind, lit: Ast_Basic_Literal) -> Value {
-        #partial switch basic {
+        switch basic {
         case .B8,
              .B16,
              .B32,
@@ -236,6 +238,11 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
             val, ok := strconv.parse_f64(lit.token.text)
             assert(ok)
             return f64(val)
+
+        case .String:
+            res, alloc, succ := strconv.unquote_string(lit.token.text)
+            assert(succ)
+            return res
         }
         return nil
     }
@@ -307,6 +314,13 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
         proc_decl := ent.ast.variant.(Ast_Proc_Decl)
         proc_type := proc_decl.type.variant.(Ast_Proc_Type)
 
+        if len(call_expr.args) != len(proc_type.params) {
+            checker_error(c, "Wrong number of call arguments, expected {}, got {}",
+                len(proc_type.params),
+                len(call_expr.args),
+            )
+        }
+
         for arg, i in call_expr.args {
             hint := proc_type.params[i].type
             check_expr(c, arg, hint)
@@ -328,6 +342,9 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
         }
 
         #partial switch v.kind {
+        case .Print, .Println:
+            assert(len(call_expr.args) == 1)
+
         case .Min,
              .Max:
             assert(len(call_expr.args) == 2) // Allow also 3 params? or any number > 1?
@@ -725,7 +742,7 @@ check_selector_expr :: proc(c: ^Checker, ast: ^Ast) {
         }
 
         if expr.right.type == nil {
-            checker_error(c, "Invalid field")
+            checker_error(c, "Invalid field {}", name[0])
         }
     }
 
@@ -866,7 +883,6 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
     }
 
     if decl.vector == .Vector {
-        fmt.println(type_to_string(decl.type.type))
         // NOTE: things like this could be cached on the scalar type, but idgaf for now
         vec := type_vectorize(decl.type.type)
         decl.type.type = find_or_create_type(c, vec)
@@ -1137,7 +1153,7 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
         case .Float:        return c.basic_types[.F32]
         case .True, .False: return c.basic_types[.B8]
         case .Char:         return c.basic_types[.U8]
-        case .String:       unimplemented("")
+        case .String:       return c.basic_types[.String]
         }
 
     case Ast_Pointer_Type:
@@ -1324,8 +1340,6 @@ check_scope_procedures_recursive :: proc(c: ^Checker, scope: ^Scope) {
     for name, ent in scope.entities {
         c.curr_entity = ent
 
-        ast_print(ent.ast, "", 0)
-
         #partial switch v in ent.variant {
         case Entity_Proc:
             decl := ent.ast.variant.(Ast_Proc_Decl)
@@ -1358,6 +1372,7 @@ check_program :: proc(c: ^Checker) {
         .U64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .U64}}),
         .F32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .F32}}),
         .F64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .F64}}),
+        .String = new_clone(Type{size = 16, variant = Type_Basic{kind = .String}}),
     }
 
     for t in c.basic_types {
@@ -1373,6 +1388,8 @@ check_program :: proc(c: ^Checker) {
     create_entity(c.curr_file_scope, "vector_index", nil, Entity_Builtin{
         kind = .Vector_Index, value = [8]i32{0, 1, 2, 3, 4, 5, 6, 7}, type = v8i32_type})
 
+    create_entity(c.curr_file_scope, "print"   , nil, Entity_Builtin{kind = .Print})
+    create_entity(c.curr_file_scope, "println" , nil, Entity_Builtin{kind = .Println})
     create_entity(c.curr_file_scope, "min"     , nil, Entity_Builtin{kind = .Min})
     create_entity(c.curr_file_scope, "max"     , nil, Entity_Builtin{kind = .Max})
     create_entity(c.curr_file_scope, "clamp"   , nil, Entity_Builtin{kind = .Clamp})
@@ -1409,8 +1426,6 @@ check_program :: proc(c: ^Checker) {
 
     for name, ent in c.curr_file_scope.entities {
         c.curr_entity = ent
-
-        ast_print(ent.ast, "", 0)
 
         #partial switch v in ent.variant {
         case Entity_Variable:

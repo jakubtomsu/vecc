@@ -622,7 +622,6 @@ register_value_entity :: proc(
 }
 
 parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
-    fmt.println("PARSE TYPE:", peek(p))
     #partial switch peek(p) {
     case .Open_Bracket:
         expect(p, .Open_Bracket)
@@ -798,9 +797,6 @@ parse_proc_decl :: proc(p: ^Parser) -> ^Ast {
 
     ident_tok := expect(p, .Ident)
 
-    fmt.println("PARSE PROC DECL", ident_tok)
-
-
     name := ident_tok.text
 
     ast.order_index = -1
@@ -876,8 +872,6 @@ register_entity :: proc(
 
 create_entity :: proc(scope: ^Scope, name: string, ast: ^Ast, variant: Entity_Variant) -> ^Entity {
     entity := new(Entity)
-
-    fmt.println("Create entity", name)
 
     entity.ast = ast
     entity.name = name

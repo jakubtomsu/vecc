@@ -14,8 +14,9 @@ Value :: union {
     bool,
     i128,
     f64,
+    string,
     [8]i32, // HACK
-    [8]f32
+    [8]f32,
 }
 
 Ast_Variant :: union {
