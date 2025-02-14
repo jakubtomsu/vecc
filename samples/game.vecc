@@ -1,6 +1,12 @@
-// Small 2d game
-
+// Juiced up topdown shooter 2d game
+//
+// Controls:
+// Arrows - movement
+// X      - shoot forward
+// Z      - shoot backward
+//
 // MANY THINGS ARE A TOTAL HACK AND WILL NEED TO BE CHANGED LATER!!!
+//
 
 const export RESOLUTION_X I32 = 8 * 30
 const export RESOLUTION_Y I32 = 8 * 30
@@ -21,9 +27,9 @@ struct Player {
     pos             [2]F32
     vel             [2]F32
     dir             [2]F32
-    health          F32
     gun_timer       F32
     powerup_timer   [3]F32
+    particle_timer  F32
 }
 
 mut player Player
@@ -42,19 +48,20 @@ struct Bullet {
     vel     [2]F32
     timer   F32
     level   U8
+    explode B8
 }
 
 mut g_bullets [64]Bullet
 
-// Only the effect
-struct Explosion {
+struct Effect {
     pos     [2]F32
     rad     F32
     timer   F32
     dur     F32
+    color   [4]U8
 }
 
-mut g_explosions [128]Explosion
+mut g_effects [128]Effect
 
 struct Enemy {
     pos             [2]F32
@@ -70,11 +77,23 @@ struct Enemy {
 const ENEMY_STATE_DEAD      U8 = 0
 const ENEMY_STATE_ALIVE     U8 = 1
 
+const ENEMY_COLOR_NORMAL [4]U8 = {255; 50; 200; 0}
+const ENEMY_COLOR_FAST   [4]U8 = {200; 0; 255; 0}
+const ENEMY_COLOR_BIG    [4]U8 = {255; 10; 100; 0}
+
+const GAME_MAX_TIME F32 = 100
+
 mut g_enemies [64]Enemy
 
 mut g_enemy_spawn_timer F32 = 5
+mut g_game_timer F32 = 0
 
 mut g_seed U32 = 1
+
+mut g_camera [2]I32
+mut g_shake F32
+
+mut g_hit_pause F32
 
 procedure hash (mut n U32) U32 {
     n = (n << 13) ^ n
@@ -90,6 +109,15 @@ procedure rand_u32 () U32 {
 
 procedure rand_f32 () F32 {
     return conv(F32, rand_u32()) / 32767.0
+}
+
+procedure color_to_u32 (immut col [4]U8) U32 {
+    mut result U32
+    result  = conv(U32, col.b)
+    result |= conv(U32, col.g) << 8
+    result |= conv(U32, col.r) << 16
+    result |= conv(U32, col.a) << 24
+    return result
 }
 
 procedure spawn_item (
@@ -108,6 +136,50 @@ procedure spawn_item (
     }
 }
 
+procedure spawn_effect (
+    immut pos   [2]F32
+    immut rad   F32
+    immut dur   F32
+    immut col   [4]U8
+) {
+    for i I32; i < 128; i += 1 {
+        mut effect Effect = g_effects[i]
+        if effect.timer > effect.dur {
+            effect.pos = pos
+            effect.rad = rad
+            effect.timer = 0
+            effect.dur = dur
+            effect.color = col
+            g_effects[i] = effect
+            break
+        }
+    }
+}
+
+procedure reset_game () {
+    player.pos = {conv(F32, RESOLUTION_X); conv(F32, RESOLUTION_Y)} / 2
+
+    player.vel = 0
+    player.gun_timer = 0
+    player.powerup_timer = {0; 0; 0}
+
+    for i I32; i < 64; i += 1 {
+        g_items[i].powerup = -1
+    }
+
+    for i I32; i < 64; i += 1 {
+        g_enemies[i].pos = -100
+        g_enemies[i].state = ENEMY_STATE_DEAD
+    }
+
+    for i I32; i < 64; i += 1 {
+        g_effects[i].dur = -1
+    }
+
+    g_enemy_spawn_timer = 0
+    g_game_timer = 0
+}
+
 procedure export compute_frame (
     immut vector framebuffer    [^]U32
     immut resolution            [2]I32
@@ -117,30 +189,45 @@ procedure export compute_frame (
     immut keys                  U32
 ) {
     if frame == 0 {
-        player.pos = {conv(F32, RESOLUTION_X); conv(F32, RESOLUTION_Y)} / 2
-
-        for i I32; i < 64; i += 1 {
-            g_items[i].powerup = -1
-        }
-
-        for i I32; i < 64; i += 1 {
-            g_enemies[i].pos = -100
-        }
+        reset_game()
     }
+
+    mut should_hit_pause B32 = g_hit_pause > 0
+    g_hit_pause -= delta
+    if should_hit_pause {
+        return
+    }
+
+    g_game_timer += delta
+
+    mut end_game Bool
 
     mut clear_mask U32 = reinterpret(U32, delta)
     clear_mask = !clear_mask
 
     immut num_pixel_blocks I32 = (resolution.x * resolution.y) / vector_width
     for i I32; i < num_pixel_blocks; i += 1 {
-        // immut offs U32 = conv(U32, (i + frame) & 127)
-        // framebuffer[i] = (framebuffer[i] & 0x12345678)
         immut vector c U32 = framebuffer[i]
-        // framebuffer[i] = c & 0x22222222
-        // framebuffer[i] = 0x33333333
-        framebuffer[i] = (c * 8)
-        // framebuffer[i] = (framebuffer[i] & (conv(U32, i + (frame & 31))))
+        framebuffer[i] = c << 5
     }
+    // if (frame & 1) == 0 {
+    //     for i I32; i < num_pixel_blocks; i += 1 {
+    //         immut vector c U32 = framebuffer[i]
+    //         framebuffer[i] &= {0x55555555; 0x11111111; 0x55555555; 0x11111111; 0x55555555; 0x11111111; 0x55555555; 0x11111111}
+    //     }
+    // } else {
+    //     for i I32; i < num_pixel_blocks; i += 1 {
+    //         immut vector c U32 = framebuffer[i]
+    //         framebuffer[i] &= {0x11111111; 0x55555555; 0x11111111; 0x55555555; 0x11111111; 0x55555555; 0x11111111; 0x55555555}
+    //     }
+    // }
+
+    g_camera = {
+        conv(I32, round((rand_f32() - 0.5) * g_shake))
+        conv(I32, round((rand_f32() - 0.5) * g_shake))
+    }
+
+    g_shake = max(0.0, g_shake - (delta * 50))
 
     for i I32; i < 64; i += 1 {
         mut enemy Enemy = g_enemies[i]
@@ -149,8 +236,9 @@ procedure export compute_frame (
             continue
         }
 
-        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {20; 50; 0; 0},
-            {true; false; true; false; true; false; true; false})
+        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {40; 10; 10; 0},
+            // {true; false; true; false; true; false; true; false})
+            true)
     }
 
     for i I32; i < 64; i += 1 {
@@ -170,7 +258,7 @@ procedure export compute_frame (
             if player.powerup_timer[item.powerup] < 0 {
                 player.powerup_timer[item.powerup] = 0
             }
-            player.powerup_timer[item.powerup] += 10
+            player.powerup_timer[item.powerup] += 7
             item.powerup = -1
         }
 
@@ -179,9 +267,9 @@ procedure export compute_frame (
         mut rad F32 = round(2.2 + (sin((time + conv(F32, i * 13)) * 8) * 0.7))
 
         mut color [4]U8
-        if item.powerup == PLAYER_POWERUP_FAST_FIRE  { color = {255; 255; 0; 0} }
-        if item.powerup == PLAYER_POWERUP_SHOTGUN    { color = {0; 255; 255; 0} }
-        if item.powerup == PLAYER_POWERUP_EXPLOSIVE  { color = {255; 0; 255; 0} }
+        if item.powerup == PLAYER_POWERUP_FAST_FIRE  { color = {0; 255; 0; 0} }
+        if item.powerup == PLAYER_POWERUP_SHOTGUN    { color = {255; 255; 0; 0} }
+        if item.powerup == PLAYER_POWERUP_EXPLOSIVE  { color = {0; 255; 255; 0} }
 
         if item.timer > 7 {
             if sin(item.timer * 30) > 0 {
@@ -217,30 +305,42 @@ procedure export compute_frame (
             enemy.vel = normalize(enemy.vel) * clamp(length(enemy.vel), 0, enemy.speed)
 
             enemy.pos += enemy.vel * delta
+
+            mut rad F32 = conv(F32, enemy.size) + 2
+            if length2(enemy.pos - player.pos) < (rad * rad) {
+                end_game = true
+            }
         }
 
         if enemy.health <= 0 {
             enemy.state = ENEMY_STATE_DEAD
+            spawn_effect(enemy.pos, 9, 0.05, {255; 255; 255; 255})
+            g_shake += 5
+            g_hit_pause = 0.02
 
-            mut p U32 = rand_u32() % 20
+            mut p U32 = rand_u32() % 10
             if p < 3 {
                 spawn_item(enemy.pos, conv(I32, p))
             }
         }
 
         mut color [4]U8
-        color = {100; 255; 10; 0}
+        color = ENEMY_COLOR_NORMAL
+        if enemy.kind == 1 { color = ENEMY_COLOR_FAST }
+        if enemy.kind == 2 { color = ENEMY_COLOR_BIG }
+
         if enemy.damage_timer < 0.05 {
             color = {255; 255; 255; 255}
         }
 
-        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, color, true)
+        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), conv(I32, enemy.size), conv(I32, enemy.size+1), color, true)
 
         g_enemies[i] = enemy
     }
 
     g_enemy_spawn_timer += delta
-    if (g_enemy_spawn_timer > 1) & (oldest_corpse != -1) {
+    immut spawn_rate F32 = 0.2 + (1.8 * max(0.0, 1.0 - (g_game_timer / GAME_MAX_TIME)))
+    if (g_enemy_spawn_timer > spawn_rate) & (oldest_corpse != -1) {
         g_enemy_spawn_timer = 0
 
         mut enemy Enemy = g_enemies[oldest_corpse]
@@ -263,26 +363,38 @@ procedure export compute_frame (
             enemy.pos.x = conv(F32, conv(I32, rand_u32()) % RESOLUTION_X)
         }
 
-        if (time > 0) & ((rand_u32() % 4) == 0) {
-            enemy.size = 10
-            enemy.health = 4
+        if (g_game_timer > 10) & ((rand_u32() % 4) == 0) {
+            enemy.size = 8
+            enemy.health = 6
             enemy.speed = 8
             enemy.kind = 2
         } else {
-            if (time > 0) & ((rand_u32() % 2) == 0) {
-                enemy.size = 3
-                enemy.health = 2
+            if (g_game_timer > 5) & ((rand_u32() % 2) == 0) {
+                enemy.size = 5
+                enemy.health = 0.5
                 enemy.speed = 30
                 enemy.kind = 1
             } else {
-                enemy.size = 5
-                enemy.health = 1
+                enemy.size = 6
+                enemy.health = 2
                 enemy.speed = 20
                 enemy.kind = 0
             }
         }
 
         g_enemies[oldest_corpse] = enemy
+    }
+
+    for i I32 = 0; i < 128; i += 1 {
+        mut effect Effect = g_effects[i]
+        effect.timer += delta
+
+        if effect.timer < effect.dur {
+            draw_octagon(framebuffer, resolution, conv(I32, effect.pos),
+                conv(I32, effect.rad), conv(I32, effect.rad * 1.5), reinterpret([4]U8, effect.color), true)
+        }
+
+        g_effects[i] = effect
     }
 
     {
@@ -306,9 +418,11 @@ procedure export compute_frame (
         mut num_shots I32 = 1
         mut shot_spread F32 = 0.25
         mut bullet_level U8 = 0
+        mut bullet_speed F32 = 300
 
         if powerups[PLAYER_POWERUP_FAST_FIRE] {
-            cooldown_time *= 0.3
+            cooldown_time *= 0.4
+            bullet_speed *= 1.5
             bullet_level += 1
         }
 
@@ -319,15 +433,28 @@ procedure export compute_frame (
             bullet_level += 1
         }
 
+        if powerups[PLAYER_POWERUP_EXPLOSIVE] {
+            bullet_speed *= 0.7
+            cooldown_time *= 2
+            bullet_level += 1
+        }
+
         player.gun_timer += delta
-        immut shooting B32 = (keys & KEY_X_BIT) != 0
+
+        mut shoot_dir F32 = 1
+        mut shooting B32
+        if (keys & KEY_X_BIT) != 0 { shoot_dir =  1; shooting = true }
+        if (keys & KEY_Z_BIT) != 0 { shoot_dir = -1; shooting = true } // overwrite is intentional
+
+
         if shooting & (player.gun_timer > cooldown_time) {
             player.gun_timer = 0
-            player.vel -= player.dir * 45
+            player.vel -= player.dir * 38
             mut bullet_num I32 = 0
+            g_shake = 1
             for i I32; i < 64; i += 1 {
                 if !g_bullets[i].used {
-                    mut bdir [2]F32 = player.dir
+                    mut bdir [2]F32 = player.dir * shoot_dir
                     bdir.x += (rand_f32() - 0.5) * shot_spread
                     bdir.y += (rand_f32() - 0.5) * shot_spread
                     bdir = normalize(bdir)
@@ -335,9 +462,10 @@ procedure export compute_frame (
                     g_bullets[i] = {
                         true
                         player.pos + (player.dir * 3)
-                        bdir * 300
+                        bdir * bullet_speed
                         0
                         bullet_level
+                        powerups[PLAYER_POWERUP_EXPLOSIVE]
                     }
                     bullet_num += 1
                     if bullet_num == num_shots {
@@ -353,6 +481,15 @@ procedure export compute_frame (
             }
         }
 
+        if aiming {
+            player.particle_timer += delta
+            if player.particle_timer > 0.1 {
+                player.particle_timer -= 0.1
+
+                spawn_effect(player.pos, 1, rand_f32() * 2, {100; 100; 100; 0})
+            }
+        }
+
         player.vel *= 0.9 // HACK
         player.vel += dir * (delta * 1000)
         player.pos += player.vel * delta
@@ -363,19 +500,19 @@ procedure export compute_frame (
 
         mut player_pos [2]F32 = player.pos
         player_pos.y -= round((0.5 + (0.5 * sin(time * 25))) * clamp(length(player.vel), 0, 1))
-        draw_octagon(framebuffer, resolution, conv(I32, player_pos), 3, 5, {255; 255; 0; 0}, true)
+        draw_octagon(framebuffer, resolution, conv(I32, player_pos), 3, 5, {255; 150; 0; 0}, true)
 
         mut gun_pos [2]I32 = conv(I32, player.pos)
-        gun_pos.x += conv(I32, (player.dir.x * 3) * min(player.gun_timer * 10, 1.0))
-        gun_pos.y += conv(I32, (player.dir.y * 3) * min(player.gun_timer * 10, 1.0))
+        gun_pos.x += conv(I32, ((player.dir.x * shoot_dir) * 3) * min(player.gun_timer * 10, 1.0))
+        gun_pos.y += conv(I32, ((player.dir.y * shoot_dir) * 3) * min(player.gun_timer * 10, 1.0))
         gun_pos.y += 1
 
-        mut gun_size [2]I32 = {6; 2}
+        mut gun_size [2]I32 = {7; 2}
         if player.dir.x == 0 {
             gun_size = {gun_size.y + 1; gun_size.x - 1}
         }
 
-        draw_rect(framebuffer, resolution, gun_pos - {gun_size.x / 2; gun_size.y/2}, gun_size, {255; 255; 255; 255})
+        draw_rect(framebuffer, resolution, (gun_pos - {gun_size.x / 2; gun_size.y/2}) - g_camera, gun_size, {255; 255; 255; 255})
     }
 
     for i I32; i < 64; i += 1 {
@@ -403,8 +540,8 @@ procedure export compute_frame (
                 immut hit Hit = intersect_ray_aabb(
                     bullet.pos,
                     move_dir,
-                    enemy.pos - conv(F32, enemy.size),
-                    enemy.pos + conv(F32, enemy.size),
+                    enemy.pos - conv(F32, enemy.size + 1),
+                    enemy.pos + conv(F32, enemy.size + 1),
                 )
 
                 if hit.hit & conv(B8, hit.tmin < tmin) {
@@ -419,9 +556,30 @@ procedure export compute_frame (
                 bullet.pos += move_dir * tmin
                 bullet.used = false
 
+                if bullet.explode {
+                    spawn_effect(bullet.pos, 24, 0.05, {0; 255; 255; 0})
+                    g_hit_pause = 0.09
+
+                    for ei I32; ei < 64; ei += 1 {
+                        mut enemy Enemy = g_enemies[ei]
+                        if enemy.state != ENEMY_STATE_ALIVE {
+                            continue
+                        }
+                        if length2(enemy.pos - bullet.pos) < (28*28) {
+                            enemy.health -= 6
+                            enemy.damage_timer = 0
+                            enemy.vel = 0
+                            g_enemies[hit_enemy] = enemy
+                        }
+                    }
+                } else {
+                    spawn_effect(bullet.pos, 4, 0.1, {0; 255; 255; 0})
+                }
+
                 mut enemy Enemy = g_enemies[hit_enemy]
                 enemy.health -= 1
                 enemy.damage_timer = 0
+                enemy.vel = bullet.vel
                 g_enemies[hit_enemy] = enemy
             }
 
@@ -431,15 +589,25 @@ procedure export compute_frame (
         g_bullets[i] = bullet
     }
 
+    draw_rect(framebuffer, resolution, {0; 1}, {RESOLUTION_X - 1; 1}, {100; 100; 100; 100})
+    draw_rect(framebuffer, resolution, {0; 1}, {max(0, conv(I32, conv(F32, RESOLUTION_X) * (1.0 - (g_game_timer / GAME_MAX_TIME)))); 1}, {255; 255; 255; 255})
+
     // if item.powerup == PLAYER_POWERUP_FAST_FIRE  { color = {255; 255; 0; 0} }
     // if item.powerup == PLAYER_POWERUP_SHOTGUN    { color = {0; 255; 255; 0} }
     // if item.powerup == PLAYER_POWERUP_EXPLOSIVE  { color = {255; 0; 255; 0} }
-    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 3},
-        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_FAST_FIRE]))); 2}, {255; 255; 0; 0})
-    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 6},
-        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_SHOTGUN]))); 2}, {0; 255; 255; 0})
-    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 9},
-        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_EXPLOSIVE]))); 2}, {255; 0; 255; 0})
+    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 5},
+        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_FAST_FIRE]))); 3}, {0; 255; 0; 0})
+    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 10},
+        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_SHOTGUN]))); 3}, {255; 255; 0; 0})
+    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 15},
+        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_EXPLOSIVE]))); 3}, {0; 255; 255; 0})
+
+    if end_game {
+        reset_game()
+         for i I32 = 0; i < num_pixel_blocks; i += 1 {
+            framebuffer[i] = 0
+        }
+    }
 }
 
 procedure draw_rect (
@@ -449,7 +617,7 @@ procedure draw_rect (
     immut size                  [2]I32
     immut color                 [4]U8
 ) {
-    immut col U32 = reinterpret(U32, color)
+    immut col U32 = color_to_u32(color)
     immut x_end I32 = pos.x + size.x
     immut x_range [2]I32 = {
         clamp(pos.x, 0, resolution.x) / vector_width
@@ -482,7 +650,8 @@ procedure draw_octagon (
     immut color                 [4]U8
     immut vector mask           B32
 ) {
-    immut col U32 = reinterpret(U32, color)
+    pos -= g_camera
+    immut col U32 = color_to_u32(color)
     immut x_start I32 = pos.x - size
     immut x_end   I32 = pos.x + size
     immut x_range [2]I32 = {
