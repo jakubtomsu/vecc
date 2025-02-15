@@ -8,18 +8,18 @@ const GLYPH_WIDTH  I32 = 5
 const GLYPH_HEIGHT I32 = 6
 
 immut g_glyphs [95]U32 = {
-		0x00000000;0x08021084;0x0000294a;0x15f52bea;0x08fa38be;0x33a22e60;0x2e94d8a6;0x00001084;
-        0x10421088;0x04421082;0x00a23880;0x00471000;0x04420000;0x00070000;0x0c600000;0x02222200;
-        0x1d3ad72e;0x3e4214c4;0x3e22222e;0x1d18320f;0x210fc888;0x1d183c3f;0x1d17844c;0x0222221f;
-        0x1d18ba2e;0x210f463e;0x0c6018c0;0x04401000;0x10411100;0x00e03800;0x04441040;0x0802322e;
-        0x3c1ef62e;0x231fc544;0x1f18be2f;0x3c10862e;0x1f18c62f;0x3e10bc3f;0x0210bc3f;0x1d1c843e;
-        0x2318fe31;0x3e42109f;0x0c94211f;0x23149d31;0x3e108421;0x231ad6bb;0x239cd671;0x1d18c62e;
-        0x0217c62f;0x30eac62e;0x2297c62f;0x1d141a2e;0x0842109f;0x1d18c631;0x08454631;0x375ad631;
-        0x22a21151;0x08421151;0x3e22221f;0x1842108c;0x20820820;0x0c421086;0x00004544;0xbe000000;
-        0x00000082;0x1c97b000;0x0e949c21;0x1c10b800;0x1c94b908;0x3c1fc5c0;0x42211c4c;0x4e87252e;
-        0x12949c21;0x0c210040;0x8c421004;0x12519521;0x0c210842;0x235aac00;0x12949c00;0x0c949800;
-        0x4213a526;0x7087252e;0x02149800;0x0e837000;0x0c213c42;0x0e94a400;0x0464a400;0x155ac400;
-        0x36426c00;0x4e872529;0x1e223c00;0x1843188c;0x08421084;0x0c463086;0x0006d800
+    0x00000000;0x08021084;0x0000294a;0x15f52bea;0x08fa38be;0x33a22e60;0x2e94d8a6;0x00001084;
+    0x10421088;0x04421082;0x00a23880;0x00471000;0x04420000;0x00070000;0x0c600000;0x02222200;
+    0x1d3ad72e;0x3e4214c4;0x3e22222e;0x1d18320f;0x210fc888;0x1d183c3f;0x1d17844c;0x0222221f;
+    0x1d18ba2e;0x210f463e;0x0c6018c0;0x04401000;0x10411100;0x00e03800;0x04441040;0x0802322e;
+    0x3c1ef62e;0x231fc544;0x1f18be2f;0x3c10862e;0x1f18c62f;0x3e10bc3f;0x0210bc3f;0x1d1c843e;
+    0x2318fe31;0x3e42109f;0x0c94211f;0x23149d31;0x3e108421;0x231ad6bb;0x239cd671;0x1d18c62e;
+    0x0217c62f;0x30eac62e;0x2297c62f;0x1d141a2e;0x0842109f;0x1d18c631;0x08454631;0x375ad631;
+    0x22a21151;0x08421151;0x3e22221f;0x1842108c;0x20820820;0x0c421086;0x00004544;0xbe000000;
+    0x00000082;0x1c97b000;0x0e949c21;0x1c10b800;0x1c94b908;0x3c1fc5c0;0x42211c4c;0x4e87252e;
+    0x12949c21;0x0c210040;0x8c421004;0x12519521;0x0c210842;0x235aac00;0x12949c00;0x0c949800;
+    0x4213a526;0x7087252e;0x02149800;0x0e837000;0x0c213c42;0x0e94a400;0x0464a400;0x155ac400;
+    0x36426c00;0x4e872529;0x1e223c00;0x1843188c;0x08421084;0x0c463086;0x0006d800
 }
 
 const export KEY_LEFT_BIT   I32 = 1 << 0
@@ -44,16 +44,34 @@ procedure export compute_frame (
 
     // print_glyph(g_glyphs[80])
 
-    immut chars [6]U8 = {'H'; 'E'; 'L'; 'L'; 'O'; '!'}
-    for i I32; i < 6; i += 1 {
+    mut y I32 = 1
+    mut x I32 = 1
+    for i I32; i < g_glyphs.len; i += 1 {
         draw_glyph(reinterpret([^]U32, framebuffer), resolution,
-            g_glyphs[conv(I32, chars[i]) - 32], {10 + (i * (GLYPH_WIDTH + 1)); 10}, 0x5566ffff)
+            g_glyphs[i], {x; y}, 0x77777777)
+        x += GLYPH_WIDTH + 1
+        if x > (RESOLUTION_X - (GLYPH_WIDTH + 2)) {
+            x = 1
+            y += GLYPH_HEIGHT + 1
+        }
+    }
+
+    x = 1
+    y += (GLYPH_HEIGHT + 1) * 2
+
+    immut msg String = "hello abfakjshdfksd!"
+    for i I32; i < msg.len; i += 1 {
+        draw_glyph(reinterpret([^]U32, framebuffer), resolution,
+            g_glyphs[conv(I32, msg[i]) - 32], {x; y}, 0x5566ffff)
+        x += GLYPH_WIDTH + 1
+        if x > (RESOLUTION_X - (GLYPH_WIDTH + 2)) {
+            x = 1
+            y += GLYPH_HEIGHT + 1
+        }
     }
 }
 
-procedure print_glyph (
-    immut glyph                 U32
-) {
+procedure print_glyph (immut glyph U32) {
     for y I32; y < GLYPH_HEIGHT; y += 1 {
         for x I32; x < GLYPH_WIDTH; x += 1 {
             immut shift U32 = conv(U32, (y * GLYPH_WIDTH) + x)
@@ -81,7 +99,10 @@ procedure draw_glyph (
             immut shift U32 = conv(U32, (y * GLYPH_WIDTH) + x)
             immut bit U32 = (glyph >> shift) & 1
             if bit != 0 {
-                framebuffer[(pos.x + x) + ((pos.y + y) * resolution.x)] = color
+                immut coord [2]I32 = pos + {x; y}
+                if ((coord.x >= 0) & (coord.x < resolution.x)) & ((coord.y >= 0) & (coord.y < resolution.y)) {
+                    framebuffer[coord.x + (coord.y * resolution.x)] = color
+                }
             }
         }
     }
