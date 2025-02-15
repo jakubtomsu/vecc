@@ -7,9 +7,13 @@
 #include <stdio.h>
 #include <vecc_builtin.h>
 
+typedef struct { F32 data[9]; } Aos9F32;
 typedef struct { I32 data[2]; } Aos2I32;
+typedef struct { F32 data[2]; } Aos2F32;
+typedef struct { Aos2F32 data[31]; } Aos31Aos2F32;
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
+static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
 static Aos2I32 aos2i32_add(Aos2I32 a, Aos2I32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1]}}; }
 static Aos2I32 aos2i32_sub(Aos2I32 a, Aos2I32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1]}}; }
 static Aos2I32 aos2i32_mul(Aos2I32 a, Aos2I32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1]}}; }
@@ -18,6 +22,14 @@ static Aos2I32 aos2i32_and(Aos2I32 a, Aos2I32 b) { return {{a.data[0] & b.data[0
 static Aos2I32 aos2i32_or(Aos2I32 a, Aos2I32 b) { return {{a.data[0] | b.data[0], a.data[1] | b.data[1]}}; }
 static Aos2I32 aos2i32_xor(Aos2I32 a, Aos2I32 b) { return {{a.data[0] ^ b.data[0], a.data[1] ^ b.data[1]}}; }
 static Aos2I32 aos2i32_neg(Aos2I32 a) { return {{-a.data[0], -a.data[1]}}; }
+static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
+static Aos2F32 aos2f32_set1(F32 a) { return {{a, a}}; }
+static Aos2I32 aos2f32_to_aos2i32(Aos2F32 a) { return {{(I32)a.data[0], (I32)a.data[1]}}; }
+static Aos2F32 aos2f32_add(Aos2F32 a, Aos2F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1]}}; }
+static Aos2F32 aos2f32_sub(Aos2F32 a, Aos2F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1]}}; }
+static Aos2F32 aos2f32_mul(Aos2F32 a, Aos2F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1]}}; }
+static Aos2F32 aos2f32_div(Aos2F32 a, Aos2F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1]}}; }
+static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
 
 // VECC exported constants
 
@@ -43,14 +55,33 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 
 static U32 rand_u32();
 static F32 rand_f32();
+static F32 wave_sin(F32 t, F32 freq);
+static F32 wave_square(F32 t, F32 freq);
+static F32 wave_saw(F32 t, F32 freq);
+static F32 wave_triangle(F32 t, F32 freq);
+static F32 wave_noise();
 
 // VECC global variable declarations
 
 I32 sample_index = 0;
-F32 freq = 16.0f;
 F32 loud = 0.5f;
 I32 effect_sample = 0;
 U32 g_seed = 1;
+const Aos9F32 NOTE_C = {{16.35f, 32.7f, 65.41f, 130.81f, 261.63f, 523.25f, 1046.5f, 2093.0f, 4186.0f}};
+const Aos9F32 NOTE_CS = {{17.32f, 34.65f, 69.3f, 138.59f, 277.17999f, 554.37f, 1108.72998f, 2217.46f, 4434.9199f}};
+const Aos9F32 NOTE_D = {{18.35f, 36.709999f, 73.419998f, 146.83f, 293.66f, 587.33f, 1174.66f, 2349.32f, 4698.6299f}};
+const Aos9F32 NOTE_DS = {{19.45f, 38.889999f, 77.779999f, 155.56f, 311.13f, 622.25f, 1244.51f, 2489.0f, 4978.0f}};
+const Aos9F32 NOTE_E = {{20.6f, 41.2f, 82.41f, 164.81f, 329.63f, 659.25f, 1318.51f, 2637.0f, 5274.0f}};
+const Aos9F32 NOTE_F = {{21.83f, 43.65f, 87.309998f, 174.61f, 349.23f, 698.46f, 1396.91f, 2793.83f, 5587.6499f}};
+const Aos9F32 NOTE_FS = {{23.12f, 46.25f, 92.5f, 185.0f, 369.98999f, 739.98999f, 1479.97998f, 2959.96f, 5919.91f}};
+const Aos9F32 NOTE_G = {{24.5f, 49.0f, 98.0f, 196.0f, 392.0f, 783.98999f, 1567.97998f, 3135.96f, 6271.93f}};
+const Aos9F32 NOTE_GS = {{25.959999f, 51.91f, 103.83f, 207.64999f, 415.29999f, 830.60999f, 1661.21997f, 3322.4399f, 6644.8799f}};
+const Aos9F32 NOTE_A = {{27.5f, 55.0f, 110.0f, 220.0f, 440.0f, 880.0f, 1760.0f, 3520.0f, 7040.0f}};
+const Aos9F32 NOTE_AS = {{29.139999f, 58.27f, 116.54f, 233.08f, 466.16f, 932.33f, 1864.66f, 3729.31f, 7458.62f}};
+const Aos9F32 NOTE_B = {{30.87f, 61.74f, 123.47f, 246.94f, 493.88f, 987.77f, 1975.53f, 3951.0f, 7902.1299f}};
+const F32 PI = 3.1415927f;
+F32 note_time = 0.0f;
+I32 note_index = 0;
 
 // VECC function definitions
 
@@ -61,6 +92,31 @@ static U32 rand_u32() {
 
 static F32 rand_f32() {
 	return (F32)rand_u32() / 32767.0f;
+}
+
+static F32 wave_sin(F32 t, F32 freq) {
+	return f32_sin((2.0f * PI) * (t * freq));
+}
+
+static F32 wave_square(F32 t, F32 freq) {
+	if (((I32)(t * freq) & 1) == 0) {
+		return 1.0f;
+	} else {
+		return -1.0f;
+	};
+}
+
+static F32 wave_saw(F32 t, F32 freq) {
+	return (f32_fract(t * freq) - 0.5f) * 2.0f;
+}
+
+static F32 wave_triangle(F32 t, F32 freq) {
+	t = t * freq;
+	return (f32_abs((t + 0.25f) - f32_round(t + 0.25f)) * 4.0f) - 1.0f;
+}
+
+static F32 wave_noise() {
+	return (rand_f32() * 2.0f) - 1.0f;
 }
 
 void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys, F32* audio_buffer, I32 audio_samples) {
@@ -74,14 +130,28 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		effect_sample = 0;
 	};
 	loud = f32_clamp(loud, -1.0f, 1.0f);
+	const Aos31Aos2F32 NOTE_SEQUENCE = {{{{1.0f, NOTE_E.data[2]}}, {{1.0f, NOTE_E.data[2]}}, {{1.0f, NOTE_F.data[2]}}, {{2.0f, NOTE_FS.data[2]}}, {{1.0f, NOTE_A.data[2]}}, {{1.0f, NOTE_FS.data[2]}}, {{1.0f, NOTE_A.data[2]}}, {{1.0f, NOTE_FS.data[2]}}, {{1.0f, NOTE_FS.data[2]}}, {{1.0f, NOTE_F.data[2]}}, {{1.0f, NOTE_E.data[2]}}, {{1.0f, NOTE_B.data[2]}}, {{1.0f, NOTE_E.data[2]}}, {{2.0f, NOTE_E.data[2]}}, {{1.0f, NOTE_B.data[2]}}, {{1.0f, NOTE_E.data[2]}}, {{1.0f, NOTE_F.data[2]}}, {{2.0f, NOTE_FS.data[2]}}, {{1.0f, NOTE_A.data[2]}}, {{1.0f, NOTE_FS.data[2]}}, {{1.0f, NOTE_A.data[2]}}, {{1.0f, NOTE_FS.data[2]}}, {{1.0f, NOTE_FS.data[2]}}, {{1.0f, NOTE_F.data[2]}}, {{1.0f, NOTE_E.data[2]}}, {{1.0f, NOTE_B.data[2]}}, {{1.0f, NOTE_E.data[2]}}, {{2.0f, NOTE_E.data[2]}}, {{1.0f, NOTE_B.data[2]}}, {{1.0f, NOTE_E.data[2]}}, {{4.0f, NOTE_F.data[2]}}}};
+	if (note_index >= VECC_LEN(NOTE_SEQUENCE.data)) {
+		note_index = 0;
+		note_time = 0.0f;
+	};
+	Aos2F32 note = NOTE_SEQUENCE.data[note_index];
+	F32 freq = note.data[1];
+	F32 note_t = note_time / note.data[0];
+	F32 ampl = loud * ((1.0f - note_t) * f32_min(note_t * 10.0f, 1.0f));
 	for (I32 i = 0; i < audio_samples; i = i + 1) {
-		F32 saw = f32_sin((F32)sample_index / freq) * loud;
-		F32 effect = f32_fract((F32)effect_sample * 0.05f);
-		effect = effect + (rand_f32() - 0.5f);
-		effect = effect / (((F32)effect_sample * 0.001f) + 1.0f);
-		audio_buffer[i] = (saw + effect) * loud;
+		const F32 t = (F32)sample_index / 44100.0f;
+		F32 s = wave_triangle(t, freq);
+		s = s + (wave_noise() * 0.05f);
+		s = s * ampl;
+		audio_buffer[i] = s;
 		sample_index = sample_index + 1;
 		effect_sample = effect_sample + 1;
+	};
+	note_time = note_time + (delta * 5.0f);
+	if (note_time > note.data[0]) {
+		note_time = note_time - note.data[0];
+		note_index = note_index + 1;
 	};
 	const F32 inv_res_y = 1.0f / (F32)resolution.data[1];
 	for (I32 xv = 0; xv < (resolution.data[0] / vector_width); xv = xv + 1) {
@@ -92,11 +162,11 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			const V8I32 x = v8i32_add(vector_index, v8i32_set1(xv * vector_width));
 			const V8F32 dist = v8f32_abs(v8f32_sub(smp, v8f32_set1((F32)y * inv_res_y)));
 			V8U32 col = {0};
-			V8B32 vecc_mask10 = v8f32_lt(dist, v8f32_set1(0.0099999998f)); { // vector if
-				col = v8u32_blend(col, v8u32_set1(2853284369), vecc_mask10);
+			V8B32 vecc_mask12 = v8f32_lt(dist, v8f32_set1(0.0099999998f)); { // vector if
+				col = v8u32_blend(col, v8u32_set1(2853284369), vecc_mask12);
 			};
-			V8B32 vecc_mask11 = v8f32_lt(dist, v8f32_set1(0.0049999999f)); { // vector if
-				col = v8u32_blend(col, v8u32_set1(4280483618), vecc_mask11);
+			V8B32 vecc_mask13 = v8f32_lt(dist, v8f32_set1(0.0049999999f)); { // vector if
+				col = v8u32_blend(col, v8u32_set1(4280483618), vecc_mask13);
 			};
 			framebuffer[(y_offset + xv)] = col;
 		};

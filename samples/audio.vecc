@@ -12,7 +12,6 @@ const export KEY_Z_BIT      U32 = 1 << 4
 const export KEY_X_BIT      U32 = 1 << 5
 
 mut sample_index I32
-mut freq F32 = 16.0
 mut loud F32 = 0.5
 
 mut effect_sample I32
@@ -26,6 +25,51 @@ procedure rand_u32 () U32 {
 procedure rand_f32 () F32 {
     return conv(F32, rand_u32()) / 32767.0
 }
+
+// *S means #/sharp
+// Index is octave
+const NOTE_C  [9]F32 = {16.35; 32.7 ; 65.41 ; 130.81; 261.63; 523.25; 1046.5 ; 2093   ; 4186}
+const NOTE_CS [9]F32 = {17.32; 34.65; 69.3  ; 138.59; 277.18; 554.37; 1108.73; 2217.46; 4434.92}
+const NOTE_D  [9]F32 = {18.35; 36.71; 73.42 ; 146.83; 293.66; 587.33; 1174.66; 2349.32; 4698.63}
+const NOTE_DS [9]F32 = {19.45; 38.89; 77.78 ; 155.56; 311.13; 622.25; 1244.51; 2489   ; 4978}
+const NOTE_E  [9]F32 = {20.6 ; 41.2 ; 82.41 ; 164.81; 329.63; 659.25; 1318.51; 2637   ; 5274}
+const NOTE_F  [9]F32 = {21.83; 43.65; 87.31 ; 174.61; 349.23; 698.46; 1396.91; 2793.83; 5587.65}
+const NOTE_FS [9]F32 = {23.12; 46.25; 92.5  ; 185   ; 369.99; 739.99; 1479.98; 2959.96; 5919.91}
+const NOTE_G  [9]F32 = {24.5 ; 49   ; 98    ; 196   ; 392   ; 783.99; 1567.98; 3135.96; 6271.93}
+const NOTE_GS [9]F32 = {25.96; 51.91; 103.83; 207.65; 415.3 ; 830.61; 1661.22; 3322.44; 6644.88}
+const NOTE_A  [9]F32 = {27.5 ; 55   ; 110   ; 220   ; 440   ; 880   ; 1760   ; 3520   ; 7040}
+const NOTE_AS [9]F32 = {29.14; 58.27; 116.54; 233.08; 466.16; 932.33; 1864.66; 3729.31; 7458.62}
+const NOTE_B  [9]F32 = {30.87; 61.74; 123.47; 246.94; 493.88; 987.77; 1975.53; 3951   ; 7902.13}
+
+const PI F32 = 3.14159265358979
+
+procedure wave_sin (immut t F32; immut freq F32) F32 {
+    return sin((2.0 * PI) * (t * freq))
+}
+
+procedure wave_square (immut t F32; immut freq F32) F32 {
+    if (conv(I32, t * freq) & 1) == 0 {
+        return 1.0
+    } else {
+        return -1.0
+    }
+}
+
+procedure wave_saw (immut t F32; immut freq F32) F32 {
+    return (fract(t * freq) - 0.5) * 2.0
+}
+
+procedure wave_triangle (mut t F32; immut freq F32) F32 {
+    t *= freq
+    return (abs((t + 0.25) - round(t + 0.25)) * 4.0) - 1.0
+}
+
+procedure wave_noise () F32 {
+    return (rand_f32() * 2.0) - 1.0
+}
+
+mut note_time F32 = 0
+mut note_index I32 = 0
 
 procedure export compute_frame (
     immut vector framebuffer    [^]U32
@@ -51,20 +95,75 @@ procedure export compute_frame (
 
     loud = clamp(loud, -1, 1)
 
+    // come as you are
+    immut NOTE_SEQUENCE [31][2]F32 = {
+        {1; NOTE_E [2]}
+        {1; NOTE_E [2]}
+        {1; NOTE_F [2]}
+
+        {2; NOTE_FS[2]}
+        {1; NOTE_A [2]}
+        {1; NOTE_FS[2]}
+        {1; NOTE_A [2]}
+        {1; NOTE_FS[2]}
+        {1; NOTE_FS[2]}
+        {1; NOTE_F [2]}
+        {1; NOTE_E [2]}
+        {1; NOTE_B [2]}
+        {1; NOTE_E [2]}
+        {2; NOTE_E [2]}
+        {1; NOTE_B [2]}
+        {1; NOTE_E [2]}
+        {1; NOTE_F [2]}
+
+        {2; NOTE_FS[2]}
+        {1; NOTE_A [2]}
+        {1; NOTE_FS[2]}
+        {1; NOTE_A [2]}
+        {1; NOTE_FS[2]}
+        {1; NOTE_FS[2]}
+        {1; NOTE_F [2]}
+        {1; NOTE_E [2]}
+        {1; NOTE_B [2]}
+        {1; NOTE_E [2]}
+        {2; NOTE_E [2]}
+        {1; NOTE_B [2]}
+        {1; NOTE_E [2]}
+        {4; NOTE_F [2]}
+    }
+
+    if note_index >= NOTE_SEQUENCE.len {
+        note_index = 0
+        note_time = 0
+    }
+
+    mut note [2]F32 = NOTE_SEQUENCE[note_index]
+
+    mut freq F32 = note[1]
+    mut note_t F32 = note_time / note[0]
+    mut ampl F32 = loud * ((1.0 - note_t) * min(note_t * 10, 1.0))
+
     for i I32; i < audio_samples; i += 1 {
-        mut saw F32 = sin(conv(F32, sample_index) / freq) * loud
-        mut effect F32 = fract(conv(F32, effect_sample) * 0.05)
-        effect += rand_f32() - 0.5
-        effect = effect / ((conv(F32, effect_sample) * 0.001) + 1)
-        audio_buffer[i] = (saw + effect) * loud
+        // mut saw F32 = sin(conv(F32, sample_index) / freq) * loud
+        // mut effect F32 = fract(conv(F32, effect_sample) * 0.05)
+        // effect += rand_f32() - 0.5
+        // effect = effect / ((conv(F32, effect_sample) * 0.001) + 1)
+        immut t F32 = conv(F32, sample_index) / 44100.0
+        mut s F32 = wave_triangle(t, freq)
+        s += wave_noise() * 0.05
+        s *= ampl
+        audio_buffer[i] = s
         sample_index += 1
         effect_sample += 1
     }
 
-    // immut num_pixel_blocks I32 = (resolution.x * resolution.y) / vector_width
-    // for i I32; i < num_pixel_blocks; i += 1 {
-    //     framebuffer[i] = 0x22222529
-    // }
+    note_time += delta * 5.0
+    if note_time > note[0] {
+        note_time -= note[0]
+        note_index += 1
+    }
+
+    // Visualize
 
     immut inv_res_y F32 = 1.0 / conv(F32, resolution.y)
     for xv I32 = 0; xv < (resolution.x / vector_width); xv += 1 {
@@ -94,17 +193,6 @@ procedure export compute_frame (
             }
 
             framebuffer[y_offset + xv] = col
-
-            // framebuffer[y_offset + xv] = {
-                // 0x22222529 + 00
-                // 0x22222529 + 10
-                // 0x22222529 + 20
-                // 0x22222529 + 30
-                // 0x22222529 + 40
-                // 0x22222529 + 50
-                // 0x22222529 + 60
-                // 0x22222529 + 70
-            // }
         }
     }
 }
