@@ -8,6 +8,11 @@
 #include <vecc_builtin.h>
 
 typedef struct { F32 data[2]; } Aos2F32;
+typedef struct Item {
+	Aos2F32 pos;
+	I32 powerup;
+	F32 timer;
+} Item;
 typedef struct Enemy {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -18,6 +23,27 @@ typedef struct Enemy {
 	U8 state;
 	U8 kind;
 } Enemy;
+typedef struct { U8 data[4]; } Aos4U8;
+typedef struct Effect {
+	Aos2F32 pos;
+	F32 rad;
+	F32 timer;
+	F32 dur;
+	Aos4U8 color;
+} Effect;
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
+typedef struct Bullet {
+	B8 used;
+	Aos2F32 pos;
+	Aos2F32 vel;
+	F32 timer;
+	U8 level;
+	B8 explode;
+} Bullet;
 typedef struct { F32 data[3]; } Aos3F32;
 typedef struct Player {
 	Aos2F32 pos;
@@ -27,37 +53,11 @@ typedef struct Player {
 	Aos3F32 powerup_timer;
 	F32 particle_timer;
 } Player;
-typedef struct Hit {
-	F32 tmin;
-	F32 tmax;
-	B8 hit;
-} Hit;
-typedef struct { U8 data[4]; } Aos4U8;
-typedef struct Effect {
-	Aos2F32 pos;
-	F32 rad;
-	F32 timer;
-	F32 dur;
-	Aos4U8 color;
-} Effect;
-typedef struct Item {
-	Aos2F32 pos;
-	I32 powerup;
-	F32 timer;
-} Item;
-typedef struct Bullet {
-	B8 used;
-	Aos2F32 pos;
-	Aos2F32 vel;
-	F32 timer;
-	U8 level;
-	B8 explode;
-} Bullet;
-typedef struct { Bullet data[64]; } Aos64Bullet;
-typedef struct { Item data[64]; } Aos64Item;
-typedef struct { Effect data[128]; } Aos128Effect;
-typedef struct { Enemy data[64]; } Aos64Enemy;
 typedef struct { I32 data[2]; } Aos2I32;
+typedef struct { Enemy data[64]; } Aos64Enemy;
+typedef struct { Effect data[128]; } Aos128Effect;
+typedef struct { Item data[64]; } Aos64Item;
+typedef struct { Bullet data[64]; } Aos64Bullet;
 typedef struct { B8 data[3]; } Aos3B8;
 typedef struct { V8I32 data[2]; } Aos2V8I32;
 static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
@@ -68,6 +68,8 @@ static Aos2F32 aos2f32_sub(Aos2F32 a, Aos2F32 b) { return {{a.data[0] - b.data[0
 static Aos2F32 aos2f32_mul(Aos2F32 a, Aos2F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1]}}; }
 static Aos2F32 aos2f32_div(Aos2F32 a, Aos2F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1]}}; }
 static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
+static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
+static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
 static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
 static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
 static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
@@ -75,8 +77,6 @@ static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0
 static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
 static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
 static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
-static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
-static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
 static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
@@ -369,9 +369,9 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			enemy.pos.data[0] = (F32)((I32)rand_u32() % RESOLUTION_X);
 		};
 		if (((g_game_timer > 10.0f) & ((rand_u32() % 4) == 0))) {
-			if (((g_game_timer > 30.0f) & ((rand_u32() % 4) == 0))) {
+			if (((g_game_timer > 30.0f) & ((rand_u32() % 6) == 0))) {
 				enemy.size = 14;
-				enemy.health = 20.0f;
+				enemy.health = 18.0f;
 				enemy.speed = 6.0f;
 				enemy.kind = 2;
 			} else {

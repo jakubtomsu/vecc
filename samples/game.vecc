@@ -373,9 +373,9 @@ procedure export compute_frame (
         }
 
         if (g_game_timer > 10) & ((rand_u32() % 4) == 0) {
-            if (g_game_timer > 30) & ((rand_u32() % 4) == 0) {
+            if (g_game_timer > 30) & ((rand_u32() % 6) == 0) {
                 enemy.size = 14
-                enemy.health = 20
+                enemy.health = 18
                 enemy.speed = 6
                 enemy.kind = 2
             } else {
