@@ -209,7 +209,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     saudio_desc desc = {0};
-    desc.buffer_frames = 512;
+    desc.sample_rate = 44100;
+    desc.buffer_frames = 1024;
     desc.packet_frames = 128;
     desc.num_packets = 8;
     saudio_setup(&desc);
