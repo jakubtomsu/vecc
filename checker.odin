@@ -716,38 +716,54 @@ check_selector_expr :: proc(c: ^Checker, ast: ^Ast) {
             }
         }
 
-        #partial switch v in base_type.variant {
-        case Type_Struct:
-            for field in v.fields {
-                if ident.token.text == field.name {
-                    expr.right.type = field.type
+        switch name {
+        case "len":
+            #partial switch v in base_type.variant {
+            case Type_Basic:
+                #partial switch v.kind {
+                case .String:
+                    expr.right.type = c.basic_types[.I32]
+                }
+
+            case Type_Array:
+                expr.right.type = c.basic_types[.I32]
+            }
+
+        case:
+
+            #partial switch v in base_type.variant {
+            case Type_Struct:
+                for field in v.fields {
+                    if ident.token.text == field.name {
+                        expr.right.type = field.type
+                        break
+                    }
+                }
+
+            case Type_Array:
+                // Swizzling later?
+                if v.len > 4 {
                     break
                 }
-            }
 
-        case Type_Array:
-            // Swizzling later?
-            if v.len > 4 {
-                break
-            }
+                all_fields := [?][2]u8 {
+                    0 = {'x', 'r'},
+                    1 = {'y', 'g'},
+                    2 = {'z', 'b'},
+                    3 = {'w', 'a'},
+                }
+                fields := all_fields[:v.len]
 
-            all_fields := [?][2]u8 {
-                0 = {'x', 'r'},
-                1 = {'y', 'g'},
-                2 = {'z', 'b'},
-                3 = {'w', 'a'},
-            }
-            fields := all_fields[:v.len]
+                if len(name) != 1 {
+                    break
+                }
 
-            if len(name) != 1 {
-                break
-            }
-
-            field_loop: for field in fields {
-                for ch in field {
-                    if ch == name[0] {
-                        expr.right.type = v.type
-                        break field_loop
+                field_loop: for field in fields {
+                    for ch in field {
+                        if ch == name[0] {
+                            expr.right.type = v.type
+                            break field_loop
+                        }
                     }
                 }
             }
@@ -780,6 +796,15 @@ check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
         ast.type = v.type
         if v.kind == .Single {
             checker_error(c, "Cannot index a single pointer. Did you want to use multi-pointer instead? (^ vs [^])")
+        }
+
+    case Type_Basic:
+        #partial switch v.kind {
+        case .String:
+            ast.type = c.basic_types[.U8]
+
+        case:
+            checker_error(c, "Cannot index {}", type_to_string(expr.left.type))
         }
 
     case:

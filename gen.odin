@@ -458,7 +458,7 @@ gen_expr :: proc(g: ^Gen, ast: ^Ast, top_level := false) {
         gen_urnary_expr(g, ast)
 
     case Ast_Binary_Expr:
-        gen_binary_expr(g, ast)
+        gen_binary_expr(g, ast, top_level = top_level)
 
     case Ast_Selector_Expr:
         gen_selector_expr(g, ast)
@@ -603,9 +603,9 @@ gen_binary_op :: proc(
     assert(data != {})
 
     gen_print(g, data.prefix)
-    gen_possible_auto_conv_expr(g, type, left, top_level = top_level)
+    gen_possible_auto_conv_expr(g, type, left, top_level = false)
     gen_print(g, data.sep)
-    gen_possible_auto_conv_expr(g, type, right, top_level = top_level)
+    gen_possible_auto_conv_expr(g, type, right, top_level = false)
     gen_print(g, data.suffix)
 }
 
@@ -667,32 +667,37 @@ gen_binary_op_data :: proc(
 
 gen_selector_expr :: proc(g: ^Gen, ast: ^Ast) {
     expr := ast.variant.(Ast_Selector_Expr)
-    gen_expr(g, expr.left)
     #partial switch v in expr.left.type.variant {
     case Type_Array:
         name := expr.right.variant.(Ast_Ident).token.text
 
-        assert(len(name) == 1)
         index := -1
-        switch name[0] {
-        case 'x', 'r': index = 0
-        case 'y', 'g': index = 1
-        case 'z', 'b': index = 2
-        case 'w', 'a': index = 3
+        switch name {
+        case "x", "r": index = 0
+        case "y", "g": index = 1
+        case "z", "b": index = 2
+        case "w", "a": index = 3
+        case "len":
+            gen_print(g, "VECC_LEN(")
+            gen_expr(g, expr.left)
+            gen_print(g, ".data)")
         }
 
-        assert(index >= 0)
-
-        gen_print(g, ".data[")
-        gen_print(g, index)
-        gen_print(g, "]")
+        if index >= 0 {
+            gen_expr(g, expr.left)
+            gen_print(g, ".data[")
+            gen_print(g, index)
+            gen_print(g, "]")
+        }
 
     case Type_Pointer:
         // TODO: pointers to pointers etc
+        gen_expr(g, expr.left)
         gen_print(g, "->")
         gen_expr(g, expr.right)
 
     case:
+        gen_expr(g, expr.left)
         gen_print(g, ".")
         gen_expr(g, expr.right)
     }
@@ -729,6 +734,18 @@ gen_index_expr :: proc(g: ^Gen, ast: ^Ast) {
         gen_print(g, "[")
         gen_expr(g, expr.index)
         gen_print(g, "]")
+
+    case Type_Basic:
+        #partial switch v.kind {
+        case .String:
+            gen_expr(g, expr.left)
+            gen_print(g, ".data[")
+            gen_expr(g, expr.index)
+            gen_print(g, "]")
+
+        case:
+            assert(false)
+        }
 
     case:
         assert(false)
