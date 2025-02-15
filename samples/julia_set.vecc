@@ -1,6 +1,8 @@
 // Julia set fractal by iq:
 // https://www.shadertoy.com/view/Mss3R8
 
+const export SAMPLE_NAME String = "Julia Set"
+
 const export RESOLUTION_X I32 = 320 * 4
 const export RESOLUTION_Y I32 = 184 * 4
 const export RESOLUTION_SCALE I32 = 1

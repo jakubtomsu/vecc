@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <vecc_builtin.h>
 
-typedef struct { F32 data[3]; } Aos3F32;
 typedef struct { I32 data[2]; } Aos2I32;
 typedef struct { F32 data[2]; } Aos2F32;
 typedef struct { V8F32 data[2]; } Aos2V8F32;
@@ -15,13 +14,6 @@ typedef struct { F32 data[4]; } Aos4F32;
 typedef struct { V8F32 data[4]; } Aos4V8F32;
 typedef struct { U32 data[4]; } Aos4U32;
 typedef struct { V8U32 data[4]; } Aos4V8U32;
-static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
-static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
-static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
-static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2]}}; }
-static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
-static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
-static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
 static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
@@ -84,6 +76,7 @@ static Aos4V8U32 aos4v8u32_xor(Aos4V8U32 a, Aos4V8U32 b) { return {{v8u32_xor(a.
 
 // VECC exported constants
 
+const String SAMPLE_NAME = {"Julia Set", 9};
 const I32 RESOLUTION_X = (320 * 4);
 const I32 RESOLUTION_Y = (184 * 4);
 const I32 RESOLUTION_SCALE = 1;
@@ -103,10 +96,6 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 
 // VECC private function declarations
 
-static Aos3F32 normalize(Aos3F32 x);
-static F32 length2(Aos3F32 x);
-static F32 length(Aos3F32 x);
-static F32 dot(Aos3F32 a, Aos3F32 b);
 
 // VECC global variable declarations
 
@@ -166,22 +155,6 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			framebuffer[index] = col_rgba;
 		};
 	};
-}
-
-static Aos3F32 normalize(Aos3F32 x) {
-	return aos3f32_mul(x, aos3f32_set1(f32_rsqrt(length2(x))));
-}
-
-static F32 length2(Aos3F32 x) {
-	return ((x.data[0] * x.data[0]) + ((x.data[1] * x.data[1]) + (x.data[2] * x.data[2])));
-}
-
-static F32 length(Aos3F32 x) {
-	return f32_sqrt(((x.data[0] * x.data[0]) + ((x.data[1] * x.data[1]) + (x.data[2] * x.data[2]))));
-}
-
-static F32 dot(Aos3F32 a, Aos3F32 b) {
-	return ((a.data[0] * b.data[0]) + ((a.data[1] * b.data[1]) + (a.data[2] * b.data[2])));
 }
 
 #endif // VECC_IMPL
