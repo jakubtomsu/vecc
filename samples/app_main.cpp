@@ -1,5 +1,9 @@
 #include <windows.h>
 #include <stdint.h>
+#include <math.h>
+
+#define SOKOL_AUDIO_IMPL
+#include "sokol_audio.h"
 
 #pragma comment(lib, "Gdi32.lib")
 #pragma comment(lib, "User32.lib")
@@ -19,6 +23,13 @@ uint64_t time_clock() {
     QueryPerformanceCounter(&counter);
     return counter.QuadPart;
 }
+
+#define NUM_SAMPLES 1024
+#define AUDIO_BUFFER_CAP (NUM_SAMPLES * 4)
+float g_audio_buffer[AUDIO_BUFFER_CAP];
+uint32_t g_audio_even_odd;
+int g_audio_pos;
+
 
 double time_diff(uint64_t now, uint64_t prev) {
     return (double)(now - prev) / (double)g_frequency.QuadPart;
@@ -83,20 +94,52 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             uint64_t compute_clock = time_clock();
 
+            int num_audio_samples = saudio_expect();
+            printf("audio frames %i\n", num_audio_samples);
+
+            if (num_audio_samples > AUDIO_BUFFER_CAP) {
+                num_audio_samples = AUDIO_BUFFER_CAP;
+            }
+
+            // float s;
+            // for (int i = 0; i < num_frames; i++) {
+            //     // if (g_audio_even_odd++ & (1<<5)) {
+            //     //     s = KEY_Z_BIT & g_keys ? 1.0f : 0.1f;
+            //     // } else {
+            //     //     // s = -0.1f;
+            //     //     s = KEY_Z_BIT & g_keys ? -1.0f : -0.1f;
+            //     // }
+            //     s = ((float)(g_audio_pos & 31) / 32.0) - 0.5;
+            //     if (KEY_Z_BIT & g_keys) s *= 0.1;
+            //     g_audio_buffer[g_audio_pos++] = s;
+            //     if (g_audio_pos == NUM_SAMPLES) {
+            //         g_audio_pos = 0;
+            //         saudio_push(g_audio_buffer, NUM_SAMPLES);
+            //         break;
+            //     }
+            // }
+
+
             compute_frame(
                 g_framebuffer,
                 {{RESOLUTION_X, RESOLUTION_Y}},
                 (float)time,
                 (float)delta,
                 g_frame,
-                g_keys);
+                g_keys,
+                g_audio_buffer,
+                num_audio_samples);
+
+            if (num_audio_samples > 0) {
+                saudio_push(g_audio_buffer, num_audio_samples);
+            }
 
             uint64_t end_clock = time_clock();
             double compute_time = time_diff(end_clock, compute_clock);
 
-            if ((g_frame % 60) == 0) {
+            // if ((g_frame % 60) == 0) {
                 printf("delta time: %g ms (%g fps), compute: %g ms\n", delta * 1e3, 1.0 / delta, compute_time * 1e3);
-            }
+            // }
 
             PAINTSTRUCT ps;
             HDC dc = BeginPaint(hwnd, &ps);
@@ -165,12 +208,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         }
     }
 
+    saudio_desc desc = {0};
+    desc.buffer_frames = 512;
+    desc.packet_frames = 128;
+    desc.num_packets = 8;
+    saudio_setup(&desc);
+
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
         InvalidateRect(hwnd, NULL, FALSE); // Force repaint
     }
+
+    saudio_shutdown();
 
     return 0;
 }

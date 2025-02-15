@@ -1,0 +1,110 @@
+const export SAMPLE_NAME String = "Audio"
+
+const export RESOLUTION_X I32 = 8 * 24
+const export RESOLUTION_Y I32 = 8 * 24
+const export RESOLUTION_SCALE I32 = 3
+
+const export KEY_LEFT_BIT   U32 = 1 << 0
+const export KEY_RIGHT_BIT  U32 = 1 << 1
+const export KEY_UP_BIT     U32 = 1 << 2
+const export KEY_DOWN_BIT   U32 = 1 << 3
+const export KEY_Z_BIT      U32 = 1 << 4
+const export KEY_X_BIT      U32 = 1 << 5
+
+mut sample_index I32
+mut freq F32 = 16.0
+mut loud F32 = 0.5
+
+mut effect_sample I32
+
+mut g_seed U32 = 1
+procedure rand_u32 () U32 {
+    g_seed = (g_seed * 0x343fd) + 0x269ec3
+    return (g_seed >> 16) & 32767
+}
+
+procedure rand_f32 () F32 {
+    return conv(F32, rand_u32()) / 32767.0
+}
+
+procedure export compute_frame (
+    immut vector framebuffer    [^]U32
+    immut resolution            [2]I32
+    immut time                  F32
+    immut delta                 F32
+    immut frame                 I32
+    immut keys                  U32
+    immut audio_buffer          [^]F32
+    immut audio_samples         I32
+) {
+    if (KEY_UP_BIT & keys) != 0 {
+        loud += delta
+    }
+
+    if (KEY_DOWN_BIT & keys) != 0 {
+        loud -= delta
+    }
+
+    if (KEY_Z_BIT & keys) != 0 {
+        effect_sample = 0
+    }
+
+    loud = clamp(loud, -1, 1)
+
+    for i I32; i < audio_samples; i += 1 {
+        mut saw F32 = sin(conv(F32, sample_index) / freq) * loud
+        mut effect F32 = fract(conv(F32, effect_sample) * 0.05)
+        effect += rand_f32() - 0.5
+        effect = effect / ((conv(F32, effect_sample) * 0.001) + 1)
+        audio_buffer[i] = (saw + effect) * loud
+        sample_index += 1
+        effect_sample += 1
+    }
+
+    // immut num_pixel_blocks I32 = (resolution.x * resolution.y) / vector_width
+    // for i I32; i < num_pixel_blocks; i += 1 {
+    //     framebuffer[i] = 0x22222529
+    // }
+
+    immut inv_res_y F32 = 1.0 / conv(F32, resolution.y)
+    for xv I32 = 0; xv < (resolution.x / vector_width); xv += 1 {
+        mut vector smp F32 = {
+            audio_buffer[(xv * vector_width) + 0]
+            audio_buffer[(xv * vector_width) + 1]
+            audio_buffer[(xv * vector_width) + 2]
+            audio_buffer[(xv * vector_width) + 3]
+            audio_buffer[(xv * vector_width) + 4]
+            audio_buffer[(xv * vector_width) + 5]
+            audio_buffer[(xv * vector_width) + 6]
+            audio_buffer[(xv * vector_width) + 7]
+        }
+        smp = (smp + 1.0) * 0.5
+
+        for y I32 = 0; y < resolution.y; y += 1 {
+            immut y_offset I32 = y * (resolution.x / vector_width)
+            immut vector x I32 = vector_index + (xv * vector_width)
+
+            immut vector dist F32 = abs(smp - (conv(F32, y) * inv_res_y))
+            mut vector col U32
+            if dist < 0.01 {
+                col = 0xaa11aa11
+            }
+            if dist < 0.005 {
+                col = 0xff22ff22
+            }
+
+            framebuffer[y_offset + xv] = col
+
+            // framebuffer[y_offset + xv] = {
+                // 0x22222529 + 00
+                // 0x22222529 + 10
+                // 0x22222529 + 20
+                // 0x22222529 + 30
+                // 0x22222529 + 40
+                // 0x22222529 + 50
+                // 0x22222529 + 60
+                // 0x22222529 + 70
+            // }
+        }
+    }
+}
