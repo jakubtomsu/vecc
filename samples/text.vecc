@@ -4,6 +4,13 @@ const export RESOLUTION_X I32 = 8 * 24
 const export RESOLUTION_Y I32 = 8 * 24
 const export RESOLUTION_SCALE I32 = 3
 
+const export KEY_LEFT_BIT   U32 = 1 << 0
+const export KEY_RIGHT_BIT  U32 = 1 << 1
+const export KEY_UP_BIT     U32 = 1 << 2
+const export KEY_DOWN_BIT   U32 = 1 << 3
+const export KEY_Z_BIT      U32 = 1 << 4
+const export KEY_X_BIT      U32 = 1 << 5
+
 const GLYPH_WIDTH  I32 = 5
 const GLYPH_HEIGHT I32 = 6
 
@@ -21,13 +28,6 @@ immut g_glyphs [95]U32 = {
     0x4213a526;0x7087252e;0x02149800;0x0e837000;0x0c213c42;0x0e94a400;0x0464a400;0x155ac400;
     0x36426c00;0x4e872529;0x1e223c00;0x1843188c;0x08421084;0x0c463086;0x0006d800
 }
-
-const export KEY_LEFT_BIT   I32 = 1 << 0
-const export KEY_RIGHT_BIT  I32 = 1 << 1
-const export KEY_UP_BIT     I32 = 1 << 2
-const export KEY_DOWN_BIT   I32 = 1 << 3
-const export KEY_Z_BIT      I32 = 1 << 4
-const export KEY_X_BIT      I32 = 1 << 5
 
 procedure export compute_frame (
     immut vector framebuffer    [^]U32
