@@ -102,6 +102,21 @@ vecc_op B64 b64_max(B64 a, B64 b) { return a > b ? a : b; }
 vecc_op F32 f32_max(F32 a, F32 b) { return a > b ? a : b; }
 vecc_op F64 f64_max(F64 a, F64 b) { return a > b ? a : b; }
 
+vecc_op I8  i8_abs (I8  a) { return a < 0 ? -a : a; }
+vecc_op I16 i16_abs(I16 a) { return a < 0 ? -a : a; }
+vecc_op I32 i32_abs(I32 a) { return a < 0 ? -a : a; }
+vecc_op I64 i64_abs(I64 a) { return a < 0 ? -a : a; }
+vecc_op U8  u8_abs (U8  a) { return a < 0 ? -a : a; }
+vecc_op U16 u16_abs(U16 a) { return a < 0 ? -a : a; }
+vecc_op U32 u32_abs(U32 a) { return a < 0 ? -a : a; }
+vecc_op U64 u64_abs(U64 a) { return a < 0 ? -a : a; }
+vecc_op B8  b8_abs (B8  a) { return a < 0 ? -a : a; }
+vecc_op B16 b16_abs(B16 a) { return a < 0 ? -a : a; }
+vecc_op B32 b32_abs(B32 a) { return a < 0 ? -a : a; }
+vecc_op B64 b64_abs(B64 a) { return a < 0 ? -a : a; }
+vecc_op F32 f32_abs(F32 a) { return a < 0 ? -a : a; }
+vecc_op F64 f64_abs(F64 a) { return a < 0 ? -a : a; }
+
 vecc_op I8  i8_clamp (I8  a, I8  lo, I8  hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
 vecc_op I16 i16_clamp(I16 a, I16 lo, I16 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
 vecc_op I32 i32_clamp(I32 a, I32 lo, I32 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }

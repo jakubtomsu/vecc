@@ -7,28 +7,7 @@
 #include <stdio.h>
 #include <vecc_builtin.h>
 
-typedef struct Hit {
-	F32 tmin;
-	F32 tmax;
-	B8 hit;
-} Hit;
 typedef struct { F32 data[2]; } Aos2F32;
-typedef struct Bullet {
-	B8 used;
-	Aos2F32 pos;
-	Aos2F32 vel;
-	F32 timer;
-	U8 level;
-	B8 explode;
-} Bullet;
-typedef struct { U8 data[4]; } Aos4U8;
-typedef struct Effect {
-	Aos2F32 pos;
-	F32 rad;
-	F32 timer;
-	F32 dur;
-	Aos4U8 color;
-} Effect;
 typedef struct Enemy {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -48,18 +27,39 @@ typedef struct Player {
 	Aos3F32 powerup_timer;
 	F32 particle_timer;
 } Player;
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
+typedef struct { U8 data[4]; } Aos4U8;
+typedef struct Effect {
+	Aos2F32 pos;
+	F32 rad;
+	F32 timer;
+	F32 dur;
+	Aos4U8 color;
+} Effect;
 typedef struct Item {
 	Aos2F32 pos;
 	I32 powerup;
 	F32 timer;
 } Item;
-typedef struct { I32 data[2]; } Aos2I32;
-typedef struct { Effect data[128]; } Aos128Effect;
-typedef struct { Enemy data[64]; } Aos64Enemy;
+typedef struct Bullet {
+	B8 used;
+	Aos2F32 pos;
+	Aos2F32 vel;
+	F32 timer;
+	U8 level;
+	B8 explode;
+} Bullet;
 typedef struct { Bullet data[64]; } Aos64Bullet;
 typedef struct { Item data[64]; } Aos64Item;
-typedef struct { V8I32 data[2]; } Aos2V8I32;
+typedef struct { Effect data[128]; } Aos128Effect;
+typedef struct { Enemy data[64]; } Aos64Enemy;
+typedef struct { I32 data[2]; } Aos2I32;
 typedef struct { B8 data[3]; } Aos3B8;
+typedef struct { V8I32 data[2]; } Aos2V8I32;
 static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
 static Aos2F32 aos2f32_set1(F32 a) { return {{a, a}}; }
 static Aos2I32 aos2f32_to_aos2i32(Aos2F32 a) { return {{(I32)a.data[0], (I32)a.data[1]}}; }
@@ -68,8 +68,6 @@ static Aos2F32 aos2f32_sub(Aos2F32 a, Aos2F32 b) { return {{a.data[0] - b.data[0
 static Aos2F32 aos2f32_mul(Aos2F32 a, Aos2F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1]}}; }
 static Aos2F32 aos2f32_div(Aos2F32 a, Aos2F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1]}}; }
 static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
-static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
-static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
 static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
 static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
 static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
@@ -77,6 +75,8 @@ static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0
 static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
 static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
 static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
+static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
+static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
 static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
@@ -88,6 +88,9 @@ static Aos2I32 aos2i32_and(Aos2I32 a, Aos2I32 b) { return {{a.data[0] & b.data[0
 static Aos2I32 aos2i32_or(Aos2I32 a, Aos2I32 b) { return {{a.data[0] | b.data[0], a.data[1] | b.data[1]}}; }
 static Aos2I32 aos2i32_xor(Aos2I32 a, Aos2I32 b) { return {{a.data[0] ^ b.data[0], a.data[1] ^ b.data[1]}}; }
 static Aos2I32 aos2i32_neg(Aos2I32 a) { return {{-a.data[0], -a.data[1]}}; }
+static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
+static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
+static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }
 static Aos2V8I32 aos2v8i32_set(V8I32 v0, V8I32 v1) { return {{v0, v1}}; }
 static Aos2V8I32 aos2v8i32_set_scalar(Aos2I32 a) { return {{v8i32_set1(a.data[0]), v8i32_set1(a.data[1])}}; }
 static Aos2V8I32 aos2v8i32_set1(V8I32 a) { return {{a, a}}; }
@@ -97,12 +100,10 @@ static Aos2V8I32 aos2v8i32_mul(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_mul(a.
 static Aos2V8I32 aos2v8i32_and(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_and(a.data[0], b.data[0]), v8i32_and(a.data[1], b.data[1])}}; }
 static Aos2V8I32 aos2v8i32_or(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_or(a.data[0], b.data[0]), v8i32_or(a.data[1], b.data[1])}}; }
 static Aos2V8I32 aos2v8i32_xor(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_xor(a.data[0], b.data[0]), v8i32_xor(a.data[1], b.data[1])}}; }
-static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
-static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
-static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }
 
 // VECC exported constants
 
+const String SAMPLE_NAME = {"PLUS120", 7};
 const I32 RESOLUTION_X = (8 * 30);
 const I32 RESOLUTION_Y = (8 * 30);
 const I32 RESOLUTION_SCALE = 4;
@@ -122,7 +123,6 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 
 // VECC private function declarations
 
-static U32 hash(U32 n);
 static U32 rand_u32();
 static F32 rand_f32();
 static U32 color_to_u32(Aos4U8 col);
@@ -142,6 +142,9 @@ static Hit intersect_ray_aabb(Aos2F32 pos, Aos2F32 dir, Aos2F32 box_min, Aos2F32
 const I32 PLAYER_POWERUP_FAST_FIRE = 0;
 const I32 PLAYER_POWERUP_SHOTGUN = 1;
 const I32 PLAYER_POWERUP_EXPLOSIVE = 2;
+const Aos4U8 POWERUP_FAST_FIRE_COLOR = {{0, 255, 0, 0}};
+const Aos4U8 POWERUP_SHOTGUN_COLOR = {{255, 255, 0, 0}};
+const Aos4U8 POWERUP_EXPLOSIVE_COLOR = {{0, 255, 255, 0}};
 Player player = {0};
 Aos64Item g_items = {0};
 Aos64Bullet g_bullets = {0};
@@ -151,7 +154,7 @@ const U8 ENEMY_STATE_ALIVE = 1;
 const Aos4U8 ENEMY_COLOR_NORMAL = {{255, 50, 200, 0}};
 const Aos4U8 ENEMY_COLOR_FAST = {{200, 0, 255, 0}};
 const Aos4U8 ENEMY_COLOR_BIG = {{255, 10, 100, 0}};
-const F32 GAME_MAX_TIME = 100.0f;
+const F32 GAME_MAX_TIME = 120.0f;
 Aos64Enemy g_enemies = {0};
 F32 g_enemy_spawn_timer = 5.0f;
 F32 g_game_timer = 0.0f;
@@ -161,13 +164,6 @@ F32 g_shake = 0.0f;
 F32 g_hit_pause = 0.0f;
 
 // VECC function definitions
-
-static U32 hash(U32 n) {
-	n = ((n << 13) ^ n);
-	n = n * (((n * n) * 15731) + 789221);
-	n = n + 1376312589;
-	return n;
-}
 
 static U32 rand_u32() {
 	g_seed = ((g_seed * 214013) + 2531011);
@@ -224,6 +220,9 @@ static void reset_game() {
 		g_items.data[i].powerup = -1;
 	};
 	for (I32 i = 0; (i < 64); i = i + 1) {
+		g_bullets.data[i].used = b8_false;
+	};
+	for (I32 i = 0; (i < 64); i = i + 1) {
 		g_enemies.data[i].pos = aos2f32_neg(aos2f32_set1(100.0f));
 		g_enemies.data[i].state = ENEMY_STATE_DEAD;
 	};
@@ -232,22 +231,27 @@ static void reset_game() {
 	};
 	g_enemy_spawn_timer = 0.0f;
 	g_game_timer = 0.0f;
+	g_shake = 40.0f;
 }
 
 void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys) {
 	if ((frame == 0)) {
 		reset_game();
 	};
+	const I32 num_pixel_blocks = ((resolution.data[0] * resolution.data[1]) / vector_width);
 	B32 should_hit_pause = (g_hit_pause > 0.0f);
 	g_hit_pause = g_hit_pause - delta;
 	if (should_hit_pause) {
+		for (I32 i = 0; (i < num_pixel_blocks); i = i + 1) {
+			const V8U32 c = framebuffer[i];
+			framebuffer[i] = v8u32_or(c, v8u32_set1(color_to_u32({{10, 10, 10, 0}})));
+		};
 		return ;
 	};
 	g_game_timer = g_game_timer + delta;
 	B8 end_game = false;
 	U32 clear_mask = (*(U32*)&delta);
 	clear_mask = ~clear_mask;
-	const I32 num_pixel_blocks = ((resolution.data[0] * resolution.data[1]) / vector_width);
 	for (I32 i = 0; (i < num_pixel_blocks); i = i + 1) {
 		const V8U32 c = framebuffer[i];
 		framebuffer[i] = v8u32_sl(c, 5);
@@ -259,7 +263,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		if ((enemy.state != ENEMY_STATE_DEAD)) {
 			continue;
 		};
-		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, {{40, 10, 10, 0}}, v8b32_set1(b32_true));
+		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, {{60, 50, 40, 0}}, v8b32_set1(b32_true));
 	};
 	for (I32 i = 0; (i < 64); i = i + 1) {
 		Item item = g_items.data[i];
@@ -281,13 +285,13 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		F32 rad = f32_round((2.2f + (f32_sin(((time + (F32)(i * 13)) * 8.0f)) * 0.69999999f)));
 		Aos4U8 color = {0};
 		if ((item.powerup == PLAYER_POWERUP_FAST_FIRE)) {
-			color = {{0, 255, 0, 0}};
+			color = POWERUP_FAST_FIRE_COLOR;
 		};
 		if ((item.powerup == PLAYER_POWERUP_SHOTGUN)) {
-			color = {{255, 255, 0, 0}};
+			color = POWERUP_SHOTGUN_COLOR;
 		};
 		if ((item.powerup == PLAYER_POWERUP_EXPLOSIVE)) {
-			color = {{0, 255, 255, 0}};
+			color = POWERUP_EXPLOSIVE_COLOR;
 		};
 		if ((item.timer > 7.0f)) {
 			if ((f32_sin((item.timer * 30.0f)) > 0.0f)) {
@@ -310,21 +314,19 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			g_enemies.data[i] = enemy;
 			continue;
 		};
-		if ((enemy.state == ENEMY_STATE_ALIVE)) {
-			enemy.vel = aos2f32_add(enemy.vel, aos2f32_mul(normalize(aos2f32_sub(player.pos, enemy.pos)), aos2f32_set1((delta * (enemy.speed * 5.0f)))));
-			enemy.vel = aos2f32_mul(normalize(enemy.vel), aos2f32_set1(f32_clamp(length(enemy.vel), 0.0f, enemy.speed)));
-			enemy.pos = aos2f32_add(enemy.pos, aos2f32_mul(enemy.vel, aos2f32_set1(delta)));
-			F32 rad = ((F32)enemy.size + 2.0f);
-			if ((length2(aos2f32_sub(enemy.pos, player.pos)) < (rad * rad))) {
-				end_game = b8_true;
-			};
+		enemy.vel = aos2f32_add(enemy.vel, aos2f32_mul(normalize(aos2f32_sub(player.pos, enemy.pos)), aos2f32_set1((delta * (enemy.speed * 5.0f)))));
+		enemy.vel = aos2f32_mul(normalize(enemy.vel), aos2f32_set1(f32_clamp(length(enemy.vel), 0.0f, enemy.speed)));
+		enemy.pos = aos2f32_add(enemy.pos, aos2f32_mul(enemy.vel, aos2f32_set1(delta)));
+		F32 rad = ((F32)enemy.size + 2.0f);
+		if ((length2(aos2f32_sub(enemy.pos, player.pos)) < (rad * rad))) {
+			end_game = b8_true;
 		};
 		if ((enemy.health <= 0.0f)) {
 			enemy.state = ENEMY_STATE_DEAD;
 			spawn_effect(enemy.pos, 9.0f, 0.05f, {{255, 255, 255, 255}});
 			g_shake = g_shake + 5.0f;
 			g_hit_pause = 0.02f;
-			U32 p = (rand_u32() % 10);
+			U32 p = (rand_u32() % 11);
 			if ((p < 3)) {
 				spawn_item(enemy.pos, (I32)p);
 			};
@@ -340,11 +342,12 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		if ((enemy.damage_timer < 0.05f)) {
 			color = {{255, 255, 255, 255}};
 		};
-		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), (I32)enemy.size, (I32)(enemy.size + 1), color, v8b32_set1(b32_true));
+		Aos2F32 enemy_pos = enemy.pos;
+		draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy_pos), (I32)enemy.size, (I32)(enemy.size + 1), color, v8b32_set1(b32_true));
 		g_enemies.data[i] = enemy;
 	};
 	g_enemy_spawn_timer = g_enemy_spawn_timer + delta;
-	const F32 spawn_rate = (0.2f + (1.8f * f32_max(0.0f, (1.0f - (g_game_timer / GAME_MAX_TIME)))));
+	const F32 spawn_rate = (0.2f + (1.2f * f32_max(0.0f, (1.0f - (g_game_timer / GAME_MAX_TIME)))));
 	if (((g_enemy_spawn_timer > spawn_rate) & (oldest_corpse != -1))) {
 		g_enemy_spawn_timer = 0.0f;
 		Enemy enemy = g_enemies.data[oldest_corpse];
@@ -366,12 +369,19 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			enemy.pos.data[0] = (F32)((I32)rand_u32() % RESOLUTION_X);
 		};
 		if (((g_game_timer > 10.0f) & ((rand_u32() % 4) == 0))) {
-			enemy.size = 8;
-			enemy.health = 6.0f;
-			enemy.speed = 8.0f;
-			enemy.kind = 2;
+			if (((g_game_timer > 30.0f) & ((rand_u32() % 4) == 0))) {
+				enemy.size = 14;
+				enemy.health = 20.0f;
+				enemy.speed = 6.0f;
+				enemy.kind = 2;
+			} else {
+				enemy.size = 8;
+				enemy.health = 6.0f;
+				enemy.speed = 8.0f;
+				enemy.kind = 2;
+			};
 		} else {
-			if (((g_game_timer > 5.0f) & ((rand_u32() % 2) == 0))) {
+			if (((g_game_timer > 5.0f) & ((rand_u32() % 3) == 0))) {
 				enemy.size = 5;
 				enemy.health = 0.5f;
 				enemy.speed = 30.0f;
@@ -450,9 +460,10 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		};
 		if ((shooting & (player.gun_timer > cooldown_time))) {
 			player.gun_timer = 0.0f;
-			player.vel = aos2f32_sub(player.vel, aos2f32_mul(player.dir, aos2f32_set1(38.0f)));
+			player.vel = aos2f32_sub(player.vel, aos2f32_mul(player.dir, aos2f32_mul(aos2f32_set1(38.0f), aos2f32_set1(shoot_dir))));
 			I32 bullet_num = 0;
 			g_shake = 1.0f;
+			spawn_effect(aos2f32_add(player.pos, aos2f32_mul(player.dir, aos2f32_mul(aos2f32_set1(6.0f), aos2f32_set1(shoot_dir)))), 3.0f, 0.0099999998f, {{0, 255, 255, 0}});
 			for (I32 i = 0; (i < 64); i = i + 1) {
 				if (!g_bullets.data[i].used) {
 					Aos2F32 bdir = aos2f32_mul(player.dir, aos2f32_set1(shoot_dir));
@@ -476,7 +487,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			player.particle_timer = player.particle_timer + delta;
 			if ((player.particle_timer > 0.1f)) {
 				player.particle_timer = player.particle_timer - 0.1f;
-				spawn_effect(player.pos, 1.0f, (rand_f32() * 2.0f), {{20, 20, 20, 0}});
+				spawn_effect(player.pos, 1.0f, (rand_f32() * 8.0f), {{100, 100, 100, 0}});
 			};
 		};
 		player.vel = aos2f32_mul(player.vel, aos2f32_set1(0.89999998f));
@@ -527,18 +538,19 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 				bullet.pos = aos2f32_add(bullet.pos, aos2f32_mul(move_dir, aos2f32_set1(tmin)));
 				bullet.used = b8_false;
 				if (bullet.explode) {
-					spawn_effect(bullet.pos, 24.0f, 0.05f, {{0, 255, 255, 0}});
+					spawn_effect(bullet.pos, 32.0f, 0.0099999998f, {{0, 255, 255, 0}});
+					spawn_effect(bullet.pos, 22.0f, 0.05f, {{255, 255, 255, 0}});
 					g_hit_pause = 0.09f;
 					for (I32 ei = 0; (ei < 64); ei = ei + 1) {
 						Enemy enemy = g_enemies.data[ei];
 						if ((enemy.state != ENEMY_STATE_ALIVE)) {
 							continue;
 						};
-						if ((length2(aos2f32_sub(enemy.pos, bullet.pos)) < (28.0f * 28.0f))) {
-							enemy.health = enemy.health - 6.0f;
+						if ((length2(aos2f32_sub(enemy.pos, bullet.pos)) < (32.0f * 32.0f))) {
+							enemy.health = enemy.health - 3.0f;
 							enemy.damage_timer = 0.0f;
 							enemy.vel = aos2f32_set1(0.0f);
-							g_enemies.data[hit_enemy] = enemy;
+							g_enemies.data[ei] = enemy;
 						};
 					};
 				} else {
@@ -554,11 +566,15 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		};
 		g_bullets.data[i] = bullet;
 	};
-	draw_rect(framebuffer, resolution, {{0, 1}}, {{(RESOLUTION_X - 1), 1}}, {{100, 100, 100, 100}});
-	draw_rect(framebuffer, resolution, {{0, 1}}, {{i32_max(0, (I32)((F32)RESOLUTION_X * (1.0f - (g_game_timer / GAME_MAX_TIME)))), 1}}, {{255, 255, 255, 255}});
-	draw_rect(framebuffer, resolution, {{2, (RESOLUTION_Y - 5)}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_FAST_FIRE]))), 3}}, {{0, 255, 0, 0}});
-	draw_rect(framebuffer, resolution, {{2, (RESOLUTION_Y - 10)}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_SHOTGUN]))), 3}}, {{255, 255, 0, 0}});
-	draw_rect(framebuffer, resolution, {{2, (RESOLUTION_Y - 15)}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_EXPLOSIVE]))), 3}}, {{0, 255, 255, 0}});
+	if ((g_game_timer < GAME_MAX_TIME)) {
+		draw_rect(framebuffer, resolution, {{0, 1}}, {{(RESOLUTION_X - 1), 1}}, {{100, 100, 100, 100}});
+		draw_rect(framebuffer, resolution, {{0, 1}}, {{(I32)((F32)RESOLUTION_X * (1.0f - (g_game_timer / GAME_MAX_TIME))), 1}}, {{255, 255, 255, 255}});
+	} else {
+		draw_rect(framebuffer, resolution, {{0, 1}}, {{(RESOLUTION_X - 1), 1}}, {{255, 0, 0, 0}});
+	};
+	draw_rect(framebuffer, resolution, {{2, (RESOLUTION_Y - 5)}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_FAST_FIRE]))), 3}}, POWERUP_FAST_FIRE_COLOR);
+	draw_rect(framebuffer, resolution, {{2, (RESOLUTION_Y - 10)}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_SHOTGUN]))), 3}}, POWERUP_SHOTGUN_COLOR);
+	draw_rect(framebuffer, resolution, {{2, (RESOLUTION_Y - 15)}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_EXPLOSIVE]))), 3}}, POWERUP_EXPLOSIVE_COLOR);
 	if (end_game) {
 		reset_game();
 		for (I32 i = 0; (i < num_pixel_blocks); i = i + 1) {

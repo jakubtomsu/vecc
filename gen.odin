@@ -1441,7 +1441,9 @@ gen_return_stmt :: proc(g: ^Gen, ast: ^Ast) {
     stmt := ast.variant.(Ast_Return_Stmt)
     gen_print(g, "return")
     gen_print(g, " ")
-    gen_expr(g, stmt.value, top_level = true)
+    if stmt.value != nil {
+        gen_expr(g, stmt.value, top_level = true)
+    }
 }
 
 

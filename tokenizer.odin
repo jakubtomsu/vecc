@@ -287,11 +287,11 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
         num := 0
         for t.offset < len(t.data) {
             next_rune(t)
+            num += 1
             if t.curr_rune == '\'' {
                 next_rune(t)
                 break
             }
-            num += 1
         }
         if num != 1 {
             err = .Illegal_Character

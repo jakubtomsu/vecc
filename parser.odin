@@ -250,7 +250,7 @@ parse_factor :: proc(p: ^Parser, loc := #caller_location) -> ^Ast {
         }
         return curr_ast
 
-    case .Integer, .Float, .String, .False, .True:
+    case .Integer, .Float, .String, .Char, .False, .True:
         return parse_basic_literal(p, next(p))
 
     case .Conv, .Reinterpret:
@@ -436,7 +436,9 @@ parse_return_stmt :: proc(p: ^Parser) -> ^Ast {
 
     ast := create_ast()
     return_stmt: Ast_Return_Stmt
-    return_stmt.value = parse_expr(p)
+    if peek(p) != .Close_Brace {
+        return_stmt.value = parse_expr(p)
+    }
     ast.variant = return_stmt
     return ast
 }

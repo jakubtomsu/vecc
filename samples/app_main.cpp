@@ -109,7 +109,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int width = client_rect.right - client_rect.left;
             int height = client_rect.bottom - client_rect.top;
 
-            StretchBlt(dc, 0, 0, width, height, bitmap_dc, 0, 0, RESOLUTION_X, RESOLUTION_Y, SRCCOPY);
+            int scale_x = width / RESOLUTION_X;
+            int scale_y = height / RESOLUTION_Y;
+            int scale = scale_x < scale_y ? scale_x : scale_y;
+
+            StretchBlt(dc, 0, 0, RESOLUTION_X * scale, RESOLUTION_Y * scale, bitmap_dc,
+                0, 0, RESOLUTION_X, RESOLUTION_Y, SRCCOPY);
 
             SelectObject(bitmap_dc, old_bitmap_handle);
             DeleteDC(bitmap_dc);
@@ -131,13 +136,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     WNDCLASS wc = {0};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
-    wc.lpszClassName = "SoftwareRenderer";
+    wc.lpszClassName = "VecC_Sample";
     RegisterClass(&wc);
 
+    RECT rect = {0, 0, RESOLUTION_X * RESOLUTION_SCALE, RESOLUTION_Y * RESOLUTION_SCALE};
+    AdjustWindowRect(&rect,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_VISIBLE,
+        FALSE
+    );
+
     HWND hwnd = CreateWindow(
-        wc.lpszClassName, "VecC sample",
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, RESOLUTION_X * RESOLUTION_SCALE, RESOLUTION_Y * RESOLUTION_SCALE,
+        wc.lpszClassName, SAMPLE_NAME.data,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_VISIBLE,
+        CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top,
+        // CW_USEDEFAULT, CW_USEDEFAULT, RESOLUTION_X * RESOLUTION_SCALE, RESOLUTION_Y * RESOLUTION_SCALE,
         NULL, NULL, hInstance, NULL);
 
     QueryPerformanceFrequency(&g_frequency);

@@ -7,6 +7,7 @@ import "core:strconv"
 import "core:slice"
 import "core:os"
 import "core:reflect"
+import "core:unicode/utf8"
 
 Checker :: struct {
     filename:           string,
@@ -225,9 +226,17 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
              .U16,
              .U32,
              .U64:
-            val, ok := strconv.parse_i128_maybe_prefixed(lit.token.text)
-            assert(ok)
-            return i128(val)
+            #partial switch lit.token.kind {
+            case .Integer:
+                val, ok := strconv.parse_i128_maybe_prefixed(lit.token.text)
+                assert(ok)
+                return i128(val)
+
+            case .Char:
+                return i128(lit.token.text[1])
+                // ch, _, _, _ := strconv.unquote_char(lit.token.text, '\'')
+                // return i128(ch)
+            }
 
         case .F32:
             val, ok := strconv.parse_f32(lit.token.text)
@@ -328,7 +337,10 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
 
         for arg, i in call_expr.args {
             if arg.type != proc_type.params[i].type {
-                checker_error(c, "Invalid argument type")
+                checker_error(c, "Invalid argument type, expected {}, got {}",
+                    type_to_string(proc_type.params[i].type),
+                    type_to_string(arg.type),
+                )
             }
         }
 
@@ -742,7 +754,7 @@ check_selector_expr :: proc(c: ^Checker, ast: ^Ast) {
         }
 
         if expr.right.type == nil {
-            checker_error(c, "Invalid field {}", name[0])
+            checker_error(c, "Invalid field {}", name)
         }
     }
 
@@ -1069,11 +1081,13 @@ check_return_stmt :: proc(c: ^Checker, ast: ^Ast) {
     check_expr(c, stmt.value)
     proc_decl := c.curr_entity.ast.variant.(Ast_Proc_Decl)
     proc_type := proc_decl.type.variant.(Ast_Proc_Type)
-    if stmt.value.type != proc_type.result.type {
-        checker_error(c, "Invalid return type, expected {}, got {}",
-            type_to_string(proc_type.result.type),
-            type_to_string(stmt.value.type),
-        )
+    if proc_type.result != nil && stmt.value != nil {
+        if stmt.value.type != proc_type.result.type {
+            checker_error(c, "Invalid return type, expected {}, got {}",
+                type_to_string(proc_type.result.type),
+                type_to_string(stmt.value.type),
+            )
+        }
     }
 }
 
@@ -1142,9 +1156,6 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
                 } else {
                     checker_error(c, "Character literal cannot be assigned to non-integer-element type")
                 }
-
-            case .String:
-                unimplemented("fuck strings tbh")
             }
         }
 
@@ -1233,6 +1244,7 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
         case "U64"          : result = c.basic_types[.U64]
         case "F32", "Float" : result = c.basic_types[.F32]
         case "F64"          : result = c.basic_types[.F64]
+        case "String"       : result = c.basic_types[.String]
 
         case "b8", "bool",
              "b16",
@@ -1247,7 +1259,8 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
              "u32",
              "u64",
              "f32", "float",
-             "f64":
+             "f64",
+             "string":
             checker_error(c,
                 "Basic types are uppercase, please use {} instead of {}",
                 strings.to_upper(v.token.text),
