@@ -1,0 +1,3 @@
+procedure export main_vecc () {
+    println("Hello World!")
+}
