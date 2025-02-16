@@ -22,19 +22,19 @@ static Aos2I32 aos2i32_neg(Aos2I32 a) { return {{-a.data[0], -a.data[1]}}; }
 
 // VECC exported constants
 
-const String SAMPLE_NAME = {"120", 3};
+const String SAMPLE_NAME = {"Text", 4};
 const I32 RESOLUTION_X = 8 * 24;
 const I32 RESOLUTION_Y = 8 * 24;
 const I32 RESOLUTION_SCALE = 3;
-const I32 KEY_LEFT_BIT = 1 << 0;
-const I32 KEY_RIGHT_BIT = 1 << 1;
-const I32 KEY_UP_BIT = 1 << 2;
-const I32 KEY_DOWN_BIT = 1 << 3;
-const I32 KEY_Z_BIT = 1 << 4;
-const I32 KEY_X_BIT = 1 << 5;
+const U32 KEY_LEFT_BIT = 1 << 0;
+const U32 KEY_RIGHT_BIT = 1 << 1;
+const U32 KEY_UP_BIT = 1 << 2;
+const U32 KEY_DOWN_BIT = 1 << 3;
+const U32 KEY_Z_BIT = 1 << 4;
+const U32 KEY_X_BIT = 1 << 5;
 
 // VECC exported function declarations
-void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys);
+void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys, F32* audio_buffer, I32 audio_samples);
 #endif // VECC_DEFINED
 
 
@@ -42,8 +42,10 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 
 // VECC private function declarations
 
+static void draw_text(V8U32* framebuffer, Aos2I32 resolution, String text, Aos2I32 pos, U32 color);
 static void print_glyph(U32 glyph);
-static void draw_glyph(U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color);
+static void draw_glyph_scalar(U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color);
+static void draw_glyph(V8U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color);
 
 // VECC global variable declarations
 
@@ -53,31 +55,28 @@ const Aos95U32 g_glyphs = {{0, 134353028, 10570, 368389098, 150616254, 866266720
 
 // VECC function definitions
 
-void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys) {
+void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys, F32* audio_buffer, I32 audio_samples) {
 	const I32 num_pixel_blocks = (resolution.data[0] * resolution.data[1]) / vector_width;
 	for (I32 i = 0; i < num_pixel_blocks; i = i + 1) {
-		framebuffer[i] = v8u32_set1(286331153);
+		framebuffer[i] = v8u32_set1((U32)((i & 1) * 50));
 	};
-	I32 y = 1;
-	I32 x = 1;
+	draw_text(framebuffer, resolution, {"AHOJ! ASLKDJASLKDJASLKDJASLDKJASDLKJ", 36}, {{4, (I32)(80.0f + (f32_sin(time * 3.0f) * 10.0f))}}, 4278233600 | (U32)(frame * 500));
+	I32 y = 2;
+	I32 x = 2;
 	for (I32 i = 0; i < VECC_LEN(g_glyphs.data); i = i + 1) {
-		draw_glyph((*(U32**)&framebuffer), resolution, g_glyphs.data[i], {{x, y}}, 2004318071);
-		x = x + (GLYPH_WIDTH + 1);
-		if (x > (RESOLUTION_X - (GLYPH_WIDTH + 2))) {
-			x = 1;
-			y = y + (GLYPH_HEIGHT + 1);
+		draw_glyph(framebuffer, resolution, g_glyphs.data[i], {{x, y}}, 2004318071);
+		x = x + (GLYPH_WIDTH + 2);
+		if (x > (RESOLUTION_X - GLYPH_WIDTH)) {
+			x = 2;
+			y = y + (GLYPH_HEIGHT + 2);
 		};
 	};
-	x = 1;
-	y = y + ((GLYPH_HEIGHT + 1) * 2);
-	const String msg = {"hello abfakjshdfksd!", 20};
-	for (I32 i = 0; i < msg.len; i = i + 1) {
-		draw_glyph((*(U32**)&framebuffer), resolution, g_glyphs.data[((I32)msg.data[i] - 32)], {{x, y}}, 1432813567);
-		x = x + (GLYPH_WIDTH + 1);
-		if (x > (RESOLUTION_X - (GLYPH_WIDTH + 2))) {
-			x = 1;
-			y = y + (GLYPH_HEIGHT + 1);
-		};
+}
+
+static void draw_text(V8U32* framebuffer, Aos2I32 resolution, String text, Aos2I32 pos, U32 color) {
+	for (I32 i = 0; i < text.len; i = i + 1) {
+		draw_glyph(framebuffer, resolution, g_glyphs.data[((I32)text.data[i] - 32)], {{pos.data[0], pos.data[1]}}, color);
+		pos.data[0] = pos.data[0] + (GLYPH_WIDTH + 1);
 	};
 }
 
@@ -96,7 +95,7 @@ static void print_glyph(U32 glyph) {
 	};
 }
 
-static void draw_glyph(U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color) {
+static void draw_glyph_scalar(U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color) {
 	for (I32 y = 0; y < GLYPH_HEIGHT; y = y + 1) {
 		for (I32 x = 0; x < GLYPH_WIDTH; x = x + 1) {
 			const U32 shift = (U32)((y * GLYPH_WIDTH) + x);
@@ -106,6 +105,46 @@ static void draw_glyph(U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 
 				if (((coord.data[0] >= 0) & (coord.data[0] < resolution.data[0])) & ((coord.data[1] >= 0) & (coord.data[1] < resolution.data[1]))) {
 					framebuffer[(coord.data[0] + (coord.data[1] * resolution.data[0]))] = color;
 				};
+			};
+		};
+	};
+}
+
+static void draw_glyph(V8U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color) {
+	if (pos.data[0] < 0) {
+		return ;
+	};
+	if (pos.data[1] < 0) {
+		return ;
+	};
+	if (pos.data[0] > (resolution.data[0] - GLYPH_WIDTH)) {
+		return ;
+	};
+	if (pos.data[1] > (resolution.data[1] - GLYPH_WIDTH)) {
+		return ;
+	};
+	const I32 x_pos = pos.data[0] / vector_width;
+	const I32 x_blocks = resolution.data[0] / vector_width;
+	const I32 sub_x = pos.data[0] % vector_width;
+	const V8B32 x_mask_0 = v8b32_and(v8i32_ge(vector_index, v8i32_set1(sub_x)), v8i32_lt(vector_index, v8i32_set1(sub_x + GLYPH_WIDTH)));
+	if (v8b32_reduce_any(x_mask_0)) {
+		const V8U32 x_shift = v8i32_to_v8u32(v8i32_sub(vector_index, v8i32_set1(sub_x)));
+		for (I32 y = 0; y < GLYPH_HEIGHT; y = y + 1) {
+			const V8U32 shift = v8u32_add(x_shift, v8u32_set1((U32)(y * GLYPH_WIDTH)));
+			const V8U32 bit = v8u32_and(v8u32_srv(v8u32_set1(glyph), shift), v8u32_set1(1));
+			V8B32 vecc_mask8 = v8b32_and(v8u32_neq(bit, v8u32_set1(0)), x_mask_0); { // vector if
+				framebuffer[((x_pos + 0) + ((pos.data[1] + y) * x_blocks))] = v8u32_blend(framebuffer[((x_pos + 0) + ((pos.data[1] + y) * x_blocks))], v8u32_set1(color), vecc_mask8);
+			};
+		};
+	};
+	const V8B32 x_mask_1 = v8i32_lt(v8i32_add(vector_index, v8i32_set1(vector_width)), v8i32_set1(sub_x + GLYPH_WIDTH));
+	if (v8b32_reduce_any(x_mask_1)) {
+		const V8U32 x_shift = v8i32_to_v8u32(v8i32_sub(v8i32_add(vector_index, v8i32_set1(vector_width)), v8i32_set1(sub_x)));
+		for (I32 y = 0; y < GLYPH_HEIGHT; y = y + 1) {
+			const V8U32 shift = v8u32_add(x_shift, v8u32_set1((U32)(y * GLYPH_WIDTH)));
+			const V8U32 bit = v8u32_and(v8u32_srv(v8u32_set1(glyph), shift), v8u32_set1(1));
+			V8B32 vecc_mask12 = v8b32_and(v8u32_neq(bit, v8u32_set1(0)), x_mask_1); { // vector if
+				framebuffer[((x_pos + 1) + ((pos.data[1] + y) * x_blocks))] = v8u32_blend(framebuffer[((x_pos + 1) + ((pos.data[1] + y) * x_blocks))], v8u32_set1(color), vecc_mask12);
 			};
 		};
 	};

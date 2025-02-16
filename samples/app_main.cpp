@@ -27,8 +27,6 @@ uint64_t time_clock() {
 #define NUM_SAMPLES 1024
 #define AUDIO_BUFFER_CAP (NUM_SAMPLES * 4)
 float g_audio_buffer[AUDIO_BUFFER_CAP];
-uint32_t g_audio_even_odd;
-int g_audio_pos;
 
 
 double time_diff(uint64_t now, uint64_t prev) {
@@ -95,29 +93,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             uint64_t compute_clock = time_clock();
 
             int num_audio_samples = saudio_expect();
-            printf("audio frames %i\n", num_audio_samples);
+            // printf("audio frames %i\n", num_audio_samples);
 
             if (num_audio_samples > AUDIO_BUFFER_CAP) {
                 num_audio_samples = AUDIO_BUFFER_CAP;
             }
-
-            // float s;
-            // for (int i = 0; i < num_frames; i++) {
-            //     // if (g_audio_even_odd++ & (1<<5)) {
-            //     //     s = KEY_Z_BIT & g_keys ? 1.0f : 0.1f;
-            //     // } else {
-            //     //     // s = -0.1f;
-            //     //     s = KEY_Z_BIT & g_keys ? -1.0f : -0.1f;
-            //     // }
-            //     s = ((float)(g_audio_pos & 31) / 32.0) - 0.5;
-            //     if (KEY_Z_BIT & g_keys) s *= 0.1;
-            //     g_audio_buffer[g_audio_pos++] = s;
-            //     if (g_audio_pos == NUM_SAMPLES) {
-            //         g_audio_pos = 0;
-            //         saudio_push(g_audio_buffer, NUM_SAMPLES);
-            //         break;
-            //     }
-            // }
 
 
             compute_frame(
@@ -137,9 +117,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             uint64_t end_clock = time_clock();
             double compute_time = time_diff(end_clock, compute_clock);
 
-            // if ((g_frame % 60) == 0) {
+            if ((g_frame % 30) == 0) {
                 printf("delta time: %g ms (%g fps), compute: %g ms\n", delta * 1e3, 1.0 / delta, compute_time * 1e3);
-            // }
+            }
 
             PAINTSTRUCT ps;
             HDC dc = BeginPaint(hwnd, &ps);

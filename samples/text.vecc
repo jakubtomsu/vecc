@@ -1,4 +1,4 @@
-const export SAMPLE_NAME String = "120"
+const export SAMPLE_NAME String = "Text"
 
 const export RESOLUTION_X I32 = 8 * 24
 const export RESOLUTION_Y I32 = 8 * 24
@@ -36,38 +36,44 @@ procedure export compute_frame (
     immut delta                 F32
     immut frame                 I32
     immut keys                  U32
+    immut audio_buffer          [^]F32
+    immut audio_samples         I32
 ) {
     immut num_pixel_blocks I32 = (resolution.x * resolution.y) / vector_width
     for i I32; i < num_pixel_blocks; i += 1 {
-        framebuffer[i] = 0x11111111
+        framebuffer[i] = conv(U32, (i & 1) * 50)
     }
 
-    // print_glyph(g_glyphs[80])
+    draw_text(framebuffer, resolution, "AHOJ!",
+        {80; conv(I32, 80.0 + (sin(time * 3.0) * 10.0))},
+        0xff00aa00 | conv(U32, frame * 500))
 
-    mut y I32 = 1
-    mut x I32 = 1
+    mut y I32 = 2
+    mut x I32 = 2
     for i I32; i < g_glyphs.len; i += 1 {
-        draw_glyph(reinterpret([^]U32, framebuffer), resolution,
+        draw_glyph(framebuffer, resolution,
             g_glyphs[i], {x; y}, 0x77777777)
-        x += GLYPH_WIDTH + 1
-        if x > (RESOLUTION_X - (GLYPH_WIDTH + 2)) {
-            x = 1
-            y += GLYPH_HEIGHT + 1
+        x += GLYPH_WIDTH + 2
+        if x > (RESOLUTION_X - (GLYPH_WIDTH)) {
+            x = 2
+            y += GLYPH_HEIGHT + 2
         }
     }
+}
 
-    x = 1
-    y += (GLYPH_HEIGHT + 1) * 2
-
-    immut msg String = "hello abfakjshdfksd!"
-    for i I32; i < msg.len; i += 1 {
-        draw_glyph(reinterpret([^]U32, framebuffer), resolution,
-            g_glyphs[conv(I32, msg[i]) - 32], {x; y}, 0x5566ffff)
-        x += GLYPH_WIDTH + 1
-        if x > (RESOLUTION_X - (GLYPH_WIDTH + 2)) {
-            x = 1
-            y += GLYPH_HEIGHT + 1
-        }
+procedure draw_text (
+    immut vector framebuffer    [^]U32
+    immut resolution            [2]I32
+    immut text String
+    mut   pos                   [2]I32
+    immut color                 U32
+) {
+    for i I32; i < text.len; i += 1 {
+        draw_glyph(framebuffer, resolution,
+            g_glyphs[conv(I32, text[i]) - 32], {pos.x; pos.y}, color)
+        // draw_glyph_scalar(reinterpret([^]U32, framebuffer), resolution,
+        //     g_glyphs[conv(I32, text[i]) - 32], {pos.x; pos.y}, color)
+        pos.x += GLYPH_WIDTH + 1
     }
 }
 
@@ -86,8 +92,7 @@ procedure print_glyph (immut glyph U32) {
     }
 }
 
-// Scalar for now!
-procedure draw_glyph (
+procedure draw_glyph_scalar (
     immut framebuffer           [^]U32
     immut resolution            [2]I32
     immut glyph                 U32
@@ -103,6 +108,49 @@ procedure draw_glyph (
                 if ((coord.x >= 0) & (coord.x < resolution.x)) & ((coord.y >= 0) & (coord.y < resolution.y)) {
                     framebuffer[coord.x + (coord.y * resolution.x)] = color
                 }
+            }
+        }
+    }
+}
+
+procedure draw_glyph (
+    immut vector framebuffer    [^]U32
+    immut resolution            [2]I32
+    immut glyph                 U32
+    immut pos                   [2]I32
+    immut color                 U32
+) {
+    // Just doesn't handle glyphs that aren't fully in the frame
+    if pos.x < 0 { return }
+    if pos.y < 0 { return }
+    if pos.x > (resolution.x - GLYPH_WIDTH) { return }
+    if pos.y > (resolution.y - GLYPH_WIDTH) { return }
+
+    immut x_pos I32 = pos.x / vector_width
+    immut x_blocks I32 = resolution.x / vector_width
+
+    immut sub_x I32 = pos.x % vector_width
+
+    immut vector x_mask_0 B32 = (vector_index >= sub_x) & (vector_index < (sub_x + GLYPH_WIDTH))
+    if reduce_any(x_mask_0) {
+        immut vector x_shift U32 = conv(U32, vector_index - sub_x)
+        for y I32; y < GLYPH_HEIGHT; y += 1 {
+            immut vector shift U32 = x_shift + conv(U32, y * GLYPH_WIDTH)
+            immut vector bit U32 = (glyph >> shift) & 1
+            if (bit != 0) & x_mask_0 {
+                framebuffer[(x_pos + 0) + ((pos.y + y) * x_blocks)] = color
+            }
+        }
+    }
+
+    immut vector x_mask_1 B32 = ((vector_index + vector_width) < (sub_x + GLYPH_WIDTH))
+    if reduce_any(x_mask_1) {
+        immut vector x_shift U32 = conv(U32, (vector_index + vector_width) - sub_x)
+        for y I32; y < GLYPH_HEIGHT; y += 1 {
+            immut vector shift U32 = x_shift + conv(U32, y * GLYPH_WIDTH)
+            immut vector bit U32 = (glyph >> shift) & 1
+            if (bit != 0) & x_mask_1 {
+                framebuffer[(x_pos + 1) + ((pos.y + y) * x_blocks)] = color
             }
         }
     }

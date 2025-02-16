@@ -7,6 +7,11 @@
 #include <stdio.h>
 #include <vecc_builtin.h>
 
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
 typedef struct { F32 data[2]; } Aos2F32;
 typedef struct Item {
 	Aos2F32 pos;
@@ -40,11 +45,6 @@ typedef struct Player {
 	Aos3F32 powerup_timer;
 	F32 particle_timer;
 } Player;
-typedef struct Hit {
-	F32 tmin;
-	F32 tmax;
-	B8 hit;
-} Hit;
 typedef struct { U8 data[4]; } Aos4U8;
 typedef struct Effect {
 	Aos2F32 pos;
@@ -54,12 +54,12 @@ typedef struct Effect {
 	Aos4U8 color;
 } Effect;
 typedef struct { I32 data[2]; } Aos2I32;
-typedef struct { Bullet data[64]; } Aos64Bullet;
+typedef struct { Enemy data[64]; } Aos64Enemy;
 typedef struct { Item data[64]; } Aos64Item;
 typedef struct { Effect data[128]; } Aos128Effect;
-typedef struct { Enemy data[64]; } Aos64Enemy;
-typedef struct { B8 data[3]; } Aos3B8;
+typedef struct { Bullet data[64]; } Aos64Bullet;
 typedef struct { V8I32 data[2]; } Aos2V8I32;
+typedef struct { B8 data[3]; } Aos3B8;
 static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
 static Aos2F32 aos2f32_set1(F32 a) { return {{a, a}}; }
 static Aos2I32 aos2f32_to_aos2i32(Aos2F32 a) { return {{(I32)a.data[0], (I32)a.data[1]}}; }
@@ -88,9 +88,6 @@ static Aos2I32 aos2i32_and(Aos2I32 a, Aos2I32 b) { return {{a.data[0] & b.data[0
 static Aos2I32 aos2i32_or(Aos2I32 a, Aos2I32 b) { return {{a.data[0] | b.data[0], a.data[1] | b.data[1]}}; }
 static Aos2I32 aos2i32_xor(Aos2I32 a, Aos2I32 b) { return {{a.data[0] ^ b.data[0], a.data[1] ^ b.data[1]}}; }
 static Aos2I32 aos2i32_neg(Aos2I32 a) { return {{-a.data[0], -a.data[1]}}; }
-static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
-static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
-static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }
 static Aos2V8I32 aos2v8i32_set(V8I32 v0, V8I32 v1) { return {{v0, v1}}; }
 static Aos2V8I32 aos2v8i32_set_scalar(Aos2I32 a) { return {{v8i32_set1(a.data[0]), v8i32_set1(a.data[1])}}; }
 static Aos2V8I32 aos2v8i32_set1(V8I32 a) { return {{a, a}}; }
@@ -100,6 +97,9 @@ static Aos2V8I32 aos2v8i32_mul(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_mul(a.
 static Aos2V8I32 aos2v8i32_and(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_and(a.data[0], b.data[0]), v8i32_and(a.data[1], b.data[1])}}; }
 static Aos2V8I32 aos2v8i32_or(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_or(a.data[0], b.data[0]), v8i32_or(a.data[1], b.data[1])}}; }
 static Aos2V8I32 aos2v8i32_xor(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_xor(a.data[0], b.data[0]), v8i32_xor(a.data[1], b.data[1])}}; }
+static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
+static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
+static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }
 
 // VECC exported constants
 
