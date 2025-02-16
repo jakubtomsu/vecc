@@ -8,7 +8,7 @@ odin build .. -out:vecc.exe || goto :error
 
 vecc %1.vecc || goto :error
 cl /I. /I.. /O2 /arch:AVX2 %1.cpp || goto :error
-clang %1.cpp -I.. -O2 -mavx2 -S -masm=intel
+@REM clang %1.cpp -I.. -O2 -mavx2 -S -masm=intel
 @REM vecc game.vecc && clang -I. -I.. -O2 -mavx2 game.cpp
 
 

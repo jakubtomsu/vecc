@@ -101,6 +101,28 @@ mut g_shake F32
 
 mut g_hit_pause F32
 
+const AUDIO_SAMPLE_RATE F32 = 44100.0
+
+const SOUND_BEGIN       I32 = 0
+const SOUND_WALK        I32 = 1
+const SOUND_HIT         I32 = 2
+const SOUND_SHOOT       I32 = 3
+const SOUND_EXPLOSION   I32 = 4
+const SOUND_KILL        I32 = 5
+const SOUND_PICKUP      I32 = 6
+const SOUND_SPAWN       I32 = 7
+const SOUND_NUM         I32 = 8
+
+mut g_sound_sample  [8]I32
+mut g_sound_rand    [8]F32
+
+mut g_audio_sample I32
+
+procedure play_sound (immut sound I32) {
+    g_sound_sample[sound] = 0
+    g_sound_rand[sound] = rand_f32()
+}
+
 procedure rand_u32 () U32 {
     g_seed = (g_seed * 0x343fd) + 0x269ec3
     return (g_seed >> 16) & 32767
@@ -126,6 +148,7 @@ procedure spawn_item (
     for i I32; i < 64; i += 1 {
         mut item Item = g_items[i]
         if item.powerup == -1 {
+            play_sound(SOUND_SPAWN)
             item.pos = pos
             item.powerup = powerup
             item.timer = 0
@@ -179,13 +202,16 @@ procedure reset_game () {
         g_effects[i].dur = -1
     }
 
+    for i I32; i < SOUND_NUM; i += 1 {
+        g_sound_sample[i] = 100000
+    }
+
+    play_sound(SOUND_BEGIN)
+
     g_enemy_spawn_timer = 0
     g_game_timer = 0
     g_shake = 40
 }
-
-mut g_hit_sound F32 = 1000
-mut g_sample_index I32
 
 procedure export compute_frame (
     immut vector framebuffer    [^]U32
@@ -203,6 +229,8 @@ procedure export compute_frame (
 
     immut num_pixel_blocks I32 = (resolution.x * resolution.y) / vector_width
 
+    mut end_game Bool
+
     mut should_hit_pause B32 = g_hit_pause > 0
     g_hit_pause -= delta
     if should_hit_pause {
@@ -210,12 +238,10 @@ procedure export compute_frame (
             immut vector c U32 = framebuffer[i]
             framebuffer[i] = c | color_to_u32({10;10;10;0})
         }
-        return
-    }
+    } else {
 
     g_game_timer += delta
 
-    mut end_game Bool
 
     mut clear_mask U32 = reinterpret(U32, delta)
     clear_mask = !clear_mask
@@ -265,7 +291,7 @@ procedure export compute_frame (
 
         item.timer += delta
 
-        if item.timer > 11 {
+        if item.timer > 4 {
             item.powerup = -1
         }
 
@@ -274,6 +300,7 @@ procedure export compute_frame (
                 player.powerup_timer[item.powerup] = 0
             }
             player.powerup_timer[item.powerup] += 7
+            play_sound(SOUND_PICKUP)
             item.powerup = -1
         }
 
@@ -286,7 +313,7 @@ procedure export compute_frame (
         if item.powerup == PLAYER_POWERUP_SHOTGUN    { color = POWERUP_SHOTGUN_COLOR }
         if item.powerup == PLAYER_POWERUP_EXPLOSIVE  { color = POWERUP_EXPLOSIVE_COLOR }
 
-        if item.timer > 7 {
+        if item.timer > 3 {
             if sin(item.timer * 30) > 0 {
                 color = {0; 0; 0; 0}
             }
@@ -327,6 +354,7 @@ procedure export compute_frame (
 
         if enemy.health <= 0 {
             enemy.state = ENEMY_STATE_DEAD
+            play_sound(SOUND_KILL)
             spawn_effect(enemy.pos, 9, 0.05, {255; 255; 255; 255})
             g_shake += 5
             g_hit_pause = 0.02
@@ -353,7 +381,7 @@ procedure export compute_frame (
     }
 
     g_enemy_spawn_timer += delta
-    immut spawn_rate F32 = 0.2 + (1.2 * max(0.0, 1.0 - (g_game_timer / GAME_MAX_TIME)))
+    immut spawn_rate F32 = 0.1 + (1.2 * max(0.0, 1.0 - (g_game_timer / GAME_MAX_TIME)))
     if (g_enemy_spawn_timer > spawn_rate) & (oldest_corpse != -1) {
         g_enemy_spawn_timer = 0
 
@@ -428,12 +456,12 @@ procedure export compute_frame (
         }
 
         mut dir [2]F32
-        mut aiming Bool
+        mut moving Bool
         if (keys & KEY_LEFT_BIT ) != 0 { dir.x += -1 }
         if (keys & KEY_RIGHT_BIT) != 0 { dir.x +=  1 }
         if (keys & KEY_UP_BIT   ) != 0 { dir.y += -1 }
         if (keys & KEY_DOWN_BIT ) != 0 { dir.y +=  1 }
-        aiming = conv(Bool, length2(dir) > 0)
+        moving = conv(Bool, length2(dir) > 0)
 
         mut cooldown_time F32 = 0.1
         mut num_shots I32 = 1
@@ -474,6 +502,7 @@ procedure export compute_frame (
             g_shake = 1
             // muzzle flash
             spawn_effect(player.pos + (player.dir * (6 * shoot_dir)), 3, 0.01, {0;255;255; 0})
+            play_sound(SOUND_SHOOT)
             for i I32; i < 64; i += 1 {
                 if !g_bullets[i].used {
                     mut bdir [2]F32 = player.dir * shoot_dir
@@ -497,16 +526,18 @@ procedure export compute_frame (
             }
         }
 
-        if aiming {
+        if moving {
             if !shooting {
                 player.dir = dir
             }
         }
 
-        if aiming {
+        if moving {
             player.particle_timer += delta
-            if player.particle_timer > 0.1 {
-                player.particle_timer -= 0.1
+            if player.particle_timer > 0.15 {
+                player.particle_timer -= 0.15
+
+                play_sound(SOUND_WALK)
 
                 spawn_effect(player.pos, 1, rand_f32() * 8, {100; 100; 100; 0})
             }
@@ -521,7 +552,7 @@ procedure export compute_frame (
         player.pos.y = clamp(player.pos.y, RAD, conv(F32, RESOLUTION_Y) - RAD)
 
         mut player_pos [2]F32 = player.pos
-        player_pos.y -= round((0.5 + (0.5 * sin(time * 25))) * clamp(length(player.vel), 0, 1))
+        player_pos.y -= round((0.5 + (0.5 * sin(time * 30))) * clamp(length(player.vel), 0, 1))
         draw_octagon(framebuffer, resolution, conv(I32, player_pos), 3, 5, {255; 150; 0; 0}, true)
 
         mut gun_pos [2]I32 = conv(I32, player.pos)
@@ -582,6 +613,7 @@ procedure export compute_frame (
                     spawn_effect(bullet.pos, 32, 0.01, {0; 255; 255; 0})
                     spawn_effect(bullet.pos, 22, 0.05, {255; 255; 255; 0})
                     g_hit_pause = 0.09
+                    play_sound(SOUND_EXPLOSION)
 
                     for ei I32; ei < 64; ei += 1 {
                         mut enemy Enemy = g_enemies[ei]
@@ -599,7 +631,7 @@ procedure export compute_frame (
                     spawn_effect(bullet.pos, 4, 0.1, {0; 255; 255; 0})
                 }
 
-                g_hit_sound = 0
+                play_sound(SOUND_HIT)
 
                 mut enemy Enemy = g_enemies[hit_enemy]
                 enemy.health -= 1
@@ -628,14 +660,78 @@ procedure export compute_frame (
     draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 15},
         {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_EXPLOSIVE]))); 3}, POWERUP_EXPLOSIVE_COLOR)
 
-    g_hit_sound += delta * 8
-    for i I32 = 0; i < audio_samples; i += 1 {
-        immut t F32 = conv(F32, g_sample_index) / 44100.0
-        mut freq F32 = 200.0 - (g_hit_sound * 20.0)
-        mut s F32 = fract(t * freq) - 0.5
-        s *= max(0.0, 1.0 - g_hit_sound) * 2.0
-        audio_buffer[i] = s
-        g_sample_index += 1
+    }
+
+    for audio_sample I32 = 0; audio_sample < audio_samples; audio_sample += 1 {
+        immut t F32 = conv(F32, g_audio_sample) / AUDIO_SAMPLE_RATE
+
+        mut begin_t     F32 = sample_t(g_sound_sample[SOUND_BEGIN])
+        mut walk_t      F32 = sample_t(g_sound_sample[SOUND_WALK])
+        mut hit_t       F32 = sample_t(g_sound_sample[SOUND_HIT])
+        mut shoot_t     F32 = sample_t(g_sound_sample[SOUND_SHOOT])
+        mut explosion_t F32 = sample_t(g_sound_sample[SOUND_EXPLOSION])
+        mut kill_t      F32 = sample_t(g_sound_sample[SOUND_KILL])
+        mut pickup_t    F32 = sample_t(g_sound_sample[SOUND_PICKUP])
+        mut spawn_t     F32 = sample_t(g_sound_sample[SOUND_SPAWN])
+
+        mut hit F32 = wave_square(hit_t * (200.0 - (hit_t * 100.0)))
+        hit += wave_sin(hit_t * (600.0 - (hit_t * 500.0)))
+        hit += wave_noise(hit_t * 600)
+        hit *= max(0.0, 1.0 - (hit_t * 5.0)) * 2.0
+
+        mut begin F32 = wave_sin(begin_t * (400 + (begin_t * 500)))
+        begin += wave_triangle(begin_t * (200 + (begin_t * 200)))
+        begin += wave_saw     (begin_t * (800 + (begin_t * 800))) * (max(0.0, 1.0 - (begin_t)) * 0.2)
+        begin *= max(0.0, 1.0 - (begin_t))
+
+        mut walk F32 = wave_noise(walk_t * (600 + (g_sound_rand[SOUND_WALK] * 300)))
+        walk += wave_saw(walk_t * 200)
+        walk *= max(0.0, 1.0 - (walk_t * 50)) * 0.2
+
+        mut shoot F32
+        shoot += wave_noise(shoot_t * (400 + (g_sound_rand[SOUND_SHOOT] * 100))) * max(0.0, 1.0 - (shoot_t * 10))
+        shoot += wave_noise(shoot_t * (200                                     )) * max(0.0, 0.5 - (shoot_t * 2))
+        shoot -= wave_saw  (shoot_t * (200 + (shoot_t * 500))) * max(0.0, 1.0 - (shoot_t * 50))
+
+        mut explosion F32
+        explosion += wave_noise(explosion_t * (200 + (g_sound_rand[SOUND_EXPLOSION] * 400))) * max(0.0, 1.0 - (explosion_t))
+        explosion += wave_noise(explosion_t * (500 + (g_sound_rand[SOUND_EXPLOSION] * 400))) * max(0.0, 1.0 - (explosion_t * 10))
+        explosion *= 4.0
+        // explosion += wave_noise(explosion_t * 1000) * max(0.0, 1.0 - (explosion_t * 20))
+
+        mut kill F32 = wave_square(kill_t * (600.0 - (kill_t * 300.0)))
+        kill += wave_noise(kill_t * 1000)
+        kill *= max(0.0, 1.0 - (kill_t * 3))
+
+        mut pickup F32
+        pickup += wave_saw     (pickup_t * (400 + (pickup_t * 500)))
+        pickup += wave_triangle(pickup_t * (800 + (pickup_t * 400)))
+        pickup *= max(0.0, 1.0 - (pickup_t * 2))
+
+        mut spawn F32
+        spawn += wave_sin(spawn_t * (500 + (spawn_t * 3000)))
+        spawn += wave_saw(spawn_t * (900  + (spawn_t * 400)))
+        spawn *= max(0.0, 1.0 - (spawn_t * 6)) * 2
+
+        mut sample F32
+        sample += begin
+        sample += walk
+        sample += hit
+        sample += shoot
+        sample += explosion
+        sample += kill
+        sample += pickup
+        sample += spawn
+
+        sample *= 0.05
+
+        audio_buffer[audio_sample] = sample
+
+        g_audio_sample += 1
+
+        for i I32; i < SOUND_NUM; i += 1 {
+            g_sound_sample[i] += 1
+        }
     }
 
     if end_game {
@@ -768,4 +864,44 @@ procedure intersect_ray_aabb (
     result.hit = conv(B8, result.tmax >= max(0.0, result.tmin))
 
     return result
+}
+
+
+const PI F32 = 3.14159265358979
+
+procedure wave_sin (immut t F32) F32 {
+    return sin((2.0 * PI) * t)
+}
+
+procedure wave_square (immut t F32) F32 {
+    if (conv(I32, t) & 1) == 0 {
+        return 1.0
+    } else {
+        return -1.0
+    }
+}
+
+procedure wave_saw (immut t F32) F32 {
+    return (fract(t) - 0.5) * 2.0
+}
+
+procedure wave_triangle (immut t F32) F32 {
+    return (abs((t + 0.25) - round(t + 0.25)) * 4.0) - 1.0
+}
+
+procedure hash_u32 (mut x U32) U32 {
+    x ^= x >> 16
+    x *= 0x7feb352d
+    x ^= x >> 15
+    x *= 0x846ca68b
+    x ^= x >> 16
+    return x
+}
+
+procedure wave_noise (immut t F32) F32 {
+    return ((conv(F32, hash_u32(conv(U32, t))) / conv(F32, 0xffffffff)) - 0.5) * 2.0
+}
+
+procedure sample_t (immut index I32) F32 {
+    return conv(F32, index) / AUDIO_SAMPLE_RATE
 }
