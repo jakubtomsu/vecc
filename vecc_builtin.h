@@ -350,6 +350,8 @@ vecc_op V8U32 v8u32_or  (V8U32 a, V8U32 b)  { return {{_mm256_or_si256(a.data[0]
 vecc_op V8U32 v8u32_xor (V8U32 a, V8U32 b)  { return {{_mm256_xor_si256(a.data[0], b.data[0])}}; }
 vecc_op V8U32 v8u32_sl  (V8U32 a, int b)    { return {{_mm256_slli_epi32(a.data[0], b)}}; }
 vecc_op V8U32 v8u32_sr  (V8U32 a, int b)    { return {{_mm256_srli_epi32(a.data[0], b)}}; }
+vecc_op V8U32 v8u32_slv (V8U32 a, V8U32 b)  { return {{_mm256_sllv_epi32(a.data[0], b.data[0])}}; }
+vecc_op V8U32 v8u32_srv (V8U32 a, V8U32 b)  { return {{_mm256_srlv_epi32(a.data[0], b.data[0])}}; }
 vecc_op V8U32 v8u32_andnot(V8U32 a, V8U32 b){ return {{_mm256_andnot_si256(b.data[0], a.data[0])}}; }
 vecc_op V8U32 v8u32_not (V8U32 a)           { return {{_mm256_xor_si256(a.data[0], _mm256_set1_epi32(0xffffffff))}}; }
 

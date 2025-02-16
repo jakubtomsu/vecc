@@ -21,6 +21,8 @@ procedure export compute_frame (
     immut delta                 F32
     immut frame                 I32
     immut keys                  U32
+    immut audio_buffer          [^]F32
+    immut audio_samples         I32
 ) {
     immut ltime F32 = 0.5 - (0.5*cos(time*0.12))
     immut zoom F32 = pow(0.9, 50.0*ltime)
