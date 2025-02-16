@@ -184,6 +184,19 @@ type_is_numeric :: proc(t: ^Type) -> bool {
     }
 }
 
+type_is_vector :: proc(t: ^Type) -> bool {
+    #partial switch v in t.variant {
+    case Type_Array:
+        if v.kind == .Vector {
+            return true
+        }
+        return false
+
+    case:
+        return false
+    }
+}
+
 type_to_string :: proc(type: ^Type) -> string {
     if type == nil {
         return "NULL TYPE"

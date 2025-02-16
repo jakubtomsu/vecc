@@ -522,7 +522,7 @@ check_binary_op :: proc(
     right:      ^Ast,
     op:         Token_Kind,
     type_hint:  ^Type,
-) -> (result: ^Type) {
+) -> (result: ^Type, dominant: ^Type) {
     check_expr(c, left, type_hint = type_hint)
 
     hint: ^Type
@@ -546,7 +546,18 @@ check_binary_op :: proc(
             checker_error(c, right.token, "Shift amount must be an integer")
         }
 
-        result = left.type
+        // HACK
+        #partial switch v in right.type.variant {
+        case Type_Array:
+            assert(v.kind == .Vector)
+            result = right.type
+            dominant = right.type
+
+        case:
+            result = left.type
+            dominant = left.type
+        }
+
 
     case:
 
@@ -603,6 +614,8 @@ check_binary_op :: proc(
             }
         }
 
+        dominant = result
+
         if result == nil {
             checker_error(c, left.token, "Incompatible types in binary op '{}': {} vs {}",
                 _token_str[op],
@@ -651,7 +664,10 @@ check_binary_op :: proc(
          .Mod:
     }
 
-    return result
+    assert(result != nil)
+    assert(dominant != nil)
+
+    return result, dominant
 }
 
 // check_type_internal, check_type, add_type_info_internal, check_ident
@@ -871,13 +887,15 @@ check_deref_expr :: proc(c: ^Checker, ast: ^Ast) {
 check_binary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
     assert(ast.type == nil)
 
-    expr := ast.variant.(Ast_Binary_Expr)
-    ast.type = check_binary_op(c,
+    expr := &ast.variant.(Ast_Binary_Expr)
+    ast.type, expr.dominant = check_binary_op(c,
         expr.left,
         expr.right,
         expr.op.kind,
         type_hint = type_hint,
     )
+
+    assert(expr.dominant != nil)
 
     // Constant folding
     #partial switch l in expr.left.value {
@@ -1017,7 +1035,7 @@ check_are_types_assignable :: proc(c: ^Checker, left: ^Type, right: ^Type) -> bo
 }
 
 check_stmt :: proc(c: ^Checker, ast: ^Ast) {
-    #partial switch v in ast.variant {
+    #partial switch &v in ast.variant {
     case Ast_Value_Decl:
         check_value_decl(c, ast)
 
@@ -1026,6 +1044,8 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
         if !op_ok {
             checker_error(c, ast.token, "Invalid assign statement op: {}", _token_str[op])
         }
+
+        // TODO: handle mutability
 
         #partial switch v.op.kind {
         case .Assign:
@@ -1041,7 +1061,9 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
             }
 
         case:
-            ast.type = check_binary_op(c, v.left, v.right, op, type_hint = nil)
+            dominant: ^Type
+            ast.type, dominant = check_binary_op(c, v.left, v.right, op, type_hint = nil)
+            assert(dominant == v.left.type) // idk
         }
 
     case Ast_Return_Stmt:

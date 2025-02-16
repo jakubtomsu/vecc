@@ -193,9 +193,10 @@ Ast_Unary_Expr :: struct {
 }
 
 Ast_Binary_Expr :: struct {
-    op:     Token,
-    left:   ^Ast,
-    right:  ^Ast,
+    op:         Token,
+    left:       ^Ast,
+    right:      ^Ast,
+    dominant:   ^Type,
 }
 
 Ast_Call_Expr :: struct {
