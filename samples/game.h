@@ -7,16 +7,20 @@
 #include <stdio.h>
 #include <vecc_builtin.h>
 
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
 typedef struct { F32 data[2]; } Aos2F32;
-typedef struct { F32 data[3]; } Aos3F32;
-typedef struct Player {
+typedef struct Bullet {
+	B8 used;
 	Aos2F32 pos;
 	Aos2F32 vel;
-	Aos2F32 dir;
-	F32 gun_timer;
-	Aos3F32 powerup_timer;
-	F32 particle_timer;
-} Player;
+	F32 timer;
+	U8 level;
+	B8 explode;
+} Bullet;
 typedef struct Enemy {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -27,6 +31,15 @@ typedef struct Enemy {
 	U8 state;
 	U8 kind;
 } Enemy;
+typedef struct { F32 data[3]; } Aos3F32;
+typedef struct Player {
+	Aos2F32 pos;
+	Aos2F32 vel;
+	Aos2F32 dir;
+	F32 gun_timer;
+	Aos3F32 powerup_timer;
+	F32 particle_timer;
+} Player;
 typedef struct { U8 data[4]; } Aos4U8;
 typedef struct Effect {
 	Aos2F32 pos;
@@ -35,31 +48,19 @@ typedef struct Effect {
 	F32 dur;
 	Aos4U8 color;
 } Effect;
-typedef struct Bullet {
-	B8 used;
-	Aos2F32 pos;
-	Aos2F32 vel;
-	F32 timer;
-	U8 level;
-	B8 explode;
-} Bullet;
-typedef struct Hit {
-	F32 tmin;
-	F32 tmax;
-	B8 hit;
-} Hit;
 typedef struct Item {
 	Aos2F32 pos;
 	I32 powerup;
 	F32 timer;
 } Item;
-typedef struct { Enemy data[64]; } Aos64Enemy;
-typedef struct { I32 data[8]; } Aos8I32;
-typedef struct { Bullet data[64]; } Aos64Bullet;
+typedef struct { F32 data[8]; } Aos8F32;
 typedef struct { Effect data[128]; } Aos128Effect;
+typedef struct { Bullet data[64]; } Aos64Bullet;
+typedef struct { I32 data[8]; } Aos8I32;
+typedef struct { U32 data[95]; } Aos95U32;
 typedef struct { Item data[64]; } Aos64Item;
 typedef struct { I32 data[2]; } Aos2I32;
-typedef struct { F32 data[8]; } Aos8F32;
+typedef struct { Enemy data[64]; } Aos64Enemy;
 typedef struct { B8 data[3]; } Aos3B8;
 typedef struct { V8I32 data[2]; } Aos2V8I32;
 static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
@@ -146,6 +147,8 @@ static F32 wave_triangle(F32 t);
 static U32 hash_u32(U32 x);
 static F32 wave_noise(F32 t);
 static F32 sample_t(I32 index);
+static void draw_text(V8U32* framebuffer, Aos2I32 resolution, String text, Aos2I32 pos, U32 color);
+static void draw_glyph(V8U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color);
 
 // VECC global variable declarations
 
@@ -186,6 +189,9 @@ Aos8I32 g_sound_sample = {0};
 Aos8F32 g_sound_rand = {0};
 I32 g_audio_sample = 0;
 const F32 PI = 3.1415927f;
+const I32 GLYPH_WIDTH = 5;
+const I32 GLYPH_HEIGHT = 6;
+const Aos95U32 g_glyphs = {{0, 134353028, 10570, 368389098, 150616254, 866266720, 781506726, 4228, 272765064, 71438466, 10631296, 4657152, 71434240, 458752, 207618048, 35791360, 490395438, 1044518084, 1042424366, 488124943, 554682504, 488127551, 488080460, 35791391, 488159790, 554649150, 207624384, 71307264, 272699648, 14694400, 71569472, 134361646, 1008662062, 589284676, 521715247, 1007715886, 521717295, 1041284159, 34651199, 488408126, 588840497, 1044517023, 211034399, 588553521, 1041269793, 588961467, 597481073, 488162862, 35112495, 820692526, 580372015, 487856686, 138547359, 488162865, 138757681, 928699953, 581046609, 138547537, 1042424351, 406982796, 545392672, 205656198, 17732, 3187671040, 130, 479703040, 244620321, 470857728, 479508744, 1008715200, 1109466188, 1317479726, 311729185, 203489344, 2353139716, 307336481, 203491394, 593144832, 311729152, 211064832, 1108583718, 1887905070, 34904064, 243494912, 203504706, 244622336, 73704448, 358269952, 910322688, 1317479721, 505560064, 407050380, 138547332, 205926534, 448512}};
 
 // VECC function definitions
 
@@ -263,9 +269,9 @@ static void reset_game() {
 		g_sound_sample.data[i] = 100000;
 	};
 	play_sound(SOUND_BEGIN);
-	g_enemy_spawn_timer = 0.0f;
+	g_enemy_spawn_timer = -2.0f;
 	g_game_timer = 0.0f;
-	g_shake = 40.0f;
+	g_shake = 30.0f;
 }
 
 void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys, F32* audio_buffer, I32 audio_samples) {
@@ -288,6 +294,14 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		for (I32 i = 0; i < num_pixel_blocks; i = i + 1) {
 			const V8U32 c = framebuffer[i];
 			framebuffer[i] = v8u32_sl(c, 5);
+		};
+		if (g_game_timer < 4.0f) {
+			draw_text(framebuffer, resolution, {"            PLUS120", 19}, {{28, 60}}, 12303291);
+			draw_text(framebuffer, resolution, {"        BY JAKUB TOMSU", 22}, {{28, 70}}, 3355443);
+			draw_text(framebuffer, resolution, {"           controls", 19}, {{28, 150 + 10}}, 7829367);
+			draw_text(framebuffer, resolution, {"         MOVE      ARROW KEYS", 29}, {{28, 150 + 30}}, 12303291);
+			draw_text(framebuffer, resolution, {" SHOOT FORWARD     X", 20}, {{28, 150 + 40}}, 12303291);
+			draw_text(framebuffer, resolution, {"SHOOT BACKWARD     Z", 20}, {{28, 150 + 50}}, 12303291);
 		};
 		g_camera = {{(I32)f32_round((rand_f32() - 0.5f) * g_shake), (I32)f32_round((rand_f32() - 0.5f) * g_shake)}};
 		g_shake = f32_max(0.0f, g_shake - (delta * 50.0f));
@@ -785,6 +799,53 @@ static F32 wave_noise(F32 t) {
 
 static F32 sample_t(I32 index) {
 	return (F32)index / AUDIO_SAMPLE_RATE;
+}
+
+static void draw_text(V8U32* framebuffer, Aos2I32 resolution, String text, Aos2I32 pos, U32 color) {
+	for (I32 i = 0; i < text.len; i = i + 1) {
+		draw_glyph(framebuffer, resolution, g_glyphs.data[((I32)text.data[i] - 32)], {{pos.data[0], pos.data[1]}}, color);
+		pos.data[0] = pos.data[0] + (GLYPH_WIDTH + 1);
+	};
+}
+
+static void draw_glyph(V8U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color) {
+	if (pos.data[0] < 0) {
+		return ;
+	};
+	if (pos.data[1] < 0) {
+		return ;
+	};
+	if (pos.data[0] > (resolution.data[0] - GLYPH_WIDTH)) {
+		return ;
+	};
+	if (pos.data[1] > (resolution.data[1] - GLYPH_WIDTH)) {
+		return ;
+	};
+	const I32 x_pos = pos.data[0] / vector_width;
+	const I32 x_blocks = resolution.data[0] / vector_width;
+	const I32 sub_x = pos.data[0] % vector_width;
+	const V8B32 x_mask_0 = v8b32_and(v8i32_ge(vector_index, v8i32_set1(sub_x)), v8i32_lt(vector_index, v8i32_set1(sub_x + GLYPH_WIDTH)));
+	if (v8b32_reduce_any(x_mask_0)) {
+		const V8U32 x_shift = v8i32_to_v8u32(v8i32_sub(vector_index, v8i32_set1(sub_x)));
+		for (I32 y = 0; y < GLYPH_HEIGHT; y = y + 1) {
+			const V8U32 shift = v8u32_add(x_shift, v8u32_set1((U32)(y * GLYPH_WIDTH)));
+			const V8U32 bit = v8u32_and(v8u32_srv(v8u32_set1(glyph), shift), v8u32_set1(1));
+			V8B32 vecc_mask8 = v8b32_and(v8u32_neq(bit, v8u32_set1(0)), x_mask_0); { // vector if
+				framebuffer[((x_pos + 0) + ((pos.data[1] + y) * x_blocks))] = v8u32_blend(framebuffer[((x_pos + 0) + ((pos.data[1] + y) * x_blocks))], v8u32_set1(color), vecc_mask8);
+			};
+		};
+	};
+	const V8B32 x_mask_1 = v8i32_lt(v8i32_add(vector_index, v8i32_set1(vector_width)), v8i32_set1(sub_x + GLYPH_WIDTH));
+	if (v8b32_reduce_any(x_mask_1)) {
+		const V8U32 x_shift = v8i32_to_v8u32(v8i32_sub(v8i32_add(vector_index, v8i32_set1(vector_width)), v8i32_set1(sub_x)));
+		for (I32 y = 0; y < GLYPH_HEIGHT; y = y + 1) {
+			const V8U32 shift = v8u32_add(x_shift, v8u32_set1((U32)(y * GLYPH_WIDTH)));
+			const V8U32 bit = v8u32_and(v8u32_srv(v8u32_set1(glyph), shift), v8u32_set1(1));
+			V8B32 vecc_mask12 = v8b32_and(v8u32_neq(bit, v8u32_set1(0)), x_mask_1); { // vector if
+				framebuffer[((x_pos + 1) + ((pos.data[1] + y) * x_blocks))] = v8u32_blend(framebuffer[((x_pos + 1) + ((pos.data[1] + y) * x_blocks))], v8u32_set1(color), vecc_mask12);
+			};
+		};
+	};
 }
 
 #endif // VECC_IMPL
