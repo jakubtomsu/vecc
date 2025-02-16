@@ -340,7 +340,8 @@ vecc_op V8I32 v8i32_mul (V8I32 a, V8I32 b)  { return {{_mm256_mullo_epi32(a.data
 vecc_op V8I32 v8i32_and (V8I32 a, V8I32 b)  { return {{_mm256_and_si256(a.data[0], b.data[0])}}; }
 vecc_op V8I32 v8i32_or  (V8I32 a, V8I32 b)  { return {{_mm256_or_si256(a.data[0], b.data[0])}}; }
 vecc_op V8I32 v8i32_xor (V8I32 a, V8I32 b)  { return {{_mm256_xor_si256(a.data[0], b.data[0])}}; }
-vecc_op V8I32 v8i32_andnot(V8I32 a, V8I32 b)  { return {{_mm256_andnot_si256(b.data[0], a.data[0])}}; }
+vecc_op V8I32 v8i32_andnot(V8I32 a, V8I32 b){ return {{_mm256_andnot_si256(b.data[0], a.data[0])}}; }
+vecc_op V8I32 v8i32_neg (V8I32 a)           { return {{_mm256_sub_epi32(_mm256_set1_epi32(0), a.data[0])}}; }
 
 vecc_op V8U32 v8u32_add (V8U32 a, V8U32 b)  { return {{_mm256_add_epi32(a.data[0], b.data[0])}}; }
 vecc_op V8U32 v8u32_sub (V8U32 a, V8U32 b)  { return {{_mm256_sub_epi32(a.data[0], b.data[0])}}; }
@@ -406,6 +407,14 @@ vecc_op V8B32 v8i32_gt(V8I32 a, V8I32 b) { return {{_mm256_cmpgt_epi32(a.data[0]
 vecc_op V8B32 v8i32_ge(V8I32 a, V8I32 b) { return {{_mm256_xor_si256(_mm256_cmpgt_epi32(b.data[0], a.data[0]), _mm256_set1_epi32(0xffffffff))}}; }
 vecc_op V8B32 v8i32_lt(V8I32 a, V8I32 b) { return {{_mm256_cmpgt_epi32(b.data[0], a.data[0])}}; }
 vecc_op V8B32 v8i32_le(V8I32 a, V8I32 b) { return {{_mm256_xor_si256(_mm256_cmpgt_epi32(a.data[0], b.data[0]), _mm256_set1_epi32(0xffffffff))}}; }
+
+vecc_op V8B32 v8u32_eq(V8U32 a, V8U32 b) { return {{_mm256_cmpeq_epi32(a.data[0], b.data[0])}}; }
+vecc_op V8B32 v8u32_neq(V8U32 a, V8U32 b){ return {{_mm256_xor_si256(_mm256_cmpeq_epi32(a.data[0], b.data[0]), _mm256_set1_epi32(0xffffffff))}}; }
+// TODO: no epu32 instructions, needs sign trick
+// vecc_op V8B32 v8u32_gt(V8I32 a, V8I32 b) { return {{_mm256_cmpgt_epi32(a.data[0], b.data[0])}}; }
+// vecc_op V8B32 v8u32_ge(V8I32 a, V8I32 b) { return {{_mm256_xor_si256(_mm256_cmpgt_epi32(b.data[0], a.data[0]), _mm256_set1_epi32(0xffffffff))}}; }
+// vecc_op V8B32 v8u32_lt(V8I32 a, V8I32 b) { return {{_mm256_cmpgt_epi32(b.data[0], a.data[0])}}; }
+// vecc_op V8B32 v8u32_le(V8I32 a, V8I32 b) { return {{_mm256_xor_si256(_mm256_cmpgt_epi32(a.data[0], b.data[0]), _mm256_set1_epi32(0xffffffff))}}; }
 
 
 vecc_op V8F32 v8f32_blend(V8F32 a, V8F32 b, V8B32 mask) {
@@ -488,7 +497,8 @@ vecc_op V8F32 v8f32_pow(V8F32 a, V8F32 b) {
     return {{_mm256_load_ps(a_data)}};
 }
 
-vecc_op B32 v8b32_reduce_all(V8B32 a) { return _mm256_testc_si256(a.data[0], _mm256_set1_epi32(-1)); }
+vecc_op B32 v8b32_reduce_all(V8B32 a) { return _mm256_testc_si256(a.data[0], _mm256_set1_epi32(-1)) != 0; }
+vecc_op B32 v8b32_reduce_any(V8B32 a) { return _mm256_testz_si256(a.data[0], a.data[0]) == 0; }
 
 #endif // VECC_AVX2
 
