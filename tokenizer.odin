@@ -395,6 +395,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
             next_rune(t)
             result.kind = .Bit_Shift_Left
             if t.curr_rune == '=' {
+                next_rune(t)
                 result.kind = .Assign_Bit_Shift_Left
             }
         }
@@ -409,6 +410,7 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
             next_rune(t)
             result.kind = .Bit_Shift_Right
             if t.curr_rune == '=' {
+                next_rune(t)
                 result.kind = .Assign_Bit_Shift_Right
             }
         }
@@ -432,6 +434,10 @@ get_token :: proc(t: ^Tokenizer) -> (result: Token, err: Error) {
                 }
             }
             return get_token(t)
+
+        case '=':
+            next_rune(t)
+            result.kind = .Assign_Div
         }
 
     case:
