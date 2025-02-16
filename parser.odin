@@ -64,7 +64,7 @@ peek :: proc(p: ^Parser) -> Token_Kind {
 }
 
 parse_ident :: proc(p: ^Parser, token: Token) -> ^Ast {
-    result := create_ast()
+    result := create_ast(p)
     result.variant = Ast_Ident{
         token = token,
     }
@@ -75,7 +75,7 @@ parse_ident :: proc(p: ^Parser, token: Token) -> ^Ast {
 }
 
 parse_basic_literal :: proc(p: ^Parser, token: Token) -> ^Ast {
-    result := create_ast()
+    result := create_ast(p)
     result.variant = Ast_Basic_Literal{
         token = token,
     }
@@ -83,7 +83,7 @@ parse_basic_literal :: proc(p: ^Parser, token: Token) -> ^Ast {
 }
 
 parse_compound_literal :: proc(p: ^Parser, type: ^Ast) -> ^Ast {
-    result := create_ast()
+    result := create_ast(p)
 
     expect(p, .Open_Brace)
 
@@ -123,7 +123,7 @@ parse_call_expr :: proc(p: ^Parser, procedure: ^Ast) -> ^Ast {
     expect(p, .Open_Paren)
     allow(p, .Semicolon)
 
-    result := create_ast()
+    result := create_ast(p)
 
     call_expr: Ast_Call_Expr
     call_expr.procedure = procedure
@@ -139,7 +139,7 @@ parse_call_expr :: proc(p: ^Parser, procedure: ^Ast) -> ^Ast {
 }
 
 parse_self_call_expr :: proc(p: ^Parser, self_ast: ^Ast) -> ^Ast {
-    result := create_ast()
+    result := create_ast(p)
 
     expect(p, .Colon)
 
@@ -163,7 +163,7 @@ parse_self_call_expr :: proc(p: ^Parser, self_ast: ^Ast) -> ^Ast {
 }
 
 parse_cast_expr :: proc(p: ^Parser, op: Token) -> ^Ast {
-    ast := create_ast()
+    ast := create_ast(p)
     expect(p, .Open_Paren)
     type := parse_type(p)
     expect(p, .Comma)
@@ -183,7 +183,7 @@ parse_selector_expr :: proc(p: ^Parser, left: ^Ast) -> ^Ast {
 
     right := parse_ident(p, expect(p, .Ident))
 
-    ast := create_ast()
+    ast := create_ast(p)
     ast.variant = Ast_Selector_Expr{
         left    = left,
         right   = right,
@@ -197,7 +197,7 @@ parse_index_expr :: proc(p: ^Parser, left: ^Ast) -> ^Ast {
 
     index := parse_expr(p)
 
-    ast := create_ast()
+    ast := create_ast(p)
     ast.variant = Ast_Index_Expr{
         left    = left,
         index   = index,
@@ -209,7 +209,7 @@ parse_index_expr :: proc(p: ^Parser, left: ^Ast) -> ^Ast {
 }
 
 parse_address_expr :: proc(p: ^Parser) -> ^Ast {
-    ast := create_ast()
+    ast := create_ast(p)
     ast.variant = Ast_Address_Expr{
         expr = parse_factor(p),
     }
@@ -217,7 +217,7 @@ parse_address_expr :: proc(p: ^Parser) -> ^Ast {
 }
 
 parse_deref_expr :: proc(p: ^Parser) -> ^Ast {
-    ast := create_ast()
+    ast := create_ast(p)
     ast.variant = Ast_Deref_Expr{
         expr = parse_factor(p),
     }
@@ -284,7 +284,7 @@ parse_factor :: proc(p: ^Parser, loc := #caller_location) -> ^Ast {
 parse_unary_expr :: proc(p: ^Parser) -> ^Ast {
     #partial switch peek(p) {
     case .Sub, .Not:
-        ast := create_ast()
+        ast := create_ast(p)
         ast.variant = Ast_Unary_Expr{
             op = next(p),
             expr = parse_factor(p),
@@ -342,7 +342,7 @@ parse_expr :: proc(p: ^Parser) -> ^Ast {
 
     right := parse_unary_expr(p)
 
-    result := create_ast()
+    result := create_ast(p)
     result.variant = Ast_Binary_Expr{
         left    = left,
         right   = right,
@@ -369,13 +369,13 @@ parse_stmt :: proc(p: ^Parser) -> ^Ast {
         result = parse_range_stmt(p)
 
     case .Break:
-        result = create_ast()
+        result = create_ast(p)
         result.variant = Ast_Break_Stmt{
             token = expect(p, .Break),
         }
 
     case .Continue:
-        result = create_ast()
+        result = create_ast(p)
         result.variant = Ast_Continue_Stmt{
             token = expect(p, .Continue),
         }
@@ -421,7 +421,7 @@ parse_stmt :: proc(p: ^Parser) -> ^Ast {
             assign_stmt.left = result
             assign_stmt.right = parse_expr(p)
 
-            result = create_ast()
+            result = create_ast(p)
             result.variant = assign_stmt
         }
     }
@@ -434,7 +434,7 @@ parse_stmt :: proc(p: ^Parser) -> ^Ast {
 parse_return_stmt :: proc(p: ^Parser) -> ^Ast {
     expect(p, .Return)
 
-    ast := create_ast()
+    ast := create_ast(p)
     return_stmt: Ast_Return_Stmt
     if peek(p) != .Close_Brace {
         return_stmt.value = parse_expr(p)
@@ -446,7 +446,7 @@ parse_return_stmt :: proc(p: ^Parser) -> ^Ast {
 parse_if_stmt :: proc(p: ^Parser) -> ^Ast {
     expect(p, .If)
 
-    ast := create_ast()
+    ast := create_ast(p)
     if_stmt: Ast_If_Stmt
     if_stmt.cond = parse_expr(p)
     if_stmt.if_body = parse_block(p)
@@ -460,7 +460,7 @@ parse_if_stmt :: proc(p: ^Parser) -> ^Ast {
 parse_for_stmt :: proc(p: ^Parser) -> ^Ast {
     expect(p, .For)
 
-    ast := create_ast()
+    ast := create_ast(p)
     for_stmt: Ast_For_Stmt
 
     parse_begin_scope(p)
@@ -485,7 +485,7 @@ parse_for_stmt :: proc(p: ^Parser) -> ^Ast {
 parse_range_stmt :: proc(p: ^Parser) -> ^Ast {
     expect(p, .Range)
 
-    ast := create_ast()
+    ast := create_ast(p)
     for_stmt: Ast_For_Range_Stmt
 
     parse_begin_scope(p)
@@ -493,7 +493,7 @@ parse_range_stmt :: proc(p: ^Parser) -> ^Ast {
     ident_tok := expect(p, .Ident)
     for_stmt.ident = parse_ident(p, ident_tok)
 
-    type := create_ast()
+    type := create_ast(p)
     type.variant = Ast_Ident{token = {text = "i64"}}
     register_value_entity(p,
         mut = .Mutable,
@@ -557,7 +557,7 @@ parse_end_curr_scope :: proc(p: ^Parser) {
 }
 
 parse_block :: proc(p: ^Parser, ignore_scope := false) -> ^Ast {
-    result := create_ast()
+    result := create_ast(p)
     this_scope := p.curr_scope
     block_stmt: Ast_Block_Stmt
 
@@ -592,7 +592,7 @@ register_value_entity :: proc(
     type:       ^Ast,
     value:      ^Ast,
 ) -> ^Ast {
-    ast := create_ast()
+    ast := create_ast(p)
     value_decl: Ast_Value_Decl
 
     value_decl.mut = mut
@@ -631,7 +631,7 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
         #partial switch peek(p) {
         case .Bit_Xor:
             tok := expect(p, .Bit_Xor)
-            ast := create_ast()
+            ast := create_ast(p)
             expect(p, .Close_Bracket)
             ast.variant = Ast_Multi_Pointer_Type{
                 token = tok,
@@ -643,7 +643,7 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
             unimplemented("slice")
 
         case:
-            ast := create_ast()
+            ast := create_ast(p)
             l := parse_expr(p)
             expect(p, .Close_Bracket)
             ast.variant = Ast_Array_Type{
@@ -657,7 +657,7 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
 
     case .Bit_Xor:
         tok := expect(p, .Bit_Xor)
-        ast := create_ast()
+        ast := create_ast(p)
         ast.variant = Ast_Pointer_Type{
             token = tok,
             type = parse_type(p),
@@ -667,7 +667,7 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
     case .Vector:
         expect(p, .Vector)
 
-        ast := create_ast()
+        ast := create_ast(p)
         vector := Ast_Array_Type{
             kind = .Vector,
         }
@@ -721,7 +721,7 @@ parse_value_decl :: proc(p: ^Parser, mut: Value_Mutablity) -> ^Ast {
 }
 
 parse_field :: proc(p: ^Parser) -> ^Ast {
-    ast := create_ast()
+    ast := create_ast(p)
     ident_tok := expect(p, .Ident)
     name := parse_ident(p, ident_tok)
     type := parse_type(p)
@@ -759,7 +759,7 @@ parse_field_list :: proc(p: ^Parser, end: Token_Kind) -> [dynamic]^Ast {
 }
 
 parse_proc_type :: proc(p: ^Parser) -> ^Ast {
-    ast := create_ast()
+    ast := create_ast(p)
     proc_type: Ast_Proc_Type
     expect(p, .Open_Paren)
     params: [dynamic]^Ast
@@ -783,7 +783,7 @@ parse_proc_type :: proc(p: ^Parser) -> ^Ast {
 }
 
 parse_proc_decl :: proc(p: ^Parser) -> ^Ast {
-    ast := create_ast()
+    ast := create_ast(p)
     proc_decl: Ast_Proc_Decl
 
     g_scope_order_counter = 0
@@ -826,7 +826,7 @@ parse_proc_decl :: proc(p: ^Parser) -> ^Ast {
 parse_struct_decl :: proc(p: ^Parser) -> ^Ast {
     expect(p, .Struct)
 
-    ast := create_ast()
+    ast := create_ast(p)
 
     ident_tok := expect(p, .Ident)
     name := ident_tok.text
@@ -888,7 +888,7 @@ create_entity :: proc(scope: ^Scope, name: string, ast: ^Ast, variant: Entity_Va
 }
 
 parse_struct_type :: proc(p: ^Parser) -> ^Ast {
-    ast := create_ast()
+    ast := create_ast(p)
     expect(p, .Open_Brace)
     parse_begin_scope(p)
     ast.variant = Ast_Struct_Type{
@@ -899,8 +899,10 @@ parse_struct_type :: proc(p: ^Parser) -> ^Ast {
     return ast
 }
 
-create_ast :: proc() -> ^Ast {
+create_ast :: proc(p: ^Parser, token: Token = {kind = .Invalid}) -> ^Ast {
     ast := new(Ast)
+     // bit of a hack
+    ast.token = token.kind == .Invalid ? p.curr_token : token
     ast.order_index = g_ast_order_counter
     g_ast_order_counter += 1
     return ast

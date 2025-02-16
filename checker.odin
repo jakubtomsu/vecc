@@ -115,8 +115,8 @@ Scope_Flag :: enum u8 {
     Global,
 }
 
-checker_error :: proc(c: ^Checker, format: string, args: ..any) -> ! {
-    // fmt.eprintf("[{}] %s(%d:%d) ", loc, p.filename, pos.line, pos.column)
+checker_error :: proc(c: ^Checker, pos: Pos, format: string, args: ..any, loc := #caller_location) -> ! {
+    fmt.eprintf("[{}] %s(%d:%d) ", loc, c.filename, pos.line, pos.column)
 	fmt.eprintf(format, ..args)
 	fmt.eprintln()
 	os.exit(1)
@@ -136,14 +136,14 @@ check_ident :: proc(c: ^Checker, ast: ^Ast) -> ^Entity {
             ast.type = ent.ast.type
             ast.value = ent.ast.value
             if scope.parent != nil && ast.order_index < ent.ast.order_index {
-                checker_error(c, "Entity is used before declaration: {}", name)
+                checker_error(c, ast.token, "Entity is used before declaration: {}", name)
             }
         }
 
         return ent
     }
 
-    checker_error(c, "Ident not found: {}", name)
+    checker_error(c, ast.token, "Ident not found: {}", name)
 }
 
 check_type :: proc(c: ^Checker, ast: ^Ast) {
@@ -190,12 +190,12 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 
     #partial switch v in ast.type.variant {
     case Type_Basic:
-        ast.value = _to_value(c, v.kind, lit)
+        ast.value = _to_value(c, ast.token, v.kind, lit)
 
     case Type_Array:
         basic := type_elem_basic_type(v.type)
         if basic == nil do break
-        ast.value = _to_value(c, basic.variant.(Type_Basic).kind, lit)
+        ast.value = _to_value(c, ast.token, basic.variant.(Type_Basic).kind, lit)
 
     case:
         assert(false)
@@ -203,7 +203,7 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 
     return
 
-    _to_value :: proc(c: ^Checker, basic: Type_Basic_Kind, lit: Ast_Basic_Literal) -> Value {
+    _to_value :: proc(c: ^Checker, pos: Pos, basic: Type_Basic_Kind, lit: Ast_Basic_Literal) -> Value {
         switch basic {
         case .B8,
              .B16,
@@ -215,7 +215,7 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
             case .False:
                 return false
             case:
-                checker_error(c, "Invalid boolean literal")
+                checker_error(c, pos, "Invalid boolean literal")
             }
 
         case .I8,
@@ -268,13 +268,13 @@ check_compound_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
     }
 
     if ast.type == nil {
-        checker_error(c, "Invalid compound type literal")
+        checker_error(c, ast.token, "Invalid compound type literal, failed to infer type")
     }
 
     #partial switch v in ast.type.variant {
     case Type_Array:
         if len(lit.elems) != v.len {
-            checker_error(c,
+            checker_error(c, ast.token,
                 "Comopound literal contains wrong number of elements, expected {}, got {}",
                 v.len,
                 len(lit.elems)
@@ -283,7 +283,7 @@ check_compound_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
 
     case Type_Struct:
         if len(lit.elems) != len(v.fields) {
-            checker_error(c,
+            checker_error(c, ast.token,
                 "Comopound literal contains wrong number of elements, expected {}, got {}",
                 len(v.fields),
                 len(lit.elems),
@@ -291,7 +291,7 @@ check_compound_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
         }
 
     case:
-        checker_error(c,
+        checker_error(c, ast.token,
             "Comopound literal is not valid for {}, expected array or struct",
             type_to_string(ast.type),
         )
@@ -324,7 +324,8 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
         proc_type := proc_decl.type.variant.(Ast_Proc_Type)
 
         if len(call_expr.args) != len(proc_type.params) {
-            checker_error(c, "Wrong number of call arguments, expected {}, got {}",
+            checker_error(c, ast.token,
+                "Wrong number of call arguments, expected {}, got {}",
                 len(proc_type.params),
                 len(call_expr.args),
             )
@@ -337,7 +338,8 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
 
         for arg, i in call_expr.args {
             if arg.type != proc_type.params[i].type {
-                checker_error(c, "Invalid argument type, expected {}, got {}",
+                checker_error(c, ast.token,
+                    "Invalid argument type, expected {}, got {}",
                     type_to_string(proc_type.params[i].type),
                     type_to_string(arg.type),
                 )
@@ -363,7 +365,8 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
             ast.type = call_expr.args[0].type
             for arg, i in call_expr.args {
                 if ast.type != arg.type {
-                    checker_error(c, "{} expected argument %i to be {}, got {}",
+                    checker_error(c, ast.token,
+                        "{} expected argument %i to be {}, got {}",
                         v.kind,
                         i,
                         type_to_string(ast.type),
@@ -378,7 +381,8 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
             assert(type_is_numeric(type_elem_basic_type(ast.type)))
             for arg, i in call_expr.args {
                 if ast.type != arg.type {
-                    checker_error(c, "{} expected argument %i to be {}, got {}",
+                    checker_error(c, ast.token,
+                        "{} expected argument %i to be {}, got {}",
                         v.kind,
                         i,
                         type_to_string(ast.type),
@@ -433,11 +437,14 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
             // assert(call_expr.args[2].type.size * 8 >= len)
 
         case:
-            checker_error(c, "This builtin cannot be called") // dafuq
+            checker_error(c, ast.token, "Builtin '{}' cannot be called", v.kind)
         }
 
     case:
-        checker_error(c, "Invalid call entity")
+        checker_error(c, ast.token,
+            "Invalid call entity, expected procedure or builtin, got {}",
+            reflect.union_variant_typeid(ent.variant),
+        )
     }
 }
 
@@ -467,7 +474,7 @@ check_cast_expr :: proc(c: ^Checker, ast: ^Ast) {
 
     case .Reinterpret:
         if expr.type.type.size != expr.value.type.size {
-            checker_error(c,
+            checker_error(c, ast.token,
                 "Cannot reinterpret between types of varying size: target type {} is {} bytes, value type {} is {} bytes)",
                 type_to_string(expr.type.type),
                 expr.type.type.size,
@@ -492,7 +499,7 @@ check_urnary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
         ast.type = expr.expr.type
 
         if !type_is_numeric(elem) {
-            checker_error(c, "Unary 'Not' operator can be only applied to numeric values")
+            checker_error(c, ast.token, "Unary 'Not' operator can be only applied to numeric values")
         }
 
     case .Not:
@@ -501,11 +508,11 @@ check_urnary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type) {
         ast.type = expr.expr.type
 
         if !type_is_boolean(elem) && !type_is_integer(elem) {
-            checker_error(c, "Unary 'Not' operator can be only applied to boolean and integer values")
+            checker_error(c, ast.token, "Unary 'Not' operator can be only applied to boolean and integer values")
         }
 
     case:
-        checker_error(c, "Invalid unary operator: ", expr.op)
+        checker_error(c, ast.token, "Invalid unary operator: ", expr.op)
     }
 }
 
@@ -531,12 +538,12 @@ check_binary_op :: proc(
     left_elem := type_elem_basic_type(left.type)
     #partial switch op {
     case .Bit_Shift_Left, .Bit_Shift_Right:
-        // if !type_is_integer(left_elem) {
-        //     checker_error(c, "Shift operation re")
-        // }
+        if !type_is_integer(left_elem) {
+            checker_error(c, left.token, "Shift operand must be an integer")
+        }
 
-        if !type_is_integer(right.type) {
-            checker_error(c, "Shift amount must be an integer")
+        if !type_is_integer(type_elem_basic_type(right.type)) {
+            checker_error(c, right.token, "Shift amount must be an integer")
         }
 
         result = left.type
@@ -597,7 +604,7 @@ check_binary_op :: proc(
         }
 
         if result == nil {
-            checker_error(c, "Incompatible types in binary op '{}': {} vs {}",
+            checker_error(c, left.token, "Incompatible types in binary op '{}': {} vs {}",
                 _token_str[op],
                 type_to_string(left.type),
                 type_to_string(right.type),
@@ -625,7 +632,7 @@ check_binary_op :: proc(
         }
 
         if op != .Equal && op != .Not_Equal && !type_is_numeric(left_elem) {
-            checker_error(c, "{} operator can be only applied to numeric values", op)
+            checker_error(c, left.token, "{} operator can be only applied to numeric values", op)
         }
 
     case .Add,
@@ -633,7 +640,7 @@ check_binary_op :: proc(
          .Mul,
          .Div:
         if !type_is_numeric(left_elem) {
-            checker_error(c, "{} operator can be only applied to numeric values", op)
+            checker_error(c, left.token, "{} operator can be only applied to numeric values", op)
         }
 
     case .Bit_And,
@@ -770,7 +777,7 @@ check_selector_expr :: proc(c: ^Checker, ast: ^Ast) {
         }
 
         if expr.right.type == nil {
-            checker_error(c, "Invalid field {}", name)
+            checker_error(c, ast.token, "Invalid field {}", name)
         }
     }
 
@@ -785,7 +792,10 @@ check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
     check_expr(c, expr.index)
 
     if !type_is_integer(expr.index.type) {
-        checker_error(c, "Index must be of integer type, got", type_to_string(expr.index.type))
+        checker_error(c, ast.token,
+            "Index must be of integer type, got: {}",
+            type_to_string(expr.index.type),
+        )
     }
 
     #partial switch v in expr.left.type.variant {
@@ -795,7 +805,9 @@ check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
     case Type_Pointer:
         ast.type = v.type
         if v.kind == .Single {
-            checker_error(c, "Cannot index a single pointer. Did you want to use multi-pointer instead? (^ vs [^])")
+            checker_error(c, ast.token,
+                "Cannot index a single pointer. Did you want to use multi-pointer instead? (^ vs [^])",
+            )
         }
 
     case Type_Basic:
@@ -804,7 +816,7 @@ check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
             ast.type = c.basic_types[.U8]
 
         case:
-            checker_error(c, "Cannot index {}", type_to_string(expr.left.type))
+            checker_error(c, ast.token, "Cannot index {}", type_to_string(expr.left.type))
         }
 
     case:
@@ -816,7 +828,7 @@ check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
         #partial switch lv in expr.left.type.variant {
         case Type_Array:
             if v < 0 || int(v) > lv.len {
-                checker_error(c, "Constant index is out of bounds")
+                checker_error(c, ast.token, "Constant index is out of bounds")
             }
         }
 
@@ -852,7 +864,7 @@ check_deref_expr :: proc(c: ^Checker, ast: ^Ast) {
     #partial switch v in expr.expr.type.variant {
     case Type_Pointer:
     case:
-        checker_error(c, "Only pointer types can be de-referenced, got: {}", type_to_string(expr.expr.type))
+        checker_error(c, ast.token, "Only pointer types can be de-referenced, got: {}", type_to_string(expr.expr.type))
     }
 }
 
@@ -893,14 +905,49 @@ check_binary_expr :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
             case .Bit_Shift_Right:  ast.value = l >> uint(r)
 
             case:
+                checker_error(c, ast.token,
+                    "Invalid operator in constant integer expression: {}",
+                    _token_str[expr.op.kind],
+                )
+            }
+
+        case nil:
+
+        case:
+            checker_error(c, ast.token,
+                "Invalid constant binary operation, got {} and {}",
+                value_type_name(l),
+                value_type_name(r),
+            )
+        }
+
+    case f64:
+        #partial switch r in expr.right.value {
+        case f64:
+            #partial switch expr.op.kind {
+            case .Equal:              ast.value = l == r
+            case .Less_Than:          ast.value = l < r
+            case .Less_Than_Equal:    ast.value = l <= r
+            case .Greater_Than:       ast.value = l > r
+            case .Greater_Than_Equal: ast.value = l >= r
+            case .Not_Equal:          ast.value = l != r
+
+            case .Add: ast.value = l + r
+            case .Sub: ast.value = l - r
+            case .Mul: ast.value = l * r
+            case .Div: ast.value = l / r
+
+            case:
                 assert(false)
             }
 
         case nil:
 
         case:
-            checker_error(c, "Invalid constant binary operation, got {} and {}",
-                l, r,
+            checker_error(c, ast.token,
+                "Invalid constant binary operation, got {} and {}",
+                value_type_name(l),
+                value_type_name(r),
             )
         }
 
@@ -929,7 +976,8 @@ check_value_decl :: proc(c: ^Checker, ast: ^Ast) {
         check_expr(c, decl.value, type_hint = decl.type.type)
         // TODO check same as in assign stmt
         if !check_are_types_assignable(c, decl.type.type, decl.value.type) {
-            checker_error(c, "Invalid initializer value, types aren't assignable: {} vs {}",
+            checker_error(c, ast.token,
+                "Invalid initializer value, types aren't assignable: {} vs {}",
                 type_to_string(decl.type.type),
                 type_to_string(decl.value.type),
             )
@@ -976,7 +1024,7 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
     case Ast_Assign_Stmt:
         op, op_ok := token_normalize_assign_op(v.op.kind)
         if !op_ok {
-            checker_error(c, "Invalid assign statement op")
+            checker_error(c, ast.token, "Invalid assign statement op: {}", _token_str[op])
         }
 
         #partial switch v.op.kind {
@@ -985,7 +1033,8 @@ check_stmt :: proc(c: ^Checker, ast: ^Ast) {
             check_expr(c, v.right, type_hint = v.left.type)
 
             if !check_are_types_assignable(c, v.left.type, v.right.type) {
-                checker_error(c, "Types aren't assignable: {} vs {}",
+                checker_error(c, ast.token,
+                    "Types aren't assignable: {} vs {}",
                     type_to_string(v.left.type),
                     type_to_string(v.right.type),
                 )
@@ -1039,8 +1088,26 @@ check_block_stmt :: proc(c: ^Checker, ast: ^Ast, scope := true) {
         case Ast_Return_Stmt:
             if i != len(block.statements) - 1 {
                 assert(false)
-                checker_error(c, "Statements after return statement will never get executed")
+                checker_error(c, stmt.token,
+                    "Statements after return statement will never get executed",
+                )
             }
+
+        case Ast_Block_Stmt,
+             Ast_If_Stmt,
+             Ast_For_Stmt,
+             Ast_Break_Stmt,
+             Ast_Continue_Stmt,
+             Ast_For_Range_Stmt,
+             Ast_Assign_Stmt:
+
+        case Ast_Value_Decl,
+             Ast_Proc_Decl:
+
+        case Ast_Call_Expr:
+
+        case:
+            checker_error(c, stmt.token, "Unused expression")
         }
     }
 
@@ -1057,22 +1124,23 @@ check_if_stmt :: proc(c: ^Checker, ast: ^Ast) {
     #partial switch v in stmt.cond.type.variant {
     case Type_Basic:
         if !type_is_boolean(stmt.cond.type) {
-            checker_error(c, "Condition in a scalar if statement must have boolean type")
+            checker_error(c, stmt.cond.token, "Condition in a scalar if statement must have boolean type")
         }
 
     case Type_Array:
         if v.kind != .Vector {
-            checker_error(c, "If statements don't accept non-vector ")
+            checker_error(c, stmt.cond.token, "If statements don't accept non-vector arrays")
         }
 
         if !type_is_boolean(v.type) {
-            checker_error(c, "Condition in an vector if statement must have boolean element type")
+            checker_error(c, stmt.cond.token, "Condition in an vector if statement must have boolean element type")
         }
 
         is_vector = true
 
     case:
-        checker_error(c, "Unexpected type in an if statement, expected vector or scalar boolean, got {}",
+        checker_error(c, stmt.cond.token,
+            "Unexpected type in an if statement, expected vector or scalar boolean, got {}",
             type_to_string(stmt.cond.type)
         )
     }
@@ -1106,12 +1174,29 @@ check_return_stmt :: proc(c: ^Checker, ast: ^Ast) {
     check_expr(c, stmt.value)
     proc_decl := c.curr_entity.ast.variant.(Ast_Proc_Decl)
     proc_type := proc_decl.type.variant.(Ast_Proc_Type)
-    if proc_type.result != nil && stmt.value != nil {
-        if stmt.value.type != proc_type.result.type {
-            checker_error(c, "Invalid return type, expected {}, got {}",
-                type_to_string(proc_type.result.type),
-                type_to_string(stmt.value.type),
+
+    if proc_type.result == nil {
+        if stmt.value == nil {
+            // Ok
+        } else {
+            checker_error(c, ast.token,
+                "Unexpected value, this procedure doesn't return anything",
             )
+        }
+    } else {
+        if stmt.value == nil {
+            checker_error(c, ast.token,
+                "Expected a value of type {}",
+                type_to_string(proc_type.result.type),
+            )
+        } else {
+            if stmt.value.type != proc_type.result.type {
+                checker_error(c, stmt.value.token,
+                    "Invalid return type, expected {}, got {}",
+                    type_to_string(proc_type.result.type),
+                    type_to_string(stmt.value.type),
+                )
+            }
         }
     }
 }
@@ -1149,7 +1234,7 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
                 if type_is_numeric(hint_basic) {
                     return type_hint
                 } else {
-                    checker_error(c,
+                    checker_error(c, ast.token,
                         "Integer literal cannot be assigned to non-numeric-element type ({} from {})",
                         type_to_string(hint_basic),
                         type_to_string(type_hint),
@@ -1161,7 +1246,7 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
                 if type_is_float(hint_basic) {
                     return type_hint
                 } else {
-                    checker_error(c,
+                    checker_error(c, ast.token,
                         "Integer literal cannot be assigned to non-float-element type ({} from {})",
                         type_to_string(hint_basic),
                         type_to_string(type_hint),
@@ -1172,14 +1257,18 @@ create_new_type_from_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil)
                 if type_is_boolean(hint_basic) {
                     return type_hint
                 } else {
-                    checker_error(c, "Boolean literal cannot be assigned to non-boolean-element type")
+                    checker_error(c, ast.token,
+                        "Boolean literal cannot be assigned to non-boolean-element type",
+                    )
                 }
 
             case .Char:
                 if type_is_integer(hint_basic) {
                     return type_hint
                 } else {
-                    checker_error(c, "Character literal cannot be assigned to non-integer-element type")
+                    checker_error(c, ast.token,
+                        "Character literal cannot be assigned to non-integer-element type",
+                    )
                 }
             }
         }
@@ -1286,7 +1375,7 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
              "f32", "float",
              "f64",
              "string":
-            checker_error(c,
+            checker_error(c, ast.token,
                 "Basic types are uppercase, please use {} instead of {}",
                 strings.to_upper(v.token.text),
                 v.token.text,
@@ -1300,10 +1389,10 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
                     result = ev.type
 
                 case:
-                    checker_error(c, "Entity {} is not a type", v.token.text)
+                    checker_error(c, ast.token, "Entity {} is not a type", v.token.text)
                 }
             } else {
-                checker_error(c, "Unknown type: {}", v.token.text)
+                checker_error(c, ast.token, "Unknown type: {}", v.token.text)
             }
         }
 

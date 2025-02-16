@@ -8,6 +8,7 @@ Ast :: struct {
     type:           ^Type,
     value:          Value, // compile time known only
     order_index:    int,
+    token:          Token, // For error reporting
 }
 
 Value :: union {
@@ -17,6 +18,19 @@ Value :: union {
     string,
     [8]i32, // HACK
     [8]f32,
+}
+
+value_type_name :: proc(v: Value) -> string {
+    switch _ in v {
+    case bool:      return "Boolean"
+    case i128:      return "Integer"
+    case f64:       return "Float"
+    case string:    return "String"
+    case [8]i32:    return "8 Integers" // TEMP
+    case [8]f32:    return "8 Floats" // TEMP
+    case nil:       return "nil"
+    }
+    return "INVALID_VALUE_KIND"
 }
 
 Ast_Variant :: union {
