@@ -101,7 +101,7 @@ mut g_shake F32
 
 mut g_hit_pause F32
 
-const AUDIO_SAMPLE_RATE F32 = 44100.0
+const AUDIO_SAMPLE_RATE I32 = 44100
 
 const SOUND_BEGIN       I32 = 0
 const SOUND_WALK        I32 = 1
@@ -117,6 +117,7 @@ mut g_sound_sample  [8]I32
 mut g_sound_rand    [8]F32
 
 mut g_audio_sample I32
+
 
 procedure play_sound (immut sound I32) {
     g_sound_sample[sound] = 0
@@ -184,6 +185,7 @@ procedure reset_game () {
     player.vel = 0
     player.gun_timer = 0
     player.powerup_timer = {0; 0; 0}
+    player.dir = {1; 0}
 
     for i I32; i < 64; i += 1 {
         g_items[i].powerup = -1
@@ -227,6 +229,91 @@ procedure export compute_frame (
         reset_game()
     }
 
+    // TEMP
+    immut g_music_beat [16]U8 = {
+        MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE
+        0
+        MUSIC_BEAT_HIHAT
+        0
+
+        MUSIC_BEAT_KICK
+        0
+        MUSIC_BEAT_HIHAT
+        0
+
+        MUSIC_BEAT_KICK
+        0
+        0
+        MUSIC_BEAT_HIHAT
+
+        MUSIC_BEAT_KICK
+        0
+        MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
+        0
+    }
+
+    const OCT I32 = 4
+    immut g_music_melody [8][3]F32 = {
+        // {NOTE_F [OCT + 0]; NOTE_D [OCT + 0]; NOTE_A [OCT + 0]}
+        // {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+        // {NOTE_D [OCT + 0]; NOTE_B [OCT + 1]; NOTE_G [OCT + 0]}
+        // {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+
+        // {NOTE_F [OCT + 0]; NOTE_D [OCT + 0]; NOTE_A [OCT + 0]}
+        // {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+        // {NOTE_FS[OCT + 0]; NOTE_DS[OCT + 0]; NOTE_B [OCT + 0]}
+        // {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+
+        // {NOTE_D [OCT + 0]; NOTE_B [OCT + 1]; NOTE_G [OCT + 0]}
+        {NOTE_F [OCT + 0]; NOTE_A [OCT + 0]; NOTE_C [OCT + 0]}
+        {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+        {NOTE_F [OCT + 0]; NOTE_D [OCT + 0]; NOTE_A [OCT + 0]}
+        {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+
+        {NOTE_D [OCT + 0]; NOTE_B [OCT + 1]; NOTE_G [OCT + 0]}
+        {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+        {NOTE_FS[OCT + 0]; NOTE_DS[OCT + 0]; NOTE_B [OCT + 0]}
+        {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+    }
+
+    immut g_music_bass [32]F32 = {
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_B [2 - 1]
+
+        NOTE_FS[3 - 1]
+        NOTE_FS[3 - 1]
+        NOTE_FS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_FS[3 - 1]
+        NOTE_FS[3 - 1]
+        NOTE_FS[3 - 1]
+        NOTE_DS[3 - 1]
+
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_B [2 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_DS[3 - 1]
+        NOTE_B [2 - 1]
+
+        NOTE_FS[3 - 1]
+        NOTE_FS[3 - 1]
+        0
+        NOTE_DS[3 - 1]
+        NOTE_FS[3 - 1]
+        NOTE_FS[3 - 1]
+        NOTE_FS[3 - 1]
+        NOTE_DS[3 - 1]
+    }
+
     immut num_pixel_blocks I32 = (resolution.x * resolution.y) / vector_width
 
     mut end_game Bool
@@ -255,7 +342,7 @@ procedure export compute_frame (
         draw_text(framebuffer, resolution, "            PLUS120"           , {28; 60}      , 0x00bbbbbb)
         draw_text(framebuffer, resolution, "        BY JAKUB TOMSU"       ,  {28; 70}      , 0x00333333)
         draw_text(framebuffer, resolution, "           controls"           , {28; 150 + 10}, 0x00777777)
-        draw_text(framebuffer, resolution, "         MOVE      ARROW KEYS" , {28; 150 + 30}, 0x00bbbbbb)
+        draw_text(framebuffer, resolution, "          MOVE     ARROW KEYS" , {28; 150 + 30}, 0x00bbbbbb)
         draw_text(framebuffer, resolution, " SHOOT FORWARD     X"          , {28; 150 + 40}, 0x00bbbbbb)
         draw_text(framebuffer, resolution, "SHOOT BACKWARD     Z"          , {28; 150 + 50}, 0x00bbbbbb)
     }
@@ -286,7 +373,7 @@ procedure export compute_frame (
             continue
         }
 
-        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {60; 50; 40; 0},
+        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {80; 60; 40; 0},
             // {true; false; true; false; true; false; true; false})
             true)
     }
@@ -672,8 +759,6 @@ procedure export compute_frame (
     }
 
     for audio_sample I32 = 0; audio_sample < audio_samples; audio_sample += 1 {
-        immut t F32 = conv(F32, g_audio_sample) / AUDIO_SAMPLE_RATE
-
         mut begin_t     F32 = sample_t(g_sound_sample[SOUND_BEGIN])
         mut walk_t      F32 = sample_t(g_sound_sample[SOUND_WALK])
         mut hit_t       F32 = sample_t(g_sound_sample[SOUND_HIT])
@@ -695,12 +780,13 @@ procedure export compute_frame (
 
         mut walk F32 = wave_noise(walk_t * (600 + (g_sound_rand[SOUND_WALK] * 300)))
         walk += wave_saw(walk_t * 200)
-        walk *= max(0.0, 1.0 - (walk_t * 50)) * 0.2
+        walk *= max(0.0, 1.0 - (walk_t * 50)) * 0.5
 
         mut shoot F32
         shoot += wave_noise(shoot_t * (400 + (g_sound_rand[SOUND_SHOOT] * 100))) * max(0.0, 1.0 - (shoot_t * 10))
         shoot += wave_noise(shoot_t * (200                                     )) * max(0.0, 0.5 - (shoot_t * 2))
         shoot -= wave_saw  (shoot_t * (200 + (shoot_t * 500))) * max(0.0, 1.0 - (shoot_t * 50))
+        shoot *= 2.0
 
         mut explosion F32
         explosion += wave_noise(explosion_t * (200 + (g_sound_rand[SOUND_EXPLOSION] * 400))) * max(0.0, 1.0 - (explosion_t))
@@ -722,6 +808,63 @@ procedure export compute_frame (
         spawn += wave_saw(spawn_t * (900  + (spawn_t * 400)))
         spawn *= max(0.0, 1.0 - (spawn_t * 6)) * 2
 
+        mut music F32
+        {
+            immut t F32 = sample_t(g_audio_sample)
+
+            const BEAT_SAMPLES I32 = AUDIO_SAMPLE_RATE / 12
+            if g_music_beat_sample >= BEAT_SAMPLES {
+                g_music_beat_sample -= BEAT_SAMPLES
+                g_music_beat_index += 1
+                g_music_beat_index %= g_music_beat.len
+            }
+            mut beat_t F32 = conv(F32, g_music_beat_sample) / conv(F32, BEAT_SAMPLES)
+            mut beat U8 = g_music_beat[g_music_beat_index]
+            mut beat_s F32 = sample_t(g_music_beat_sample)
+
+            mut kick  F32 = wave_square(beat_s * (200.0 - (beat_t * 50))) * max(0.0, 1.0 - beat_t)
+            mut snare F32 = wave_noise(beat_s * (8000.0 - (beat_t * 2000))) * max(0.0, 1.0 - ((beat_t * 2) * (beat_t * 2)))
+            mut hihat F32 = wave_noise(beat_s * (15000.0 + (beat_t * 5000))) * max(0.0, 1.0 - (beat_t * 5))
+
+            if (MUSIC_BEAT_KICK  & beat) == 0 { kick = 0 }
+            if (MUSIC_BEAT_SNARE & beat) == 0 { snare = 0 }
+            if (MUSIC_BEAT_HIHAT & beat) == 0 { hihat = 0 }
+
+            const MELODY_SAMPLES I32 = AUDIO_SAMPLE_RATE * 3
+            if g_music_melody_sample >= MELODY_SAMPLES {
+                g_music_melody_sample -= MELODY_SAMPLES
+                g_music_melody_index += 1
+                g_music_melody_index %= g_music_melody.len
+            }
+            mut melody_t F32 = conv(F32, g_music_melody_sample) / conv(F32, MELODY_SAMPLES)
+            mut melody_s F32 = sample_t(g_music_melody_sample)
+            mut melody_chord [3]F32 = g_music_melody[g_music_melody_index]
+
+            mut melody F32
+            melody += wave_sin(melody_s * melody_chord[0])
+            melody += wave_sin(melody_s * melody_chord[1])
+            melody += wave_sin(melody_s * melody_chord[2])
+            melody *= 1.0 - melody_t // * (1.0 - (melody_t * 0.25))
+
+            const BASS_SAMPLES I32 = AUDIO_SAMPLE_RATE / 3
+            if g_music_bass_sample >= BASS_SAMPLES {
+                g_music_bass_sample -= BASS_SAMPLES
+                g_music_bass_index += 1
+                g_music_bass_index %= g_music_bass.len
+            }
+            mut bass_t F32 = conv(F32, g_music_bass_sample) / conv(F32, BASS_SAMPLES)
+            mut bass_s F32 = sample_t(g_music_bass_sample)
+            mut bass_note F32 = g_music_bass[g_music_bass_index]
+
+            mut bass F32 = wave_triangle(bass_s * bass_note) * (1.0 - bass_t)
+
+            music += kick * 1.1
+            music += snare
+            music += hihat * 0.6
+            music += melody * 1
+            music += bass * 5
+        }
+
         mut sample F32
         sample += begin
         sample += walk
@@ -731,6 +874,7 @@ procedure export compute_frame (
         sample += kill
         sample += pickup
         sample += spawn
+        sample += music
 
         sample *= 0.05
 
@@ -741,6 +885,10 @@ procedure export compute_frame (
         for i I32; i < SOUND_NUM; i += 1 {
             g_sound_sample[i] += 1
         }
+
+        g_music_beat_sample += 1
+        g_music_melody_sample += 1
+        g_music_bass_sample += 1
     }
 
     if end_game {
@@ -912,8 +1060,14 @@ procedure wave_noise (immut t F32) F32 {
 }
 
 procedure sample_t (immut index I32) F32 {
-    return conv(F32, index) / AUDIO_SAMPLE_RATE
+    return conv(F32, index) / conv(F32, AUDIO_SAMPLE_RATE)
 }
+
+
+
+//
+// Glyphs
+//
 
 const GLYPH_WIDTH  I32 = 5
 const GLYPH_HEIGHT I32 = 6
@@ -989,3 +1143,45 @@ procedure draw_glyph (
         }
     }
 }
+
+
+
+//
+// Music
+//
+
+// *S means #/sharp
+// Index is octave
+const NOTE_C  [9]F32 = {16.35; 32.7 ; 65.41 ; 130.81; 261.63; 523.25; 1046.5 ; 2093   ; 4186}
+const NOTE_CS [9]F32 = {17.32; 34.65; 69.3  ; 138.59; 277.18; 554.37; 1108.73; 2217.46; 4434.92}
+const NOTE_D  [9]F32 = {18.35; 36.71; 73.42 ; 146.83; 293.66; 587.33; 1174.66; 2349.32; 4698.63}
+const NOTE_DS [9]F32 = {19.45; 38.89; 77.78 ; 155.56; 311.13; 622.25; 1244.51; 2489   ; 4978}
+const NOTE_E  [9]F32 = {20.6 ; 41.2 ; 82.41 ; 164.81; 329.63; 659.25; 1318.51; 2637   ; 5274}
+const NOTE_F  [9]F32 = {21.83; 43.65; 87.31 ; 174.61; 349.23; 698.46; 1396.91; 2793.83; 5587.65}
+const NOTE_FS [9]F32 = {23.12; 46.25; 92.5  ; 185   ; 369.99; 739.99; 1479.98; 2959.96; 5919.91}
+const NOTE_G  [9]F32 = {24.5 ; 49   ; 98    ; 196   ; 392   ; 783.99; 1567.98; 3135.96; 6271.93}
+const NOTE_GS [9]F32 = {25.96; 51.91; 103.83; 207.65; 415.3 ; 830.61; 1661.22; 3322.44; 6644.88}
+const NOTE_A  [9]F32 = {27.5 ; 55   ; 110   ; 220   ; 440   ; 880   ; 1760   ; 3520   ; 7040}
+const NOTE_AS [9]F32 = {29.14; 58.27; 116.54; 233.08; 466.16; 932.33; 1864.66; 3729.31; 7458.62}
+const NOTE_B  [9]F32 = {30.87; 61.74; 123.47; 246.94; 493.88; 987.77; 1975.53; 3951   ; 7902.13}
+
+const MUSIC_BEAT_KICK  U8 = 1 << 0
+const MUSIC_BEAT_SNARE U8 = 1 << 1
+const MUSIC_BEAT_HIHAT U8 = 1 << 2
+
+mut g_music_beat_index I32
+mut g_music_beat_sample I32
+
+mut g_music_melody_index I32
+mut g_music_melody_sample I32
+
+mut g_music_bass_index I32
+mut g_music_bass_sample I32
+
+// immut g_music_bass [32]F32 = {
+
+// }
+
+// immut g_music_synth [32]F32 = {
+
+// }
