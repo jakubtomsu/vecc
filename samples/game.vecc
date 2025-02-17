@@ -8,7 +8,7 @@
 // MANY THINGS ARE A TOTAL HACK AND WILL NEED TO BE CHANGED LATER!!!
 //
 
-const export SAMPLE_NAME String = "PLUS120"
+const export SAMPLE_NAME String = "120+"
 
 const export RESOLUTION_X I32 = 8 * 30
 const export RESOLUTION_Y I32 = 8 * 30
@@ -241,7 +241,7 @@ procedure export compute_frame (
         MUSIC_BEAT_HIHAT
         0
 
-        MUSIC_BEAT_KICK
+        MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
         0
         0
         MUSIC_BEAT_HIHAT
@@ -252,66 +252,108 @@ procedure export compute_frame (
         0
     }
 
-    const OCT I32 = 4
-    immut g_music_melody [8][3]F32 = {
-        // {NOTE_F [OCT + 0]; NOTE_D [OCT + 0]; NOTE_A [OCT + 0]}
-        // {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
-        // {NOTE_D [OCT + 0]; NOTE_B [OCT + 1]; NOTE_G [OCT + 0]}
-        // {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
-
-        // {NOTE_F [OCT + 0]; NOTE_D [OCT + 0]; NOTE_A [OCT + 0]}
-        // {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
-        // {NOTE_FS[OCT + 0]; NOTE_DS[OCT + 0]; NOTE_B [OCT + 0]}
-        // {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
-
-        // {NOTE_D [OCT + 0]; NOTE_B [OCT + 1]; NOTE_G [OCT + 0]}
-        {NOTE_F [OCT + 0]; NOTE_A [OCT + 0]; NOTE_C [OCT + 0]}
-        {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
-        {NOTE_F [OCT + 0]; NOTE_D [OCT + 0]; NOTE_A [OCT + 0]}
-        {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
-
-        {NOTE_D [OCT + 0]; NOTE_B [OCT + 1]; NOTE_G [OCT + 0]}
-        {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
-        {NOTE_FS[OCT + 0]; NOTE_DS[OCT + 0]; NOTE_B [OCT + 0]}
-        {NOTE_DS[OCT + 0]; NOTE_C [OCT + 0]; NOTE_GS[OCT + 0]}
+    immut g_music_melody [4][3]F32 = {
+        {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
+        {NOTE_G [4]; NOTE_AS[4]; NOTE_D [5]}
+        {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
+        {NOTE_G [4]; NOTE_B [4]; NOTE_D [5]}
     }
 
-    immut g_music_bass [32]F32 = {
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_B [2 - 1]
-
-        NOTE_FS[3 - 1]
-        NOTE_FS[3 - 1]
-        NOTE_FS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_FS[3 - 1]
-        NOTE_FS[3 - 1]
-        NOTE_FS[3 - 1]
-        NOTE_DS[3 - 1]
-
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_B [2 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_DS[3 - 1]
-        NOTE_B [2 - 1]
-
-        NOTE_FS[3 - 1]
-        NOTE_FS[3 - 1]
+    immut g_music_synth [16]F32 = {
+        NOTE_F [6 - 1]
+        NOTE_G [6 - 1]
+        NOTE_C [6 - 1]
         0
-        NOTE_DS[3 - 1]
-        NOTE_FS[3 - 1]
-        NOTE_FS[3 - 1]
-        NOTE_FS[3 - 1]
-        NOTE_DS[3 - 1]
+
+        NOTE_DS[6 - 1]
+        NOTE_G [6 - 1]
+        NOTE_C [6 - 1]
+        0
+
+        NOTE_F [6 - 1]
+        NOTE_G [6 - 1]
+        NOTE_C [6 - 1]
+        0
+
+        NOTE_C [6 - 1]
+        NOTE_G [6 - 1]
+        NOTE_C [6 - 1]
+        0
+    }
+
+    immut g_music_bass [64]F32 = {
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_C [3]
+        NOTE_C [3]
+        NOTE_C [3]
+        NOTE_C [3]
+
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_D [3]
+        NOTE_D [3]
+        NOTE_D [3]
+        NOTE_D [3]
+
+
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_C [3]
+        NOTE_C [3]
+        NOTE_C [3]
+        NOTE_C [3]
+
+        NOTE_F [3]
+        NOTE_F [3]
+        0
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_AS[3]
+        NOTE_AS[3]
+        NOTE_AS[3]
+        NOTE_AS[3]
     }
 
     immut num_pixel_blocks I32 = (resolution.x * resolution.y) / vector_width
@@ -339,8 +381,8 @@ procedure export compute_frame (
     }
 
     if g_game_timer < 4 {
-        draw_text(framebuffer, resolution, "            PLUS120"           , {28; 60}      , 0x00bbbbbb)
-        draw_text(framebuffer, resolution, "        BY JAKUB TOMSU"       ,  {28; 70}      , 0x00333333)
+        draw_text(framebuffer, resolution, "              120+"            , {28; 60}      , 0x00bbbbbb)
+        draw_text(framebuffer, resolution, "         BY JAKUB TOMSU"        ,  {28; 70}      , 0x00333333)
         draw_text(framebuffer, resolution, "           controls"           , {28; 150 + 10}, 0x00777777)
         draw_text(framebuffer, resolution, "          MOVE     ARROW KEYS" , {28; 150 + 30}, 0x00bbbbbb)
         draw_text(framebuffer, resolution, " SHOOT FORWARD     X"          , {28; 150 + 40}, 0x00bbbbbb)
@@ -373,7 +415,7 @@ procedure export compute_frame (
             continue
         }
 
-        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {80; 60; 40; 0},
+        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {50; 20; 30; 0},
             // {true; false; true; false; true; false; true; false})
             true)
     }
@@ -387,7 +429,7 @@ procedure export compute_frame (
 
         item.timer += delta
 
-        if item.timer > 4 {
+        if item.timer > 8 {
             item.powerup = -1
         }
 
@@ -409,7 +451,7 @@ procedure export compute_frame (
         if item.powerup == PLAYER_POWERUP_SHOTGUN    { color = POWERUP_SHOTGUN_COLOR }
         if item.powerup == PLAYER_POWERUP_EXPLOSIVE  { color = POWERUP_EXPLOSIVE_COLOR }
 
-        if item.timer > 3 {
+        if item.timer > 6 {
             if sin(item.timer * 30) > 0 {
                 color = {0; 0; 0; 0}
             }
@@ -443,7 +485,7 @@ procedure export compute_frame (
 
         enemy.pos += enemy.vel * delta
 
-        mut rad F32 = conv(F32, enemy.size) + 2
+        mut rad F32 = conv(F32, enemy.size)
         if length2(enemy.pos - player.pos) < (rad * rad) {
             end_game = true
         }
@@ -455,7 +497,16 @@ procedure export compute_frame (
             g_shake += 5
             g_hit_pause = 0.02
 
-            mut p U32 = rand_u32() % 11
+            mut p U32
+            if g_game_timer < 30 {
+                p = rand_u32() % 8
+            } else {
+                if g_game_timer < 60 {
+                    p = rand_u32() % 12
+                } else {
+                    p = rand_u32() % 16
+                }
+            }
             if p < 3 {
                 spawn_item(enemy.pos, conv(I32, p))
             }
@@ -500,6 +551,9 @@ procedure export compute_frame (
             }
             enemy.pos.x = conv(F32, conv(I32, rand_u32()) % RESOLUTION_X)
         }
+
+        spawn_effect(enemy.pos, 10, 0.03, {200; 0; 150; 255})
+        spawn_effect(enemy.pos, 7, 0.1, {255; 0; 180; 255})
 
         if (g_game_timer > 10) & ((rand_u32() % 4) == 0) {
             if (g_game_timer > 30) & ((rand_u32() % 6) == 0) {
@@ -749,11 +803,11 @@ procedure export compute_frame (
         draw_rect(framebuffer, resolution, {0; 1}, {RESOLUTION_X - 1; 1}, {255; 0; 0; 0})
     }
 
-    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 5},
+    draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 5},
         {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_FAST_FIRE]))); 3}, POWERUP_FAST_FIRE_COLOR)
-    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 10},
+    draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 10},
         {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_SHOTGUN]))); 3}, POWERUP_SHOTGUN_COLOR)
-    draw_rect(framebuffer, resolution, {2; RESOLUTION_Y - 15},
+    draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 15},
         {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_EXPLOSIVE]))); 3}, POWERUP_EXPLOSIVE_COLOR)
 
     }
@@ -822,15 +876,15 @@ procedure export compute_frame (
             mut beat U8 = g_music_beat[g_music_beat_index]
             mut beat_s F32 = sample_t(g_music_beat_sample)
 
-            mut kick  F32 = wave_square(beat_s * (200.0 - (beat_t * 50))) * max(0.0, 1.0 - beat_t)
-            mut snare F32 = wave_noise(beat_s * (8000.0 - (beat_t * 2000))) * max(0.0, 1.0 - ((beat_t * 2) * (beat_t * 2)))
-            mut hihat F32 = wave_noise(beat_s * (15000.0 + (beat_t * 5000))) * max(0.0, 1.0 - (beat_t * 5))
+            mut kick  F32 = wave_triangle(beat_s * (200.0 - (beat_t * 100))) * max(0.0, 1.0 - beat_t)
+            mut snare F32 = wave_noise(beat_s * (18000.0 - (beat_t * 2000))) * max(0.0, 1.0 - ((beat_t * 2) * (beat_t * 2)))
+            mut hihat F32 = wave_noise(beat_s * (20000.0 + (beat_t * 5000))) * max(0.0, 1.0 - (beat_t * 4))
 
             if (MUSIC_BEAT_KICK  & beat) == 0 { kick = 0 }
             if (MUSIC_BEAT_SNARE & beat) == 0 { snare = 0 }
             if (MUSIC_BEAT_HIHAT & beat) == 0 { hihat = 0 }
 
-            const MELODY_SAMPLES I32 = AUDIO_SAMPLE_RATE * 3
+            const MELODY_SAMPLES I32 = BEAT_SAMPLES * 16 // (AUDIO_SAMPLE_RATE * 16) / 12
             if g_music_melody_sample >= MELODY_SAMPLES {
                 g_music_melody_sample -= MELODY_SAMPLES
                 g_music_melody_index += 1
@@ -846,7 +900,7 @@ procedure export compute_frame (
             melody += wave_sin(melody_s * melody_chord[2])
             melody *= 1.0 - melody_t // * (1.0 - (melody_t * 0.25))
 
-            const BASS_SAMPLES I32 = AUDIO_SAMPLE_RATE / 3
+            const BASS_SAMPLES I32 = BEAT_SAMPLES * 2
             if g_music_bass_sample >= BASS_SAMPLES {
                 g_music_bass_sample -= BASS_SAMPLES
                 g_music_bass_index += 1
@@ -858,11 +912,32 @@ procedure export compute_frame (
 
             mut bass F32 = wave_triangle(bass_s * bass_note) * (1.0 - bass_t)
 
-            music += kick * 1.1
-            music += snare
-            music += hihat * 0.6
-            music += melody * 1
-            music += bass * 5
+            const SYNTH_SAMPLES I32 = BEAT_SAMPLES * 16
+            if g_music_synth_sample >= SYNTH_SAMPLES {
+                g_music_synth_sample -= SYNTH_SAMPLES
+                g_music_synth_index += 1
+                g_music_synth_index %= g_music_synth.len
+            }
+            mut synth_t F32 = conv(F32, g_music_synth_sample) / conv(F32, SYNTH_SAMPLES)
+            mut synth_s F32 = sample_t(g_music_synth_sample)
+            mut synth_note F32 = g_music_synth[g_music_synth_index]
+
+            mut synth F32 = (wave_triangle(synth_s * synth_note)) * (((1.0 - synth_t) * (1.0 - synth_t)) * (1.0 - synth_t))
+            synth *= clamp((synth_t - 0.125) * 100.0, 0.0, 1.0)
+
+            // kick    *= min(1.0, t * 0.5)
+            // snare   *= min(1.0, t * 0.1)
+            // hihat   *= min(1.0, t * 0.5)
+            // melody  *= min(1.0, t * 0.5)
+            // bass    *= min(1.0, t * 0.1)
+            // synth   *= min(1.0, t * 0.1)
+
+            music += kick * 2
+            music += snare * 2
+            music += hihat * 0.5
+            music += melody * 0.5
+            music += bass * 2
+            music += synth * 2
         }
 
         mut sample F32
@@ -880,15 +955,16 @@ procedure export compute_frame (
 
         audio_buffer[audio_sample] = sample
 
-        g_audio_sample += 1
 
         for i I32; i < SOUND_NUM; i += 1 {
             g_sound_sample[i] += 1
         }
 
+        g_audio_sample += 1
         g_music_beat_sample += 1
         g_music_melody_sample += 1
         g_music_bass_sample += 1
+        g_music_synth_sample += 1
     }
 
     if end_game {
@@ -1178,10 +1254,5 @@ mut g_music_melody_sample I32
 mut g_music_bass_index I32
 mut g_music_bass_sample I32
 
-// immut g_music_bass [32]F32 = {
-
-// }
-
-// immut g_music_synth [32]F32 = {
-
-// }
+mut g_music_synth_index I32
+mut g_music_synth_sample I32

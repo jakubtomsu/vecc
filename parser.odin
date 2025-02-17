@@ -37,7 +37,7 @@ next :: proc(p: ^Parser, loc := #caller_location) -> Token {
     }
 
     // Print every token. Useful for parser debugging
-    fmt.println(token, loc)
+    // fmt.println(token, loc)
 
     p.prev_token, p.curr_token = p.curr_token, token
     return p.prev_token

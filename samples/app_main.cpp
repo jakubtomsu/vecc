@@ -99,7 +99,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 num_audio_samples = AUDIO_BUFFER_CAP;
             }
 
-
             compute_frame(
                 g_framebuffer,
                 {{RESOLUTION_X, RESOLUTION_Y}},
@@ -118,7 +117,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             double compute_time = time_diff(end_clock, compute_clock);
 
             if ((g_frame % 30) == 0) {
-                printf("delta time: %g ms (%g fps), compute: %g ms\n", delta * 1e3, 1.0 / delta, compute_time * 1e3);
+                // printf("delta time: %g ms (%g fps), compute: %g ms\n", delta * 1e3, 1.0 / delta, compute_time * 1e3);
             }
 
             PAINTSTRUCT ps;

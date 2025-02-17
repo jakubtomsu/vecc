@@ -8,20 +8,6 @@
 #include <vecc_builtin.h>
 
 typedef struct { F32 data[2]; } Aos2F32;
-typedef struct Item {
-	Aos2F32 pos;
-	I32 powerup;
-	F32 timer;
-} Item;
-typedef struct { F32 data[3]; } Aos3F32;
-typedef struct Player {
-	Aos2F32 pos;
-	Aos2F32 vel;
-	Aos2F32 dir;
-	F32 gun_timer;
-	Aos3F32 powerup_timer;
-	F32 particle_timer;
-} Player;
 typedef struct Enemy {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -32,14 +18,6 @@ typedef struct Enemy {
 	U8 state;
 	U8 kind;
 } Enemy;
-typedef struct Bullet {
-	B8 used;
-	Aos2F32 pos;
-	Aos2F32 vel;
-	F32 timer;
-	U8 level;
-	B8 explode;
-} Bullet;
 typedef struct { U8 data[4]; } Aos4U8;
 typedef struct Effect {
 	Aos2F32 pos;
@@ -53,20 +31,43 @@ typedef struct Hit {
 	F32 tmax;
 	B8 hit;
 } Hit;
+typedef struct { F32 data[3]; } Aos3F32;
+typedef struct Player {
+	Aos2F32 pos;
+	Aos2F32 vel;
+	Aos2F32 dir;
+	F32 gun_timer;
+	Aos3F32 powerup_timer;
+	F32 particle_timer;
+} Player;
+typedef struct Item {
+	Aos2F32 pos;
+	I32 powerup;
+	F32 timer;
+} Item;
+typedef struct Bullet {
+	B8 used;
+	Aos2F32 pos;
+	Aos2F32 vel;
+	F32 timer;
+	U8 level;
+	B8 explode;
+} Bullet;
 typedef struct { F32 data[9]; } Aos9F32;
-typedef struct { Bullet data[64]; } Aos64Bullet;
+typedef struct { Enemy data[64]; } Aos64Enemy;
+typedef struct { I32 data[2]; } Aos2I32;
+typedef struct { F32 data[8]; } Aos8F32;
+typedef struct { U32 data[95]; } Aos95U32;
 typedef struct { Effect data[128]; } Aos128Effect;
 typedef struct { I32 data[8]; } Aos8I32;
-typedef struct { Enemy data[64]; } Aos64Enemy;
-typedef struct { U32 data[95]; } Aos95U32;
-typedef struct { I32 data[2]; } Aos2I32;
 typedef struct { Item data[64]; } Aos64Item;
-typedef struct { F32 data[8]; } Aos8F32;
-typedef struct { U8 data[16]; } Aos16U8;
-typedef struct { Aos3F32 data[8]; } Aos8Aos3F32;
-typedef struct { F32 data[32]; } Aos32F32;
-typedef struct { B8 data[3]; } Aos3B8;
+typedef struct { Bullet data[64]; } Aos64Bullet;
 typedef struct { V8I32 data[2]; } Aos2V8I32;
+typedef struct { U8 data[16]; } Aos16U8;
+typedef struct { Aos3F32 data[4]; } Aos4Aos3F32;
+typedef struct { F32 data[16]; } Aos16F32;
+typedef struct { F32 data[64]; } Aos64F32;
+typedef struct { B8 data[3]; } Aos3B8;
 static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
 static Aos2F32 aos2f32_set1(F32 a) { return {{a, a}}; }
 static Aos2I32 aos2f32_to_aos2i32(Aos2F32 a) { return {{(I32)a.data[0], (I32)a.data[1]}}; }
@@ -75,6 +76,8 @@ static Aos2F32 aos2f32_sub(Aos2F32 a, Aos2F32 b) { return {{a.data[0] - b.data[0
 static Aos2F32 aos2f32_mul(Aos2F32 a, Aos2F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1]}}; }
 static Aos2F32 aos2f32_div(Aos2F32 a, Aos2F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1]}}; }
 static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
+static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
+static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
 static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
 static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
 static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
@@ -82,8 +85,6 @@ static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0
 static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
 static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
 static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
-static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
-static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
 static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
@@ -95,9 +96,6 @@ static Aos2I32 aos2i32_and(Aos2I32 a, Aos2I32 b) { return {{a.data[0] & b.data[0
 static Aos2I32 aos2i32_or(Aos2I32 a, Aos2I32 b) { return {{a.data[0] | b.data[0], a.data[1] | b.data[1]}}; }
 static Aos2I32 aos2i32_xor(Aos2I32 a, Aos2I32 b) { return {{a.data[0] ^ b.data[0], a.data[1] ^ b.data[1]}}; }
 static Aos2I32 aos2i32_neg(Aos2I32 a) { return {{-a.data[0], -a.data[1]}}; }
-static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
-static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
-static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }
 static Aos2V8I32 aos2v8i32_set(V8I32 v0, V8I32 v1) { return {{v0, v1}}; }
 static Aos2V8I32 aos2v8i32_set_scalar(Aos2I32 a) { return {{v8i32_set1(a.data[0]), v8i32_set1(a.data[1])}}; }
 static Aos2V8I32 aos2v8i32_set1(V8I32 a) { return {{a, a}}; }
@@ -107,10 +105,14 @@ static Aos2V8I32 aos2v8i32_mul(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_mul(a.
 static Aos2V8I32 aos2v8i32_and(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_and(a.data[0], b.data[0]), v8i32_and(a.data[1], b.data[1])}}; }
 static Aos2V8I32 aos2v8i32_or(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_or(a.data[0], b.data[0]), v8i32_or(a.data[1], b.data[1])}}; }
 static Aos2V8I32 aos2v8i32_xor(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_xor(a.data[0], b.data[0]), v8i32_xor(a.data[1], b.data[1])}}; }
+static Aos4Aos3F32 aos4aos3f32_set(Aos3F32 v0, Aos3F32 v1, Aos3F32 v2, Aos3F32 v3) { return {{v0, v1, v2, v3}}; }
+static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
+static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
+static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }
 
 // VECC exported constants
 
-const String SAMPLE_NAME = {"PLUS120", 7};
+const String SAMPLE_NAME = {"120+", 4};
 const I32 RESOLUTION_X = 8 * 30;
 const I32 RESOLUTION_Y = 8 * 30;
 const I32 RESOLUTION_SCALE = 4;
@@ -217,6 +219,8 @@ I32 g_music_melody_index = 0;
 I32 g_music_melody_sample = 0;
 I32 g_music_bass_index = 0;
 I32 g_music_bass_sample = 0;
+I32 g_music_synth_index = 0;
+I32 g_music_synth_sample = 0;
 
 // VECC function definitions
 
@@ -304,10 +308,10 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 	if (frame == 0) {
 		reset_game();
 	};
-	const Aos16U8 g_music_beat = {{MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE, 0, MUSIC_BEAT_HIHAT, 0, MUSIC_BEAT_KICK, 0, MUSIC_BEAT_HIHAT, 0, MUSIC_BEAT_KICK, 0, 0, MUSIC_BEAT_HIHAT, MUSIC_BEAT_KICK, 0, MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT, 0}};
-	const I32 OCT = 4;
-	const Aos8Aos3F32 g_music_melody = {{{{NOTE_F.data[(OCT + 0)], NOTE_A.data[(OCT + 0)], NOTE_C.data[(OCT + 0)]}}, {{NOTE_DS.data[(OCT + 0)], NOTE_C.data[(OCT + 0)], NOTE_GS.data[(OCT + 0)]}}, {{NOTE_F.data[(OCT + 0)], NOTE_D.data[(OCT + 0)], NOTE_A.data[(OCT + 0)]}}, {{NOTE_DS.data[(OCT + 0)], NOTE_C.data[(OCT + 0)], NOTE_GS.data[(OCT + 0)]}}, {{NOTE_D.data[(OCT + 0)], NOTE_B.data[(OCT + 1)], NOTE_G.data[(OCT + 0)]}}, {{NOTE_DS.data[(OCT + 0)], NOTE_C.data[(OCT + 0)], NOTE_GS.data[(OCT + 0)]}}, {{NOTE_FS.data[(OCT + 0)], NOTE_DS.data[(OCT + 0)], NOTE_B.data[(OCT + 0)]}}, {{NOTE_DS.data[(OCT + 0)], NOTE_C.data[(OCT + 0)], NOTE_GS.data[(OCT + 0)]}}}};
-	const Aos32F32 g_music_bass = {{NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_B.data[(2 - 1)], NOTE_FS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_B.data[(2 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_DS.data[(3 - 1)], NOTE_B.data[(2 - 1)], NOTE_FS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], 0.0f, NOTE_DS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], NOTE_FS.data[(3 - 1)], NOTE_DS.data[(3 - 1)]}};
+	const Aos16U8 g_music_beat = {{MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE, 0, MUSIC_BEAT_HIHAT, 0, MUSIC_BEAT_KICK, 0, MUSIC_BEAT_HIHAT, 0, MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT, 0, 0, MUSIC_BEAT_HIHAT, MUSIC_BEAT_KICK, 0, MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT, 0}};
+	const Aos4Aos3F32 g_music_melody = {{{{NOTE_F.data[4], NOTE_GS.data[4], NOTE_C.data[5]}}, {{NOTE_G.data[4], NOTE_AS.data[4], NOTE_D.data[5]}}, {{NOTE_F.data[4], NOTE_GS.data[4], NOTE_C.data[5]}}, {{NOTE_G.data[4], NOTE_B.data[4], NOTE_D.data[5]}}}};
+	const Aos16F32 g_music_synth = {{NOTE_F.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_DS.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_F.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_C.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f}};
+	const Aos64F32 g_music_bass = {{NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_F.data[3], NOTE_F.data[3], 0.0f, NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_AS.data[3], NOTE_AS.data[3], NOTE_AS.data[3], NOTE_AS.data[3]}};
 	const I32 num_pixel_blocks = (resolution.data[0] * resolution.data[1]) / vector_width;
 	B8 end_game = false;
 	B32 should_hit_pause = g_hit_pause > 0.0f;
@@ -326,8 +330,8 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			framebuffer[i] = v8u32_sl(c, 5);
 		};
 		if (g_game_timer < 4.0f) {
-			draw_text(framebuffer, resolution, {"            PLUS120", 19}, {{28, 60}}, 12303291);
-			draw_text(framebuffer, resolution, {"        BY JAKUB TOMSU", 22}, {{28, 70}}, 3355443);
+			draw_text(framebuffer, resolution, {"              120+", 18}, {{28, 60}}, 12303291);
+			draw_text(framebuffer, resolution, {"         BY JAKUB TOMSU", 23}, {{28, 70}}, 3355443);
 			draw_text(framebuffer, resolution, {"           controls", 19}, {{28, 150 + 10}}, 7829367);
 			draw_text(framebuffer, resolution, {"          MOVE     ARROW KEYS", 29}, {{28, 150 + 30}}, 12303291);
 			draw_text(framebuffer, resolution, {" SHOOT FORWARD     X", 20}, {{28, 150 + 40}}, 12303291);
@@ -340,7 +344,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			if (enemy.state != ENEMY_STATE_DEAD) {
 				continue;
 			};
-			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, {{80, 60, 40, 0}}, v8b32_set1(b32_true));
+			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, {{50, 20, 30, 0}}, v8b32_set1(b32_true));
 		};
 		for (I32 i = 0; i < 64; i = i + 1) {
 			Item item = g_items.data[i];
@@ -348,7 +352,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 				continue;
 			};
 			item.timer = item.timer + delta;
-			if (item.timer > 4.0f) {
+			if (item.timer > 8.0f) {
 				item.powerup = -1;
 			};
 			if (length2(aos2f32_sub(item.pos, player.pos)) < (10.0f * 10.0f)) {
@@ -371,7 +375,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			if (item.powerup == PLAYER_POWERUP_EXPLOSIVE) {
 				color = POWERUP_EXPLOSIVE_COLOR;
 			};
-			if (item.timer > 3.0f) {
+			if (item.timer > 6.0f) {
 				if (f32_sin(item.timer * 30.0f) > 0.0f) {
 					color = {{0, 0, 0, 0}};
 				};
@@ -395,7 +399,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			enemy.vel = aos2f32_add(enemy.vel, aos2f32_mul(normalize(aos2f32_sub(player.pos, enemy.pos)), aos2f32_set1(delta * (enemy.speed * 5.0f))));
 			enemy.vel = aos2f32_mul(normalize(enemy.vel), aos2f32_set1(f32_clamp(length(enemy.vel), 0.0f, enemy.speed)));
 			enemy.pos = aos2f32_add(enemy.pos, aos2f32_mul(enemy.vel, aos2f32_set1(delta)));
-			F32 rad = (F32)enemy.size + 2.0f;
+			F32 rad = (F32)enemy.size;
 			if (length2(aos2f32_sub(enemy.pos, player.pos)) < (rad * rad)) {
 				end_game = b8_true;
 			};
@@ -405,7 +409,16 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 				spawn_effect(enemy.pos, 9.0f, 0.05f, {{255, 255, 255, 255}});
 				g_shake = g_shake + 5.0f;
 				g_hit_pause = 0.02f;
-				U32 p = rand_u32() % 11;
+				U32 p = 0;
+				if (g_game_timer < 30.0f) {
+					p = rand_u32() % 8;
+				} else {
+					if (g_game_timer < 60.0f) {
+						p = rand_u32() % 12;
+					} else {
+						p = rand_u32() % 16;
+					};
+				};
 				if (p < 3) {
 					spawn_item(enemy.pos, (I32)p);
 				};
@@ -447,6 +460,8 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 				};
 				enemy.pos.data[0] = (F32)((I32)rand_u32() % RESOLUTION_X);
 			};
+			spawn_effect(enemy.pos, 10.0f, 0.029999999f, {{200, 0, 150, 255}});
+			spawn_effect(enemy.pos, 7.0f, 0.1f, {{255, 0, 180, 255}});
 			if ((g_game_timer > 10.0f) & ((rand_u32() % 4) == 0)) {
 				if ((g_game_timer > 30.0f) & ((rand_u32() % 6) == 0)) {
 					enemy.size = 14;
@@ -655,9 +670,9 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		} else {
 			draw_rect(framebuffer, resolution, {{0, 1}}, {{RESOLUTION_X - 1, 1}}, {{255, 0, 0, 0}});
 		};
-		draw_rect(framebuffer, resolution, {{2, RESOLUTION_Y - 5}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_FAST_FIRE]))), 3}}, POWERUP_FAST_FIRE_COLOR);
-		draw_rect(framebuffer, resolution, {{2, RESOLUTION_Y - 10}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_SHOTGUN]))), 3}}, POWERUP_SHOTGUN_COLOR);
-		draw_rect(framebuffer, resolution, {{2, RESOLUTION_Y - 15}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_EXPLOSIVE]))), 3}}, POWERUP_EXPLOSIVE_COLOR);
+		draw_rect(framebuffer, resolution, {{1, RESOLUTION_Y - 5}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_FAST_FIRE]))), 3}}, POWERUP_FAST_FIRE_COLOR);
+		draw_rect(framebuffer, resolution, {{1, RESOLUTION_Y - 10}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_SHOTGUN]))), 3}}, POWERUP_SHOTGUN_COLOR);
+		draw_rect(framebuffer, resolution, {{1, RESOLUTION_Y - 15}}, {{i32_max(0, (I32)(3.0f * f32_ceil(player.powerup_timer.data[PLAYER_POWERUP_EXPLOSIVE]))), 3}}, POWERUP_EXPLOSIVE_COLOR);
 	};
 	for (I32 audio_sample = 0; audio_sample < audio_samples; audio_sample = audio_sample + 1) {
 		F32 begin_t = sample_t(g_sound_sample.data[SOUND_BEGIN]);
@@ -711,9 +726,9 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			F32 beat_t = (F32)g_music_beat_sample / (F32)BEAT_SAMPLES;
 			U8 beat = g_music_beat.data[g_music_beat_index];
 			F32 beat_s = sample_t(g_music_beat_sample);
-			F32 kick = wave_square(beat_s * (200.0f - (beat_t * 50.0f))) * f32_max(0.0f, 1.0f - beat_t);
-			F32 snare = wave_noise(beat_s * (8000.0f - (beat_t * 2000.0f))) * f32_max(0.0f, 1.0f - ((beat_t * 2.0f) * (beat_t * 2.0f)));
-			F32 hihat = wave_noise(beat_s * (15000.0f + (beat_t * 5000.0f))) * f32_max(0.0f, 1.0f - (beat_t * 5.0f));
+			F32 kick = wave_triangle(beat_s * (200.0f - (beat_t * 100.0f))) * f32_max(0.0f, 1.0f - beat_t);
+			F32 snare = wave_noise(beat_s * (18000.0f - (beat_t * 2000.0f))) * f32_max(0.0f, 1.0f - ((beat_t * 2.0f) * (beat_t * 2.0f)));
+			F32 hihat = wave_noise(beat_s * (20000.0f + (beat_t * 5000.0f))) * f32_max(0.0f, 1.0f - (beat_t * 4.0f));
 			if ((MUSIC_BEAT_KICK & beat) == 0) {
 				kick = 0.0f;
 			};
@@ -723,7 +738,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			if ((MUSIC_BEAT_HIHAT & beat) == 0) {
 				hihat = 0.0f;
 			};
-			const I32 MELODY_SAMPLES = AUDIO_SAMPLE_RATE * 3;
+			const I32 MELODY_SAMPLES = BEAT_SAMPLES * 16;
 			if (g_music_melody_sample >= MELODY_SAMPLES) {
 				g_music_melody_sample = g_music_melody_sample - MELODY_SAMPLES;
 				g_music_melody_index = g_music_melody_index + 1;
@@ -737,7 +752,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			melody = melody + wave_sin(melody_s * melody_chord.data[1]);
 			melody = melody + wave_sin(melody_s * melody_chord.data[2]);
 			melody = melody * (1.0f - melody_t);
-			const I32 BASS_SAMPLES = AUDIO_SAMPLE_RATE / 3;
+			const I32 BASS_SAMPLES = BEAT_SAMPLES * 2;
 			if (g_music_bass_sample >= BASS_SAMPLES) {
 				g_music_bass_sample = g_music_bass_sample - BASS_SAMPLES;
 				g_music_bass_index = g_music_bass_index + 1;
@@ -747,11 +762,23 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			F32 bass_s = sample_t(g_music_bass_sample);
 			F32 bass_note = g_music_bass.data[g_music_bass_index];
 			F32 bass = wave_triangle(bass_s * bass_note) * (1.0f - bass_t);
-			music = music + (kick * 1.1f);
-			music = music + snare;
-			music = music + (hihat * 0.6f);
-			music = music + (melody * 1.0f);
-			music = music + (bass * 5.0f);
+			const I32 SYNTH_SAMPLES = BEAT_SAMPLES * 16;
+			if (g_music_synth_sample >= SYNTH_SAMPLES) {
+				g_music_synth_sample = g_music_synth_sample - SYNTH_SAMPLES;
+				g_music_synth_index = g_music_synth_index + 1;
+				g_music_synth_index = g_music_synth_index % VECC_LEN(g_music_synth.data);
+			};
+			F32 synth_t = (F32)g_music_synth_sample / (F32)SYNTH_SAMPLES;
+			F32 synth_s = sample_t(g_music_synth_sample);
+			F32 synth_note = g_music_synth.data[g_music_synth_index];
+			F32 synth = wave_triangle(synth_s * synth_note) * (((1.0f - synth_t) * (1.0f - synth_t)) * (1.0f - synth_t));
+			synth = synth * f32_clamp((synth_t - 0.125f) * 100.0f, 0.0f, 1.0f);
+			music = music + (kick * 2.0f);
+			music = music + (snare * 2.0f);
+			music = music + (hihat * 0.5f);
+			music = music + (melody * 0.5f);
+			music = music + (bass * 2.0f);
+			music = music + (synth * 2.0f);
 		};
 		F32 sample = 0.0f;
 		sample = sample + begin;
@@ -765,13 +792,14 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		sample = sample + music;
 		sample = sample * 0.05f;
 		audio_buffer[audio_sample] = sample;
-		g_audio_sample = g_audio_sample + 1;
 		for (I32 i = 0; i < SOUND_NUM; i = i + 1) {
 			g_sound_sample.data[i] = g_sound_sample.data[i] + 1;
 		};
+		g_audio_sample = g_audio_sample + 1;
 		g_music_beat_sample = g_music_beat_sample + 1;
 		g_music_melody_sample = g_music_melody_sample + 1;
 		g_music_bass_sample = g_music_bass_sample + 1;
+		g_music_synth_sample = g_music_synth_sample + 1;
 	};
 	if (end_game) {
 		reset_game();
