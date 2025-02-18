@@ -8,6 +8,41 @@
 #include <vecc_builtin.h>
 
 typedef struct { F32 data[2]; } Aos2F32;
+typedef struct Item {
+	Aos2F32 pos;
+	I32 powerup;
+	F32 timer;
+} Item;
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
+typedef struct Bullet {
+	B8 used;
+	Aos2F32 pos;
+	Aos2F32 vel;
+	F32 timer;
+	U8 level;
+	B8 explode;
+} Bullet;
+typedef struct { U8 data[4]; } Aos4U8;
+typedef struct Effect {
+	Aos2F32 pos;
+	F32 rad;
+	F32 timer;
+	F32 dur;
+	Aos4U8 color;
+} Effect;
+typedef struct { F32 data[3]; } Aos3F32;
+typedef struct Player {
+	Aos2F32 pos;
+	Aos2F32 vel;
+	Aos2F32 dir;
+	F32 gun_timer;
+	Aos3F32 powerup_timer;
+	F32 particle_timer;
+} Player;
 typedef struct Enemy {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -18,50 +53,15 @@ typedef struct Enemy {
 	U8 state;
 	U8 kind;
 } Enemy;
-typedef struct { U8 data[4]; } Aos4U8;
-typedef struct Effect {
-	Aos2F32 pos;
-	F32 rad;
-	F32 timer;
-	F32 dur;
-	Aos4U8 color;
-} Effect;
-typedef struct Hit {
-	F32 tmin;
-	F32 tmax;
-	B8 hit;
-} Hit;
-typedef struct { F32 data[3]; } Aos3F32;
-typedef struct Player {
-	Aos2F32 pos;
-	Aos2F32 vel;
-	Aos2F32 dir;
-	F32 gun_timer;
-	Aos3F32 powerup_timer;
-	F32 particle_timer;
-} Player;
-typedef struct Item {
-	Aos2F32 pos;
-	I32 powerup;
-	F32 timer;
-} Item;
-typedef struct Bullet {
-	B8 used;
-	Aos2F32 pos;
-	Aos2F32 vel;
-	F32 timer;
-	U8 level;
-	B8 explode;
-} Bullet;
-typedef struct { F32 data[9]; } Aos9F32;
-typedef struct { Enemy data[64]; } Aos64Enemy;
-typedef struct { I32 data[2]; } Aos2I32;
-typedef struct { F32 data[8]; } Aos8F32;
 typedef struct { U32 data[95]; } Aos95U32;
-typedef struct { Effect data[128]; } Aos128Effect;
+typedef struct { Enemy data[256]; } Aos256Enemy;
+typedef struct { F32 data[9]; } Aos9F32;
+typedef struct { F32 data[8]; } Aos8F32;
+typedef struct { Effect data[32]; } Aos32Effect;
+typedef struct { Item data[32]; } Aos32Item;
+typedef struct { I32 data[2]; } Aos2I32;
+typedef struct { Bullet data[128]; } Aos128Bullet;
 typedef struct { I32 data[8]; } Aos8I32;
-typedef struct { Item data[64]; } Aos64Item;
-typedef struct { Bullet data[64]; } Aos64Bullet;
 typedef struct { V8I32 data[2]; } Aos2V8I32;
 typedef struct { U8 data[16]; } Aos16U8;
 typedef struct { Aos3F32 data[4]; } Aos4Aos3F32;
@@ -165,16 +165,16 @@ const Aos4U8 POWERUP_FAST_FIRE_COLOR = {{0, 255, 0, 0}};
 const Aos4U8 POWERUP_SHOTGUN_COLOR = {{255, 255, 0, 0}};
 const Aos4U8 POWERUP_EXPLOSIVE_COLOR = {{0, 255, 255, 0}};
 Player player = {0};
-Aos64Item g_items = {0};
-Aos64Bullet g_bullets = {0};
-Aos128Effect g_effects = {0};
+Aos32Item g_items = {0};
+Aos128Bullet g_bullets = {0};
+Aos32Effect g_effects = {0};
 const U8 ENEMY_STATE_DEAD = 0;
 const U8 ENEMY_STATE_ALIVE = 1;
 const Aos4U8 ENEMY_COLOR_NORMAL = {{255, 50, 200, 0}};
 const Aos4U8 ENEMY_COLOR_FAST = {{200, 0, 255, 0}};
 const Aos4U8 ENEMY_COLOR_BIG = {{255, 10, 100, 0}};
 const F32 GAME_MAX_TIME = 120.0f;
-Aos64Enemy g_enemies = {0};
+Aos256Enemy g_enemies = {0};
 F32 g_enemy_spawn_timer = 5.0f;
 F32 g_game_timer = 0.0f;
 U32 g_seed = 1;
@@ -248,7 +248,7 @@ static U32 color_to_u32(Aos4U8 col) {
 }
 
 static void spawn_item(Aos2F32 pos, I32 powerup) {
-	for (I32 i = 0; i < 64; i = i + 1) {
+	for (I32 i = 0; i < VECC_LEN(g_items.data); i = i + 1) {
 		Item item = g_items.data[i];
 		if (item.powerup == -1) {
 			play_sound(SOUND_SPAWN);
@@ -262,7 +262,7 @@ static void spawn_item(Aos2F32 pos, I32 powerup) {
 }
 
 static void spawn_effect(Aos2F32 pos, F32 rad, F32 dur, Aos4U8 col) {
-	for (I32 i = 0; i < 128; i = i + 1) {
+	for (I32 i = 0; i < VECC_LEN(g_effects.data); i = i + 1) {
 		Effect effect = g_effects.data[i];
 		if (effect.timer > effect.dur) {
 			effect.pos = pos;
@@ -282,17 +282,17 @@ static void reset_game() {
 	player.gun_timer = 0.0f;
 	player.powerup_timer = {{0.0f, 0.0f, 0.0f}};
 	player.dir = {{1.0f, 0.0f}};
-	for (I32 i = 0; i < 64; i = i + 1) {
+	for (I32 i = 0; i < VECC_LEN(g_items.data); i = i + 1) {
 		g_items.data[i].powerup = -1;
 	};
-	for (I32 i = 0; i < 64; i = i + 1) {
+	for (I32 i = 0; i < VECC_LEN(g_bullets.data); i = i + 1) {
 		g_bullets.data[i].used = b8_false;
 	};
-	for (I32 i = 0; i < 64; i = i + 1) {
+	for (I32 i = 0; i < VECC_LEN(g_enemies.data); i = i + 1) {
 		g_enemies.data[i].pos = aos2f32_neg(aos2f32_set1(100.0f));
 		g_enemies.data[i].state = ENEMY_STATE_DEAD;
 	};
-	for (I32 i = 0; i < 64; i = i + 1) {
+	for (I32 i = 0; i < VECC_LEN(g_effects.data); i = i + 1) {
 		g_effects.data[i].dur = -1.0f;
 	};
 	for (I32 i = 0; i < SOUND_NUM; i = i + 1) {
@@ -339,14 +339,14 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		};
 		g_camera = {{(I32)f32_round((rand_f32() - 0.5f) * g_shake), (I32)f32_round((rand_f32() - 0.5f) * g_shake)}};
 		g_shake = f32_max(0.0f, g_shake - (delta * 50.0f));
-		for (I32 i = 0; i < 64; i = i + 1) {
+		for (I32 i = 0; i < VECC_LEN(g_enemies.data); i = i + 1) {
 			Enemy enemy = g_enemies.data[i];
 			if (enemy.state != ENEMY_STATE_DEAD) {
 				continue;
 			};
 			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, {{50, 20, 30, 0}}, v8b32_set1(b32_true));
 		};
-		for (I32 i = 0; i < 64; i = i + 1) {
+		for (I32 i = 0; i < VECC_LEN(g_items.data); i = i + 1) {
 			Item item = g_items.data[i];
 			if (item.powerup == -1) {
 				continue;
@@ -385,11 +385,11 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 		};
 		F32 max_enemy_damage_timer = 0.0f;
 		I32 oldest_corpse = -1;
-		for (I32 i = 0; i < 64; i = i + 1) {
+		for (I32 i = 0; i < VECC_LEN(g_enemies.data); i = i + 1) {
 			Enemy enemy = g_enemies.data[i];
 			enemy.damage_timer = enemy.damage_timer + delta;
 			if (enemy.state == ENEMY_STATE_DEAD) {
-				if (enemy.damage_timer > max_enemy_damage_timer) {
+				if (enemy.damage_timer >= max_enemy_damage_timer) {
 					max_enemy_damage_timer = enemy.damage_timer;
 					oldest_corpse = i;
 				};
@@ -437,6 +437,9 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			Aos2F32 enemy_pos = enemy.pos;
 			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy_pos), (I32)enemy.size, (I32)(enemy.size + 1), color, v8b32_set1(b32_true));
 			g_enemies.data[i] = enemy;
+		};
+		if (oldest_corpse == -1) {
+			oldest_corpse = (I32)rand_u32() % VECC_LEN(g_enemies.data);
 		};
 		g_enemy_spawn_timer = g_enemy_spawn_timer + delta;
 		const F32 spawn_rate = 0.1f + (1.2f * f32_max(0.0f, 1.0f - (g_game_timer / GAME_MAX_TIME)));
@@ -489,7 +492,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			};
 			g_enemies.data[oldest_corpse] = enemy;
 		};
-		for (I32 i = 0; i < 128; i = i + 1) {
+		for (I32 i = 0; i < VECC_LEN(g_effects.data); i = i + 1) {
 			Effect effect = g_effects.data[i];
 			effect.timer = effect.timer + delta;
 			if (effect.timer < effect.dur) {
@@ -559,7 +562,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 				g_shake = 1.0f;
 				spawn_effect(aos2f32_add(player.pos, aos2f32_mul(player.dir, aos2f32_mul(aos2f32_set1(6.0f), aos2f32_set1(shoot_dir)))), 3.0f, 0.0099999998f, {{0, 255, 255, 0}});
 				play_sound(SOUND_SHOOT);
-				for (I32 i = 0; i < 64; i = i + 1) {
+				for (I32 i = 0; i < VECC_LEN(g_bullets.data); i = i + 1) {
 					if (!g_bullets.data[i].used) {
 						Aos2F32 bdir = aos2f32_mul(player.dir, aos2f32_set1(shoot_dir));
 						bdir.data[0] = bdir.data[0] + ((rand_f32() - 0.5f) * shot_spread);
@@ -605,7 +608,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			};
 			draw_rect(framebuffer, resolution, aos2i32_sub(aos2i32_sub(gun_pos, {{gun_size.data[0] / 2, gun_size.data[1] / 2}}), g_camera), gun_size, {{255, 255, 255, 255}});
 		};
-		for (I32 i = 0; i < 64; i = i + 1) {
+		for (I32 i = 0; i < VECC_LEN(g_bullets.data); i = i + 1) {
 			Bullet bullet = g_bullets.data[i];
 			if (bullet.timer > 0.4f) {
 				bullet.timer = 0.0f;
@@ -617,7 +620,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 				const Aos2F32 move_dir = normalize(move);
 				F32 tmin = length(move);
 				I32 hit_enemy = -1;
-				for (I32 ei = 0; ei < 64; ei = ei + 1) {
+				for (I32 ei = 0; ei < VECC_LEN(g_enemies.data); ei = ei + 1) {
 					const Enemy enemy = g_enemies.data[ei];
 					if (enemy.state != ENEMY_STATE_ALIVE) {
 						continue;
@@ -638,7 +641,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 						spawn_effect(bullet.pos, 22.0f, 0.05f, {{255, 255, 255, 0}});
 						g_hit_pause = 0.09f;
 						play_sound(SOUND_EXPLOSION);
-						for (I32 ei = 0; ei < 64; ei = ei + 1) {
+						for (I32 ei = 0; ei < VECC_LEN(g_enemies.data); ei = ei + 1) {
 							Enemy enemy = g_enemies.data[ei];
 							if (enemy.state != ENEMY_STATE_ALIVE) {
 								continue;
@@ -773,10 +776,16 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			F32 synth_note = g_music_synth.data[g_music_synth_index];
 			F32 synth = wave_triangle(synth_s * synth_note) * (((1.0f - synth_t) * (1.0f - synth_t)) * (1.0f - synth_t));
 			synth = synth * f32_clamp((synth_t - 0.125f) * 100.0f, 0.0f, 1.0f);
+			kick = kick * f32_min(1.0f, t);
+			snare = snare * f32_min(1.0f, t * 0.1f);
+			hihat = hihat * f32_min(1.0f, t * 0.5f);
+			melody = melody * f32_min(1.0f, t * 0.5f);
+			bass = bass * f32_min(1.0f, t * 0.1f);
+			synth = synth * f32_min(1.0f, t * 0.1f);
 			music = music + (kick * 2.0f);
 			music = music + (snare * 2.0f);
 			music = music + (hihat * 0.5f);
-			music = music + (melody * 0.5f);
+			music = music + melody;
 			music = music + (bass * 2.0f);
 			music = music + (synth * 2.0f);
 		};

@@ -46,7 +46,7 @@ struct Item {
     timer   F32
 }
 
-mut g_items [64]Item
+mut g_items [32]Item
 
 struct Bullet {
     used    B8
@@ -57,7 +57,7 @@ struct Bullet {
     explode B8
 }
 
-mut g_bullets [64]Bullet
+mut g_bullets [128]Bullet
 
 struct Effect {
     pos     [2]F32
@@ -67,7 +67,7 @@ struct Effect {
     color   [4]U8
 }
 
-mut g_effects [128]Effect
+mut g_effects [32]Effect
 
 struct Enemy {
     pos             [2]F32
@@ -89,7 +89,7 @@ const ENEMY_COLOR_BIG    [4]U8 = {255; 10; 100; 0}
 
 const GAME_MAX_TIME F32 = 120
 
-mut g_enemies [64]Enemy
+mut g_enemies [256]Enemy
 
 mut g_enemy_spawn_timer F32 = 5
 mut g_game_timer F32 = 0
@@ -146,7 +146,7 @@ procedure spawn_item (
     immut pos     [2]F32
     immut powerup I32
 ) {
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_items.len; i += 1 {
         mut item Item = g_items[i]
         if item.powerup == -1 {
             play_sound(SOUND_SPAWN)
@@ -165,7 +165,7 @@ procedure spawn_effect (
     immut dur   F32
     immut col   [4]U8
 ) {
-    for i I32; i < 128; i += 1 {
+    for i I32; i < g_effects.len; i += 1 {
         mut effect Effect = g_effects[i]
         if effect.timer > effect.dur {
             effect.pos = pos
@@ -187,20 +187,20 @@ procedure reset_game () {
     player.powerup_timer = {0; 0; 0}
     player.dir = {1; 0}
 
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_items.len; i += 1 {
         g_items[i].powerup = -1
     }
 
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_bullets.len; i += 1 {
         g_bullets[i].used = false
     }
 
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_enemies.len; i += 1 {
         g_enemies[i].pos = -100
         g_enemies[i].state = ENEMY_STATE_DEAD
     }
 
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_effects.len; i += 1 {
         g_effects[i].dur = -1
     }
 
@@ -408,7 +408,7 @@ procedure export compute_frame (
 
     g_shake = max(0.0, g_shake - (delta * 50))
 
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_enemies.len; i += 1 {
         mut enemy Enemy = g_enemies[i]
 
         if enemy.state != ENEMY_STATE_DEAD {
@@ -420,7 +420,7 @@ procedure export compute_frame (
             true)
     }
 
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_items.len; i += 1 {
         mut item Item = g_items[i]
 
         if item.powerup == -1 {
@@ -466,19 +466,20 @@ procedure export compute_frame (
 
     mut max_enemy_damage_timer F32
     mut oldest_corpse I32 = -1
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_enemies.len; i += 1 {
         mut enemy Enemy = g_enemies[i]
 
         enemy.damage_timer += delta
 
         if enemy.state == ENEMY_STATE_DEAD {
-            if enemy.damage_timer > max_enemy_damage_timer {
+            if enemy.damage_timer >= max_enemy_damage_timer {
                 max_enemy_damage_timer = enemy.damage_timer
                 oldest_corpse = i
             }
             g_enemies[i] = enemy
             continue
         }
+
 
         enemy.vel += normalize(player.pos - enemy.pos) * (delta * (enemy.speed * 5))
         enemy.vel = normalize(enemy.vel) * clamp(length(enemy.vel), 0, enemy.speed)
@@ -525,6 +526,10 @@ procedure export compute_frame (
         draw_octagon(framebuffer, resolution, conv(I32, enemy_pos), conv(I32, enemy.size), conv(I32, enemy.size+1), color, true)
 
         g_enemies[i] = enemy
+    }
+
+    if oldest_corpse == -1 {
+        oldest_corpse = conv(I32, rand_u32()) % g_enemies.len
     }
 
     g_enemy_spawn_timer += delta
@@ -584,7 +589,7 @@ procedure export compute_frame (
         g_enemies[oldest_corpse] = enemy
     }
 
-    for i I32 = 0; i < 128; i += 1 {
+    for i I32 = 0; i < g_effects.len; i += 1 {
         mut effect Effect = g_effects[i]
         effect.timer += delta
 
@@ -653,7 +658,7 @@ procedure export compute_frame (
             // muzzle flash
             spawn_effect(player.pos + (player.dir * (6 * shoot_dir)), 3, 0.01, {0;255;255; 0})
             play_sound(SOUND_SHOOT)
-            for i I32; i < 64; i += 1 {
+            for i I32; i < g_bullets.len; i += 1 {
                 if !g_bullets[i].used {
                     mut bdir [2]F32 = player.dir * shoot_dir
                     bdir.x += (rand_f32() - 0.5) * shot_spread
@@ -718,7 +723,7 @@ procedure export compute_frame (
         draw_rect(framebuffer, resolution, (gun_pos - {gun_size.x / 2; gun_size.y/2}) - g_camera, gun_size, {255; 255; 255; 255})
     }
 
-    for i I32; i < 64; i += 1 {
+    for i I32; i < g_bullets.len; i += 1 {
         mut bullet Bullet = g_bullets[i]
 
         if bullet.timer > 0.4 {
@@ -735,7 +740,7 @@ procedure export compute_frame (
 
             mut tmin F32 = length(move)
             mut hit_enemy I32 = -1
-            for ei I32; ei < 64; ei += 1 {
+            for ei I32; ei < g_enemies.len; ei += 1 {
                 immut enemy Enemy = g_enemies[ei]
                 if enemy.state != ENEMY_STATE_ALIVE {
                     continue
@@ -765,7 +770,7 @@ procedure export compute_frame (
                     g_hit_pause = 0.09
                     play_sound(SOUND_EXPLOSION)
 
-                    for ei I32; ei < 64; ei += 1 {
+                    for ei I32; ei < g_enemies.len; ei += 1 {
                         mut enemy Enemy = g_enemies[ei]
                         if enemy.state != ENEMY_STATE_ALIVE {
                             continue
@@ -925,17 +930,17 @@ procedure export compute_frame (
             mut synth F32 = (wave_triangle(synth_s * synth_note)) * (((1.0 - synth_t) * (1.0 - synth_t)) * (1.0 - synth_t))
             synth *= clamp((synth_t - 0.125) * 100.0, 0.0, 1.0)
 
-            // kick    *= min(1.0, t * 0.5)
-            // snare   *= min(1.0, t * 0.1)
-            // hihat   *= min(1.0, t * 0.5)
-            // melody  *= min(1.0, t * 0.5)
-            // bass    *= min(1.0, t * 0.1)
-            // synth   *= min(1.0, t * 0.1)
+            kick    *= min(1.0, t)
+            snare   *= min(1.0, t * 0.1)
+            hihat   *= min(1.0, t * 0.5)
+            melody  *= min(1.0, t * 0.5)
+            bass    *= min(1.0, t * 0.1)
+            synth   *= min(1.0, t * 0.1)
 
             music += kick * 2
             music += snare * 2
             music += hihat * 0.5
-            music += melody * 0.5
+            music += melody
             music += bass * 2
             music += synth * 2
         }
