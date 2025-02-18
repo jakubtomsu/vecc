@@ -7,10 +7,27 @@
 #include <stdio.h>
 #include <vecc_builtin.h>
 
-typedef struct { F32 data[3]; } Aos3F32;
-typedef struct { Aos3F32 data[4]; } Aos4Aos3F32;
 typedef struct { F32 data[9]; } Aos9F32;
 typedef struct { F32 data[2]; } Aos2F32;
+typedef struct Item {
+	Aos2F32 pos;
+	I32 powerup;
+	F32 timer;
+} Item;
+typedef struct { Item data[32]; } Aos32Item;
+typedef struct { I32 data[2]; } Aos2I32;
+typedef struct Bullet {
+	B8 used;
+	Aos2F32 pos;
+	Aos2F32 vel;
+	F32 timer;
+	U8 level;
+	B8 explode;
+} Bullet;
+typedef struct { U8 data[4]; } Aos4U8;
+typedef struct { I32 data[8]; } Aos8I32;
+typedef struct { F32 data[8]; } Aos8F32;
+typedef struct { F32 data[3]; } Aos3F32;
 typedef struct Player {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -19,7 +36,19 @@ typedef struct Player {
 	Aos3F32 powerup_timer;
 	F32 particle_timer;
 } Player;
-typedef struct { U8 data[4]; } Aos4U8;
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
+typedef struct Effect {
+	Aos2F32 pos;
+	F32 rad;
+	F32 timer;
+	F32 dur;
+	Aos4U8 color;
+} Effect;
+typedef struct { Effect data[32]; } Aos32Effect;
 typedef struct Enemy {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -30,52 +59,15 @@ typedef struct Enemy {
 	U8 state;
 	U8 kind;
 } Enemy;
-typedef struct { U8 data[16]; } Aos16U8;
-typedef struct { U32 data[95]; } Aos95U32;
+typedef struct { Aos3F32 data[4]; } Aos4Aos3F32;
 typedef struct { Enemy data[256]; } Aos256Enemy;
-typedef struct Bullet {
-	B8 used;
-	Aos2F32 pos;
-	Aos2F32 vel;
-	F32 timer;
-	U8 level;
-	B8 explode;
-} Bullet;
-typedef struct { Bullet data[128]; } Aos128Bullet;
-typedef struct { I32 data[2]; } Aos2I32;
-typedef struct Item {
-	Aos2F32 pos;
-	I32 powerup;
-	F32 timer;
-} Item;
-typedef struct { Item data[32]; } Aos32Item;
+typedef struct { U8 data[16]; } Aos16U8;
 typedef struct { F32 data[16]; } Aos16F32;
-typedef struct Effect {
-	Aos2F32 pos;
-	F32 rad;
-	F32 timer;
-	F32 dur;
-	Aos4U8 color;
-} Effect;
-typedef struct { Effect data[32]; } Aos32Effect;
-typedef struct Hit {
-	F32 tmin;
-	F32 tmax;
-	B8 hit;
-} Hit;
-typedef struct { I32 data[8]; } Aos8I32;
+typedef struct { Bullet data[128]; } Aos128Bullet;
+typedef struct { U32 data[95]; } Aos95U32;
 typedef struct { F32 data[64]; } Aos64F32;
-typedef struct { F32 data[8]; } Aos8F32;
 typedef struct { V8I32 data[2]; } Aos2V8I32;
 typedef struct { B8 data[3]; } Aos3B8;
-static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
-static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
-static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
-static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2]}}; }
-static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
-static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
-static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
-static Aos4Aos3F32 aos4aos3f32_set(Aos3F32 v0, Aos3F32 v1, Aos3F32 v2, Aos3F32 v3) { return {{v0, v1, v2, v3}}; }
 static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
 static Aos2F32 aos2f32_set1(F32 a) { return {{a, a}}; }
 static Aos2I32 aos2f32_to_aos2i32(Aos2F32 a) { return {{(I32)a.data[0], (I32)a.data[1]}}; }
@@ -84,8 +76,6 @@ static Aos2F32 aos2f32_sub(Aos2F32 a, Aos2F32 b) { return {{a.data[0] - b.data[0
 static Aos2F32 aos2f32_mul(Aos2F32 a, Aos2F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1]}}; }
 static Aos2F32 aos2f32_div(Aos2F32 a, Aos2F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1]}}; }
 static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
-static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
-static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
 static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
@@ -97,6 +87,16 @@ static Aos2I32 aos2i32_and(Aos2I32 a, Aos2I32 b) { return {{a.data[0] & b.data[0
 static Aos2I32 aos2i32_or(Aos2I32 a, Aos2I32 b) { return {{a.data[0] | b.data[0], a.data[1] | b.data[1]}}; }
 static Aos2I32 aos2i32_xor(Aos2I32 a, Aos2I32 b) { return {{a.data[0] ^ b.data[0], a.data[1] ^ b.data[1]}}; }
 static Aos2I32 aos2i32_neg(Aos2I32 a) { return {{-a.data[0], -a.data[1]}}; }
+static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
+static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
+static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
+static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
+static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
+static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2]}}; }
+static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
+static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
+static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
+static Aos4Aos3F32 aos4aos3f32_set(Aos3F32 v0, Aos3F32 v1, Aos3F32 v2, Aos3F32 v3) { return {{v0, v1, v2, v3}}; }
 static Aos2V8I32 aos2v8i32_set(V8I32 v0, V8I32 v1) { return {{v0, v1}}; }
 static Aos2V8I32 aos2v8i32_set_scalar(Aos2I32 a) { return {{v8i32_set1(a.data[0]), v8i32_set1(a.data[1])}}; }
 static Aos2V8I32 aos2v8i32_set1(V8I32 a) { return {{a, a}}; }
@@ -132,32 +132,41 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 
 // VECC private function declarations
 
-static void play_sound(I32 sound);
-static U32 rand_u32();
-static F32 rand_f32();
-static U32 color_to_u32(Aos4U8 col);
 static void spawn_item(Aos2F32 pos, I32 powerup);
 static void spawn_effect(Aos2F32 pos, F32 rad, F32 dur, Aos4U8 col);
 static void reset_game();
 static void draw_rect(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, Aos2I32 size, Aos4U8 color);
-static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color, V8B32 mask);
-static Aos2F32 normalize(Aos2F32 x);
-static F32 length2(Aos2F32 x);
-static F32 length(Aos2F32 x);
-static F32 dot(Aos2F32 a, Aos2F32 b);
+static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color);
 static Hit intersect_ray_aabb(Aos2F32 pos, Aos2F32 dir, Aos2F32 box_min, Aos2F32 box_max);
 static F32 wave_sin(F32 t);
 static F32 wave_square(F32 t);
 static F32 wave_saw(F32 t);
 static F32 wave_triangle(F32 t);
-static U32 hash_u32(U32 x);
 static F32 wave_noise(F32 t);
 static F32 sample_t(I32 index);
+static void play_sound(I32 sound);
 static void draw_text(V8U32* framebuffer, Aos2I32 resolution, String text, Aos2I32 pos, U32 color);
 static void draw_glyph(V8U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I32 pos, U32 color);
+static U32 rand_u32();
+static F32 rand_f32();
+static U32 hash_u32(U32 x);
+static U32 color_to_u32(Aos4U8 col);
+static Aos2F32 normalize(Aos2F32 x);
+static F32 length2(Aos2F32 x);
+static F32 length(Aos2F32 x);
+static F32 dot(Aos2F32 a, Aos2F32 b);
 
 // VECC global variable declarations
 
+const F32 PI = 3.1415927f;
+const I32 AUDIO_SAMPLE_RATE = 44100;
+const F32 GAME_MAX_TIME = 120.0f;
+F32 g_enemy_spawn_timer = 5.0f;
+F32 g_game_timer = 0.0f;
+U32 g_seed = 1;
+Aos2I32 g_camera = {0};
+F32 g_shake = 0.0f;
+F32 g_hit_pause = 0.0f;
 const I32 PLAYER_POWERUP_FAST_FIRE = 0;
 const I32 PLAYER_POWERUP_SHOTGUN = 1;
 const I32 PLAYER_POWERUP_EXPLOSIVE = 2;
@@ -173,15 +182,7 @@ const U8 ENEMY_STATE_ALIVE = 1;
 const Aos4U8 ENEMY_COLOR_NORMAL = {{255, 50, 200, 0}};
 const Aos4U8 ENEMY_COLOR_FAST = {{200, 0, 255, 0}};
 const Aos4U8 ENEMY_COLOR_BIG = {{255, 10, 100, 0}};
-const F32 GAME_MAX_TIME = 120.0f;
 Aos256Enemy g_enemies = {0};
-F32 g_enemy_spawn_timer = 5.0f;
-F32 g_game_timer = 0.0f;
-U32 g_seed = 1;
-Aos2I32 g_camera = {0};
-F32 g_shake = 0.0f;
-F32 g_hit_pause = 0.0f;
-const I32 AUDIO_SAMPLE_RATE = 44100;
 const I32 SOUND_BEGIN = 0;
 const I32 SOUND_WALK = 1;
 const I32 SOUND_HIT = 2;
@@ -194,10 +195,6 @@ const I32 SOUND_NUM = 8;
 Aos8I32 g_sound_sample = {0};
 Aos8F32 g_sound_rand = {0};
 I32 g_audio_sample = 0;
-const F32 PI = 3.1415927f;
-const I32 GLYPH_WIDTH = 5;
-const I32 GLYPH_HEIGHT = 6;
-const Aos95U32 g_glyphs = {{0, 134353028, 10570, 368389098, 150616254, 866266720, 781506726, 4228, 272765064, 71438466, 10631296, 4657152, 71434240, 458752, 207618048, 35791360, 490395438, 1044518084, 1042424366, 488124943, 554682504, 488127551, 488080460, 35791391, 488159790, 554649150, 207624384, 71307264, 272699648, 14694400, 71569472, 134361646, 1008662062, 589284676, 521715247, 1007715886, 521717295, 1041284159, 34651199, 488408126, 588840497, 1044517023, 211034399, 588553521, 1041269793, 588961467, 597481073, 488162862, 35112495, 820692526, 580372015, 487856686, 138547359, 488162865, 138757681, 928699953, 581046609, 138547537, 1042424351, 406982796, 545392672, 205656198, 17732, 3187671040, 130, 479703040, 244620321, 470857728, 479508744, 1008715200, 1109466188, 1317479726, 311729185, 203489344, 2353139716, 307336481, 203491394, 593144832, 311729152, 211064832, 1108583718, 1887905070, 34904064, 243494912, 203504706, 244622336, 73704448, 358269952, 910322688, 1317479721, 505560064, 407050380, 138547332, 205926534, 448512}};
 const Aos9F32 NOTE_C = {{16.35f, 32.7f, 65.41f, 130.81f, 261.63f, 523.25f, 1046.5f, 2093.0f, 4186.0f}};
 const Aos9F32 NOTE_CS = {{17.32f, 34.65f, 69.3f, 138.59f, 277.17999f, 554.37f, 1108.72998f, 2217.46f, 4434.9199f}};
 const Aos9F32 NOTE_D = {{18.35f, 36.709999f, 73.419998f, 146.83f, 293.66f, 587.33f, 1174.66f, 2349.32f, 4698.6299f}};
@@ -225,31 +222,12 @@ const Aos16U8 g_music_beat = {{MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE, 0, MUSIC_BEAT
 const Aos4Aos3F32 g_music_melody = {{{{NOTE_F.data[4], NOTE_GS.data[4], NOTE_C.data[5]}}, {{NOTE_G.data[4], NOTE_AS.data[4], NOTE_D.data[5]}}, {{NOTE_F.data[4], NOTE_GS.data[4], NOTE_C.data[5]}}, {{NOTE_G.data[4], NOTE_B.data[4], NOTE_D.data[5]}}}};
 const Aos16F32 g_music_synth = {{NOTE_F.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_DS.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_F.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_C.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f}};
 const Aos64F32 g_music_bass = {{NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_F.data[3], NOTE_F.data[3], 0.0f, NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_AS.data[3], NOTE_AS.data[3], NOTE_AS.data[3], NOTE_AS.data[3]}};
+const I32 GLYPH_WIDTH = 5;
+const I32 GLYPH_HEIGHT = 6;
+const I32 GLYPH_ASCII_FIRST = 32;
+const Aos95U32 g_glyphs = {{0, 134353028, 10570, 368389098, 150616254, 866266720, 781506726, 4228, 272765064, 71438466, 10631296, 4657152, 71434240, 458752, 207618048, 35791360, 490395438, 1044518084, 1042424366, 488124943, 554682504, 488127551, 488080460, 35791391, 488159790, 554649150, 207624384, 71307264, 272699648, 14694400, 71569472, 134361646, 1008662062, 589284676, 521715247, 1007715886, 521717295, 1041284159, 34651199, 488408126, 588840497, 1044517023, 211034399, 588553521, 1041269793, 588961467, 597481073, 488162862, 35112495, 820692526, 580372015, 487856686, 138547359, 488162865, 138757681, 928699953, 581046609, 138547537, 1042424351, 406982796, 545392672, 205656198, 17732, 3187671040, 130, 479703040, 244620321, 470857728, 479508744, 1008715200, 1109466188, 1317479726, 311729185, 203489344, 2353139716, 307336481, 203491394, 593144832, 311729152, 211064832, 1108583718, 1887905070, 34904064, 243494912, 203504706, 244622336, 73704448, 358269952, 910322688, 1317479721, 505560064, 407050380, 138547332, 205926534, 448512}};
 
 // VECC function definitions
-
-static void play_sound(I32 sound) {
-	g_sound_sample.data[sound] = 0;
-	g_sound_rand.data[sound] = rand_f32();
-}
-
-static U32 rand_u32() {
-	g_seed = (g_seed * 214013) + 2531011;
-	return (g_seed >> 16) & 32767;
-}
-
-static F32 rand_f32() {
-	return (F32)rand_u32() / 32767.0f;
-}
-
-static U32 color_to_u32(Aos4U8 col) {
-	U32 result = 0;
-	result = (U32)col.data[2];
-	result = result | ((U32)col.data[1] << 8);
-	result = result | ((U32)col.data[0] << 16);
-	result = result | ((U32)col.data[3] << 24);
-	return result;
-}
 
 static void spawn_item(Aos2F32 pos, I32 powerup) {
 	for (I32 i = 0; i < VECC_LEN(g_items.data); i = i + 1) {
@@ -344,7 +322,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			if (enemy.state != ENEMY_STATE_DEAD) {
 				continue;
 			};
-			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, {{50, 20, 30, 0}}, v8b32_set1(b32_true));
+			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy.pos), 5, 6, {{50, 20, 30, 0}});
 		};
 		for (I32 i = 0; i < VECC_LEN(g_items.data); i = i + 1) {
 			Item item = g_items.data[i];
@@ -381,7 +359,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 				};
 				rad = 3.0f;
 			};
-			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(item.pos), (I32)rad, 100, color, v8b32_set1(b32_true));
+			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(item.pos), (I32)rad, 100, color);
 		};
 		F32 max_enemy_damage_timer = 0.0f;
 		I32 oldest_corpse = -1;
@@ -435,7 +413,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 				color = {{255, 255, 255, 255}};
 			};
 			Aos2F32 enemy_pos = enemy.pos;
-			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy_pos), (I32)enemy.size, (I32)(enemy.size + 1), color, v8b32_set1(b32_true));
+			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(enemy_pos), (I32)enemy.size, (I32)(enemy.size + 1), color);
 			g_enemies.data[i] = enemy;
 		};
 		if (oldest_corpse == -1) {
@@ -496,7 +474,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			Effect effect = g_effects.data[i];
 			effect.timer = effect.timer + delta;
 			if (effect.timer < effect.dur) {
-				draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(effect.pos), (I32)effect.rad, (I32)(effect.rad * 1.5f), effect.color, v8b32_set1(b32_true));
+				draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(effect.pos), (I32)effect.rad, (I32)(effect.rad * 1.5f), effect.color);
 			};
 			g_effects.data[i] = effect;
 		};
@@ -597,7 +575,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			player.pos.data[1] = f32_clamp(player.pos.data[1], RAD, (F32)RESOLUTION_Y - RAD);
 			Aos2F32 player_pos = player.pos;
 			player_pos.data[1] = player_pos.data[1] - f32_round((0.5f + (0.5f * f32_sin(time * 30.0f))) * f32_clamp(length(player.vel), 0.0f, 1.0f));
-			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(player_pos), 3, 5, {{255, 150, 0, 0}}, v8b32_set1(b32_true));
+			draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(player_pos), 3, 5, {{255, 150, 0, 0}});
 			Aos2I32 gun_pos = aos2f32_to_aos2i32(player.pos);
 			gun_pos.data[0] = gun_pos.data[0] + (I32)(((player.dir.data[0] * shoot_dir) * 3.0f) * f32_min(player.gun_timer * 10.0f, 1.0f));
 			gun_pos.data[1] = gun_pos.data[1] + (I32)(((player.dir.data[1] * shoot_dir) * 3.0f) * f32_min(player.gun_timer * 10.0f, 1.0f));
@@ -663,7 +641,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 					enemy.vel = bullet.vel;
 					g_enemies.data[hit_enemy] = enemy;
 				};
-				draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(bullet.pos), 2, 2 + (I32)bullet.level, {{0, 255, 255, 0}}, v8b32_set1(b32_true));
+				draw_octagon(framebuffer, resolution, aos2f32_to_aos2i32(bullet.pos), 2, 2 + (I32)bullet.level, {{0, 255, 255, 0}});
 			};
 			g_bullets.data[i] = bullet;
 		};
@@ -836,7 +814,7 @@ static void draw_rect(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, Aos2I
 	};
 }
 
-static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color, V8B32 mask) {
+static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I32 size, I32 rad, Aos4U8 color) {
 	pos = aos2i32_sub(pos, g_camera);
 	const U32 col = color_to_u32(color);
 	const I32 x_start = pos.data[0] - size;
@@ -849,33 +827,15 @@ static void draw_octagon(V8U32* framebuffer, Aos2I32 resolution, Aos2I32 pos, I3
 			const V8I32 x = v8i32_add(vector_index, v8i32_set1(xv * vector_width));
 			const Aos2V8I32 rel = aos2v8i32_sub({{x, v8i32_set1(y)}}, aos2v8i32_set_scalar(pos));
 			const V8I32 dist = v8i32_add(v8i32_abs(rel.data[0]), v8i32_abs(rel.data[1]));
-			V8B32 vecc_mask5 = mask; { // vector if
-				V8B32 vecc_mask6 = v8b32_and(vecc_mask5, v8i32_lt(dist, v8i32_set1(rad))); { // vector if
-					V8B32 vecc_mask7 = v8b32_and(vecc_mask6, v8i32_gt(x, v8i32_set1(x_start))); { // vector if
-						V8B32 vecc_mask8 = v8b32_and(vecc_mask7, v8i32_lt(x, v8i32_set1(x_end))); { // vector if
-							framebuffer[(y_offset + xv)] = v8u32_blend(framebuffer[(y_offset + xv)], v8u32_set1(col), vecc_mask8);
-						};
+			V8B32 vecc_mask5 = v8i32_lt(dist, v8i32_set1(rad)); { // vector if
+				V8B32 vecc_mask6 = v8b32_and(vecc_mask5, v8i32_gt(x, v8i32_set1(x_start))); { // vector if
+					V8B32 vecc_mask7 = v8b32_and(vecc_mask6, v8i32_lt(x, v8i32_set1(x_end))); { // vector if
+						framebuffer[(y_offset + xv)] = v8u32_blend(framebuffer[(y_offset + xv)], v8u32_set1(col), vecc_mask7);
 					};
 				};
 			};
 		};
 	};
-}
-
-static Aos2F32 normalize(Aos2F32 x) {
-	return aos2f32_mul(x, aos2f32_set1(f32_rsqrt(length2(x))));
-}
-
-static F32 length2(Aos2F32 x) {
-	return (x.data[0] * x.data[0]) + (x.data[1] * x.data[1]);
-}
-
-static F32 length(Aos2F32 x) {
-	return f32_sqrt((x.data[0] * x.data[0]) + (x.data[1] * x.data[1]));
-}
-
-static F32 dot(Aos2F32 a, Aos2F32 b) {
-	return (a.data[0] * b.data[0]) + (a.data[1] * b.data[1]);
 }
 
 static Hit intersect_ray_aabb(Aos2F32 pos, Aos2F32 dir, Aos2F32 box_min, Aos2F32 box_max) {
@@ -909,15 +869,6 @@ static F32 wave_triangle(F32 t) {
 	return (f32_abs((t + 0.25f) - f32_round(t + 0.25f)) * 4.0f) - 1.0f;
 }
 
-static U32 hash_u32(U32 x) {
-	x = x ^ (x >> 16);
-	x = x * 2146121005;
-	x = x ^ (x >> 15);
-	x = x * 2221713035;
-	x = x ^ (x >> 16);
-	return x;
-}
-
 static F32 wave_noise(F32 t) {
 	return (((F32)hash_u32((U32)t) / (F32)4294967295) - 0.5f) * 2.0f;
 }
@@ -926,9 +877,14 @@ static F32 sample_t(I32 index) {
 	return (F32)index / (F32)AUDIO_SAMPLE_RATE;
 }
 
+static void play_sound(I32 sound) {
+	g_sound_sample.data[sound] = 0;
+	g_sound_rand.data[sound] = rand_f32();
+}
+
 static void draw_text(V8U32* framebuffer, Aos2I32 resolution, String text, Aos2I32 pos, U32 color) {
 	for (I32 i = 0; i < text.len; i = i + 1) {
-		draw_glyph(framebuffer, resolution, g_glyphs.data[((I32)text.data[i] - 32)], {{pos.data[0], pos.data[1]}}, color);
+		draw_glyph(framebuffer, resolution, g_glyphs.data[((I32)text.data[i] - GLYPH_ASCII_FIRST)], {{pos.data[0], pos.data[1]}}, color);
 		pos.data[0] = pos.data[0] + (GLYPH_WIDTH + 1);
 	};
 }
@@ -971,6 +927,49 @@ static void draw_glyph(V8U32* framebuffer, Aos2I32 resolution, U32 glyph, Aos2I3
 			};
 		};
 	};
+}
+
+static U32 rand_u32() {
+	g_seed = (g_seed * 214013) + 2531011;
+	return (g_seed >> 16) & 32767;
+}
+
+static F32 rand_f32() {
+	return (F32)rand_u32() / 32767.0f;
+}
+
+static U32 hash_u32(U32 x) {
+	x = x ^ (x >> 16);
+	x = x * 2146121005;
+	x = x ^ (x >> 15);
+	x = x * 2221713035;
+	x = x ^ (x >> 16);
+	return x;
+}
+
+static U32 color_to_u32(Aos4U8 col) {
+	U32 result = 0;
+	result = (U32)col.data[2];
+	result = result | ((U32)col.data[1] << 8);
+	result = result | ((U32)col.data[0] << 16);
+	result = result | ((U32)col.data[3] << 24);
+	return result;
+}
+
+static Aos2F32 normalize(Aos2F32 x) {
+	return aos2f32_mul(x, aos2f32_set1(f32_rsqrt(length2(x))));
+}
+
+static F32 length2(Aos2F32 x) {
+	return (x.data[0] * x.data[0]) + (x.data[1] * x.data[1]);
+}
+
+static F32 length(Aos2F32 x) {
+	return f32_sqrt((x.data[0] * x.data[0]) + (x.data[1] * x.data[1]));
+}
+
+static F32 dot(Aos2F32 a, Aos2F32 b) {
+	return (a.data[0] * b.data[0]) + (a.data[1] * b.data[1]);
 }
 
 #endif // VECC_IMPL

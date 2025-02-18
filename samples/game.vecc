@@ -21,6 +21,24 @@ const export KEY_DOWN_BIT   U32 = 1 << 3
 const export KEY_Z_BIT      U32 = 1 << 4
 const export KEY_X_BIT      U32 = 1 << 5
 
+const PI F32 = 3.14159265358979
+
+const AUDIO_SAMPLE_RATE I32 = 44100
+
+const GAME_MAX_TIME F32 = 120
+
+mut g_enemy_spawn_timer F32 = 5
+mut g_game_timer F32 = 0
+
+mut g_seed U32 = 1
+
+mut g_camera [2]I32
+mut g_shake F32
+
+mut g_hit_pause F32
+
+// Player
+
 const PLAYER_POWERUP_FAST_FIRE  I32 = 0
 const PLAYER_POWERUP_SHOTGUN    I32 = 1
 const PLAYER_POWERUP_EXPLOSIVE  I32 = 2
@@ -40,6 +58,8 @@ struct Player {
 
 mut player Player
 
+// Items
+
 struct Item {
     pos     [2]F32
     powerup I32
@@ -47,100 +67,6 @@ struct Item {
 }
 
 mut g_items [32]Item
-
-struct Bullet {
-    used    B8
-    pos     [2]F32
-    vel     [2]F32
-    timer   F32
-    level   U8
-    explode B8
-}
-
-mut g_bullets [128]Bullet
-
-struct Effect {
-    pos     [2]F32
-    rad     F32
-    timer   F32
-    dur     F32
-    color   [4]U8
-}
-
-mut g_effects [32]Effect
-
-struct Enemy {
-    pos             [2]F32
-    vel             [2]F32
-    speed           F32
-    health          F32
-    damage_timer    F32
-    size            U8
-    state           U8
-    kind            U8
-}
-
-const ENEMY_STATE_DEAD      U8 = 0
-const ENEMY_STATE_ALIVE     U8 = 1
-
-const ENEMY_COLOR_NORMAL [4]U8 = {255; 50; 200; 0}
-const ENEMY_COLOR_FAST   [4]U8 = {200; 0; 255; 0}
-const ENEMY_COLOR_BIG    [4]U8 = {255; 10; 100; 0}
-
-const GAME_MAX_TIME F32 = 120
-
-mut g_enemies [256]Enemy
-
-mut g_enemy_spawn_timer F32 = 5
-mut g_game_timer F32 = 0
-
-mut g_seed U32 = 1
-
-mut g_camera [2]I32
-mut g_shake F32
-
-mut g_hit_pause F32
-
-const AUDIO_SAMPLE_RATE I32 = 44100
-
-const SOUND_BEGIN       I32 = 0
-const SOUND_WALK        I32 = 1
-const SOUND_HIT         I32 = 2
-const SOUND_SHOOT       I32 = 3
-const SOUND_EXPLOSION   I32 = 4
-const SOUND_KILL        I32 = 5
-const SOUND_PICKUP      I32 = 6
-const SOUND_SPAWN       I32 = 7
-const SOUND_NUM         I32 = 8
-
-mut g_sound_sample  [8]I32
-mut g_sound_rand    [8]F32
-
-mut g_audio_sample I32
-
-
-procedure play_sound (immut sound I32) {
-    g_sound_sample[sound] = 0
-    g_sound_rand[sound] = rand_f32()
-}
-
-procedure rand_u32 () U32 {
-    g_seed = (g_seed * 0x343fd) + 0x269ec3
-    return (g_seed >> 16) & 32767
-}
-
-procedure rand_f32 () F32 {
-    return conv(F32, rand_u32()) / 32767.0
-}
-
-procedure color_to_u32 (immut col [4]U8) U32 {
-    mut result U32
-    result  = conv(U32, col.b)
-    result |= conv(U32, col.g) << 8
-    result |= conv(U32, col.r) << 16
-    result |= conv(U32, col.a) << 24
-    return result
-}
 
 procedure spawn_item (
     immut pos     [2]F32
@@ -158,6 +84,32 @@ procedure spawn_item (
         }
     }
 }
+
+// Bullets
+
+struct Bullet {
+    used    B8
+    pos     [2]F32
+    vel     [2]F32
+    timer   F32
+    level   U8
+    explode B8
+}
+
+mut g_bullets [128]Bullet
+
+// Effects
+// super simple particles, used for explosions and dust
+
+struct Effect {
+    pos     [2]F32
+    rad     F32
+    timer   F32
+    dur     F32
+    color   [4]U8
+}
+
+mut g_effects [32]Effect
 
 procedure spawn_effect (
     immut pos   [2]F32
@@ -178,6 +130,32 @@ procedure spawn_effect (
         }
     }
 }
+
+// Enemies
+
+const ENEMY_STATE_DEAD      U8 = 0
+const ENEMY_STATE_ALIVE     U8 = 1
+
+const ENEMY_COLOR_NORMAL [4]U8 = {255; 50; 200; 0}
+const ENEMY_COLOR_FAST   [4]U8 = {200; 0; 255; 0}
+const ENEMY_COLOR_BIG    [4]U8 = {255; 10; 100; 0}
+
+struct Enemy {
+    pos             [2]F32
+    vel             [2]F32
+    speed           F32
+    health          F32
+    damage_timer    F32
+    size            U8
+    state           U8
+    kind            U8
+}
+
+mut g_enemies [256]Enemy
+
+//
+// Game
+//
 
 procedure reset_game () {
     player.pos = {conv(F32, RESOLUTION_X); conv(F32, RESOLUTION_Y)} / 2
@@ -242,452 +220,435 @@ procedure export compute_frame (
         }
     } else {
 
-    g_game_timer += delta
+        g_game_timer += delta
 
 
-    mut clear_mask U32 = reinterpret(U32, delta)
-    clear_mask = !clear_mask
+        mut clear_mask U32 = reinterpret(U32, delta)
+        clear_mask = !clear_mask
 
-    for i I32; i < num_pixel_blocks; i += 1 {
-        immut vector c U32 = framebuffer[i]
-        framebuffer[i] = (c << 5) // | color_to_u32({0;255;0;0})
-    }
-
-    if g_game_timer < 4 {
-        draw_text(framebuffer, resolution, "              120+"            , {28; 60}      , 0x00bbbbbb)
-        draw_text(framebuffer, resolution, "         BY JAKUB TOMSU"        ,  {28; 70}      , 0x00333333)
-        draw_text(framebuffer, resolution, "           controls"           , {28; 150 + 10}, 0x00777777)
-        draw_text(framebuffer, resolution, "          MOVE     ARROW KEYS" , {28; 150 + 30}, 0x00bbbbbb)
-        draw_text(framebuffer, resolution, " SHOOT FORWARD     X"          , {28; 150 + 40}, 0x00bbbbbb)
-        draw_text(framebuffer, resolution, "SHOOT BACKWARD     Z"          , {28; 150 + 50}, 0x00bbbbbb)
-    }
-
-    // if (frame & 1) == 0 {
-    //     for i I32; i < num_pixel_blocks; i += 1 {
-    //         immut vector c U32 = framebuffer[i]
-    //         framebuffer[i] &= {0x55555555; 0x11111111; 0x55555555; 0x11111111; 0x55555555; 0x11111111; 0x55555555; 0x11111111}
-    //     }
-    // } else {
-    //     for i I32; i < num_pixel_blocks; i += 1 {
-    //         immut vector c U32 = framebuffer[i]
-    //         framebuffer[i] &= {0x11111111; 0x55555555; 0x11111111; 0x55555555; 0x11111111; 0x55555555; 0x11111111; 0x55555555}
-    //     }
-    // }
-
-    g_camera = {
-        conv(I32, round((rand_f32() - 0.5) * g_shake))
-        conv(I32, round((rand_f32() - 0.5) * g_shake))
-    }
-
-    g_shake = max(0.0, g_shake - (delta * 50))
-
-    for i I32; i < g_enemies.len; i += 1 {
-        mut enemy Enemy = g_enemies[i]
-
-        if enemy.state != ENEMY_STATE_DEAD {
-            continue
+        for i I32; i < num_pixel_blocks; i += 1 {
+            immut vector c U32 = framebuffer[i]
+            framebuffer[i] = (c << 5) // | color_to_u32({0;255;0;0})
         }
 
-        draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {50; 20; 30; 0},
-            // {true; false; true; false; true; false; true; false})
-            true)
-    }
-
-    for i I32; i < g_items.len; i += 1 {
-        mut item Item = g_items[i]
-
-        if item.powerup == -1 {
-            continue
+        if g_game_timer < 4 {
+            draw_text(framebuffer, resolution, "              120+"            , {28; 60}      , 0x00bbbbbb)
+            draw_text(framebuffer, resolution, "         BY JAKUB TOMSU"        ,  {28; 70}      , 0x00333333)
+            draw_text(framebuffer, resolution, "           controls"           , {28; 150 + 10}, 0x00777777)
+            draw_text(framebuffer, resolution, "          MOVE     ARROW KEYS" , {28; 150 + 30}, 0x00bbbbbb)
+            draw_text(framebuffer, resolution, " SHOOT FORWARD     X"          , {28; 150 + 40}, 0x00bbbbbb)
+            draw_text(framebuffer, resolution, "SHOOT BACKWARD     Z"          , {28; 150 + 50}, 0x00bbbbbb)
         }
 
-        item.timer += delta
-
-        if item.timer > 8 {
-            item.powerup = -1
+        g_camera = {
+            conv(I32, round((rand_f32() - 0.5) * g_shake))
+            conv(I32, round((rand_f32() - 0.5) * g_shake))
         }
 
-        if length2(item.pos - player.pos) < (10 * 10) {
-            if player.powerup_timer[item.powerup] < 0 {
-                player.powerup_timer[item.powerup] = 0
+        g_shake = max(0.0, g_shake - (delta * 50))
+
+        for i I32; i < g_enemies.len; i += 1 {
+            mut enemy Enemy = g_enemies[i]
+
+            if enemy.state != ENEMY_STATE_DEAD {
+                continue
             }
-            player.powerup_timer[item.powerup] += 7
-            play_sound(SOUND_PICKUP)
-            item.powerup = -1
+
+            draw_octagon(framebuffer, resolution, conv(I32, enemy.pos), 5, 6, {50; 20; 30; 0})
         }
 
-        g_items[i] = item
+        for i I32; i < g_items.len; i += 1 {
+            mut item Item = g_items[i]
 
-        mut rad F32 = round(2.2 + (sin((time + conv(F32, i * 13)) * 8) * 0.7))
-
-        mut color [4]U8
-        if item.powerup == PLAYER_POWERUP_FAST_FIRE  { color = POWERUP_FAST_FIRE_COLOR }
-        if item.powerup == PLAYER_POWERUP_SHOTGUN    { color = POWERUP_SHOTGUN_COLOR }
-        if item.powerup == PLAYER_POWERUP_EXPLOSIVE  { color = POWERUP_EXPLOSIVE_COLOR }
-
-        if item.timer > 6 {
-            if sin(item.timer * 30) > 0 {
-                color = {0; 0; 0; 0}
+            if item.powerup == -1 {
+                continue
             }
-            rad = 3
+
+            item.timer += delta
+
+            if item.timer > 8 {
+                item.powerup = -1
+            }
+
+            if length2(item.pos - player.pos) < (10 * 10) {
+                if player.powerup_timer[item.powerup] < 0 {
+                    player.powerup_timer[item.powerup] = 0
+                }
+                player.powerup_timer[item.powerup] += 7
+                play_sound(SOUND_PICKUP)
+                item.powerup = -1
+            }
+
+            g_items[i] = item
+
+            mut rad F32 = round(2.2 + (sin((time + conv(F32, i * 13)) * 8) * 0.7))
+
+            mut color [4]U8
+            if item.powerup == PLAYER_POWERUP_FAST_FIRE  { color = POWERUP_FAST_FIRE_COLOR }
+            if item.powerup == PLAYER_POWERUP_SHOTGUN    { color = POWERUP_SHOTGUN_COLOR }
+            if item.powerup == PLAYER_POWERUP_EXPLOSIVE  { color = POWERUP_EXPLOSIVE_COLOR }
+
+            if item.timer > 6 {
+                if sin(item.timer * 30) > 0 {
+                    color = {0; 0; 0; 0}
+                }
+                rad = 3
+            }
+
+            draw_octagon(framebuffer, resolution,
+                conv(I32, item.pos), conv(I32, rad), 100, color)
         }
 
-        draw_octagon(framebuffer, resolution,
-            conv(I32, item.pos), conv(I32, rad), 100, color,
-            // {true; false; true; false; true; false; true; false},
-            true)
-    }
+        mut max_enemy_damage_timer F32
+        mut oldest_corpse I32 = -1
+        for i I32; i < g_enemies.len; i += 1 {
+            mut enemy Enemy = g_enemies[i]
 
-    mut max_enemy_damage_timer F32
-    mut oldest_corpse I32 = -1
-    for i I32; i < g_enemies.len; i += 1 {
-        mut enemy Enemy = g_enemies[i]
+            enemy.damage_timer += delta
 
-        enemy.damage_timer += delta
-
-        if enemy.state == ENEMY_STATE_DEAD {
-            if enemy.damage_timer >= max_enemy_damage_timer {
-                max_enemy_damage_timer = enemy.damage_timer
-                oldest_corpse = i
+            if enemy.state == ENEMY_STATE_DEAD {
+                if enemy.damage_timer >= max_enemy_damage_timer {
+                    max_enemy_damage_timer = enemy.damage_timer
+                    oldest_corpse = i
+                }
+                g_enemies[i] = enemy
+                continue
             }
+
+
+            enemy.vel += normalize(player.pos - enemy.pos) * (delta * (enemy.speed * 5))
+            enemy.vel = normalize(enemy.vel) * clamp(length(enemy.vel), 0, enemy.speed)
+
+            enemy.pos += enemy.vel * delta
+
+            mut rad F32 = conv(F32, enemy.size)
+            if length2(enemy.pos - player.pos) < (rad * rad) {
+                end_game = true
+            }
+
+            if enemy.health <= 0 {
+                enemy.state = ENEMY_STATE_DEAD
+                play_sound(SOUND_KILL)
+                spawn_effect(enemy.pos, 9, 0.05, {255; 255; 255; 255})
+                g_shake += 5
+                g_hit_pause = 0.02
+
+                mut p U32
+                if g_game_timer < 30 {
+                    p = rand_u32() % 8
+                } else {
+                    if g_game_timer < 60 {
+                        p = rand_u32() % 12
+                    } else {
+                        p = rand_u32() % 16
+                    }
+                }
+                if p < 3 {
+                    spawn_item(enemy.pos, conv(I32, p))
+                }
+            }
+
+            mut color [4]U8
+            color = ENEMY_COLOR_NORMAL
+            if enemy.kind == 1 { color = ENEMY_COLOR_FAST }
+            if enemy.kind == 2 { color = ENEMY_COLOR_BIG }
+
+            if enemy.damage_timer < 0.05 {
+                color = {255; 255; 255; 255}
+            }
+
+            mut enemy_pos [2]F32 = enemy.pos
+            draw_octagon(framebuffer, resolution, conv(I32, enemy_pos), conv(I32, enemy.size), conv(I32, enemy.size+1), color)
+
             g_enemies[i] = enemy
-            continue
         }
 
-
-        enemy.vel += normalize(player.pos - enemy.pos) * (delta * (enemy.speed * 5))
-        enemy.vel = normalize(enemy.vel) * clamp(length(enemy.vel), 0, enemy.speed)
-
-        enemy.pos += enemy.vel * delta
-
-        mut rad F32 = conv(F32, enemy.size)
-        if length2(enemy.pos - player.pos) < (rad * rad) {
-            end_game = true
+        if oldest_corpse == -1 {
+            oldest_corpse = conv(I32, rand_u32()) % g_enemies.len
         }
 
-        if enemy.health <= 0 {
-            enemy.state = ENEMY_STATE_DEAD
-            play_sound(SOUND_KILL)
-            spawn_effect(enemy.pos, 9, 0.05, {255; 255; 255; 255})
-            g_shake += 5
-            g_hit_pause = 0.02
+        g_enemy_spawn_timer += delta
+        immut spawn_rate F32 = 0.1 + (1.2 * max(0.0, 1.0 - (g_game_timer / GAME_MAX_TIME)))
+        if (g_enemy_spawn_timer > spawn_rate) & (oldest_corpse != -1) {
+            g_enemy_spawn_timer = 0
 
-            mut p U32
-            if g_game_timer < 30 {
-                p = rand_u32() % 8
-            } else {
-                if g_game_timer < 60 {
-                    p = rand_u32() % 12
+            mut enemy Enemy = g_enemies[oldest_corpse]
+            enemy.state = ENEMY_STATE_ALIVE
+
+            const RAD F32 = 0
+            if (rand_u32() & 1) == 0 {
+                if (rand_u32() & 1) == 0 {
+                    enemy.pos.x = -RAD
                 } else {
-                    p = rand_u32() % 16
+                    enemy.pos.x = conv(F32, RESOLUTION_X) + RAD
+                }
+                enemy.pos.y = conv(F32, conv(I32, rand_u32()) % RESOLUTION_Y)
+            } else {
+                if (rand_u32() & 1) == 0 {
+                    enemy.pos.y = -RAD
+                } else {
+                    enemy.pos.y = conv(F32, RESOLUTION_Y) + RAD
+                }
+                enemy.pos.x = conv(F32, conv(I32, rand_u32()) % RESOLUTION_X)
+            }
+
+            spawn_effect(enemy.pos, 10, 0.03, {200; 0; 150; 255})
+            spawn_effect(enemy.pos, 7, 0.1, {255; 0; 180; 255})
+
+            if (g_game_timer > 10) & ((rand_u32() % 4) == 0) {
+                if (g_game_timer > 30) & ((rand_u32() % 6) == 0) {
+                    enemy.size = 14
+                    enemy.health = 18
+                    enemy.speed = 6
+                    enemy.kind = 2
+                } else {
+                    enemy.size = 8
+                    enemy.health = 6
+                    enemy.speed = 8
+                    enemy.kind = 2
+                }
+            } else {
+                if (g_game_timer > 5) & ((rand_u32() % 3) == 0) {
+                    enemy.size = 5
+                    enemy.health = 0.5
+                    enemy.speed = 30
+                    enemy.kind = 1
+                } else {
+                    enemy.size = 6
+                    enemy.health = 2
+                    enemy.speed = 20
+                    enemy.kind = 0
                 }
             }
-            if p < 3 {
-                spawn_item(enemy.pos, conv(I32, p))
+
+            g_enemies[oldest_corpse] = enemy
+        }
+
+        for i I32 = 0; i < g_effects.len; i += 1 {
+            mut effect Effect = g_effects[i]
+            effect.timer += delta
+
+            if effect.timer < effect.dur {
+                draw_octagon(framebuffer, resolution, conv(I32, effect.pos),
+                    conv(I32, effect.rad), conv(I32, effect.rad * 1.5), reinterpret([4]U8, effect.color))
             }
+
+            g_effects[i] = effect
         }
 
-        mut color [4]U8
-        color = ENEMY_COLOR_NORMAL
-        if enemy.kind == 1 { color = ENEMY_COLOR_FAST }
-        if enemy.kind == 2 { color = ENEMY_COLOR_BIG }
-
-        if enemy.damage_timer < 0.05 {
-            color = {255; 255; 255; 255}
-        }
-
-        mut enemy_pos [2]F32 = enemy.pos
-        draw_octagon(framebuffer, resolution, conv(I32, enemy_pos), conv(I32, enemy.size), conv(I32, enemy.size+1), color, true)
-
-        g_enemies[i] = enemy
-    }
-
-    if oldest_corpse == -1 {
-        oldest_corpse = conv(I32, rand_u32()) % g_enemies.len
-    }
-
-    g_enemy_spawn_timer += delta
-    immut spawn_rate F32 = 0.1 + (1.2 * max(0.0, 1.0 - (g_game_timer / GAME_MAX_TIME)))
-    if (g_enemy_spawn_timer > spawn_rate) & (oldest_corpse != -1) {
-        g_enemy_spawn_timer = 0
-
-        mut enemy Enemy = g_enemies[oldest_corpse]
-        enemy.state = ENEMY_STATE_ALIVE
-
-        const RAD F32 = 0
-        if (rand_u32() & 1) == 0 {
-            if (rand_u32() & 1) == 0 {
-                enemy.pos.x = -RAD
-            } else {
-                enemy.pos.x = conv(F32, RESOLUTION_X) + RAD
+        {
+            mut powerups [3]Bool
+            for i I32; i < 3; i += 1 {
+                player.powerup_timer[i] -= delta
+                if player.powerup_timer[i] > 0 {
+                    powerups[i] = true
+                }
             }
-            enemy.pos.y = conv(F32, conv(I32, rand_u32()) % RESOLUTION_Y)
-        } else {
-            if (rand_u32() & 1) == 0 {
-                enemy.pos.y = -RAD
-            } else {
-                enemy.pos.y = conv(F32, RESOLUTION_Y) + RAD
+
+            mut dir [2]F32
+            mut moving Bool
+            if (keys & KEY_LEFT_BIT ) != 0 { dir.x += -1 }
+            if (keys & KEY_RIGHT_BIT) != 0 { dir.x +=  1 }
+            if (keys & KEY_UP_BIT   ) != 0 { dir.y += -1 }
+            if (keys & KEY_DOWN_BIT ) != 0 { dir.y +=  1 }
+            moving = conv(Bool, length2(dir) > 0)
+
+            mut cooldown_time F32 = 0.1
+            mut num_shots I32 = 1
+            mut shot_spread F32 = 0.25
+            mut bullet_level U8 = 0
+            mut bullet_speed F32 = 300
+
+            if powerups[PLAYER_POWERUP_FAST_FIRE] {
+                cooldown_time *= 0.4
+                bullet_speed *= 1.5
+                bullet_level += 1
             }
-            enemy.pos.x = conv(F32, conv(I32, rand_u32()) % RESOLUTION_X)
-        }
 
-        spawn_effect(enemy.pos, 10, 0.03, {200; 0; 150; 255})
-        spawn_effect(enemy.pos, 7, 0.1, {255; 0; 180; 255})
-
-        if (g_game_timer > 10) & ((rand_u32() % 4) == 0) {
-            if (g_game_timer > 30) & ((rand_u32() % 6) == 0) {
-                enemy.size = 14
-                enemy.health = 18
-                enemy.speed = 6
-                enemy.kind = 2
-            } else {
-                enemy.size = 8
-                enemy.health = 6
-                enemy.speed = 8
-                enemy.kind = 2
+            if powerups[PLAYER_POWERUP_SHOTGUN] {
+                cooldown_time *= 2
+                num_shots *= 4
+                shot_spread *= 3
+                bullet_level += 1
             }
-        } else {
-            if (g_game_timer > 5) & ((rand_u32() % 3) == 0) {
-                enemy.size = 5
-                enemy.health = 0.5
-                enemy.speed = 30
-                enemy.kind = 1
-            } else {
-                enemy.size = 6
-                enemy.health = 2
-                enemy.speed = 20
-                enemy.kind = 0
+
+            if powerups[PLAYER_POWERUP_EXPLOSIVE] {
+                bullet_speed *= 0.7
+                cooldown_time *= 2
+                bullet_level += 1
             }
-        }
 
-        g_enemies[oldest_corpse] = enemy
-    }
+            player.gun_timer += delta
 
-    for i I32 = 0; i < g_effects.len; i += 1 {
-        mut effect Effect = g_effects[i]
-        effect.timer += delta
+            mut shoot_dir F32 = 1
+            mut shooting B32
+            if (keys & KEY_X_BIT) != 0 { shoot_dir =  1; shooting = true }
+            if (keys & KEY_Z_BIT) != 0 { shoot_dir = -1; shooting = true } // overwrite is intentional
 
-        if effect.timer < effect.dur {
-            draw_octagon(framebuffer, resolution, conv(I32, effect.pos),
-                conv(I32, effect.rad), conv(I32, effect.rad * 1.5), reinterpret([4]U8, effect.color), true)
-        }
+            if shooting & (player.gun_timer > cooldown_time) {
+                player.gun_timer = 0
+                player.vel -= player.dir * (38 * shoot_dir)
+                mut bullet_num I32 = 0
+                g_shake = 1
+                // muzzle flash
+                spawn_effect(player.pos + (player.dir * (6 * shoot_dir)), 3, 0.01, {0;255;255; 0})
+                play_sound(SOUND_SHOOT)
+                for i I32; i < g_bullets.len; i += 1 {
+                    if !g_bullets[i].used {
+                        mut bdir [2]F32 = player.dir * shoot_dir
+                        bdir.x += (rand_f32() - 0.5) * shot_spread
+                        bdir.y += (rand_f32() - 0.5) * shot_spread
+                        bdir = normalize(bdir)
 
-        g_effects[i] = effect
-    }
-
-    {
-        mut powerups [3]Bool
-        for i I32; i < 3; i += 1 {
-            player.powerup_timer[i] -= delta
-            if player.powerup_timer[i] > 0 {
-                powerups[i] = true
-            }
-        }
-
-        mut dir [2]F32
-        mut moving Bool
-        if (keys & KEY_LEFT_BIT ) != 0 { dir.x += -1 }
-        if (keys & KEY_RIGHT_BIT) != 0 { dir.x +=  1 }
-        if (keys & KEY_UP_BIT   ) != 0 { dir.y += -1 }
-        if (keys & KEY_DOWN_BIT ) != 0 { dir.y +=  1 }
-        moving = conv(Bool, length2(dir) > 0)
-
-        mut cooldown_time F32 = 0.1
-        mut num_shots I32 = 1
-        mut shot_spread F32 = 0.25
-        mut bullet_level U8 = 0
-        mut bullet_speed F32 = 300
-
-        if powerups[PLAYER_POWERUP_FAST_FIRE] {
-            cooldown_time *= 0.4
-            bullet_speed *= 1.5
-            bullet_level += 1
-        }
-
-        if powerups[PLAYER_POWERUP_SHOTGUN] {
-            cooldown_time *= 2
-            num_shots *= 4
-            shot_spread *= 3
-            bullet_level += 1
-        }
-
-        if powerups[PLAYER_POWERUP_EXPLOSIVE] {
-            bullet_speed *= 0.7
-            cooldown_time *= 2
-            bullet_level += 1
-        }
-
-        player.gun_timer += delta
-
-        mut shoot_dir F32 = 1
-        mut shooting B32
-        if (keys & KEY_X_BIT) != 0 { shoot_dir =  1; shooting = true }
-        if (keys & KEY_Z_BIT) != 0 { shoot_dir = -1; shooting = true } // overwrite is intentional
-
-        if shooting & (player.gun_timer > cooldown_time) {
-            player.gun_timer = 0
-            player.vel -= player.dir * (38 * shoot_dir)
-            mut bullet_num I32 = 0
-            g_shake = 1
-            // muzzle flash
-            spawn_effect(player.pos + (player.dir * (6 * shoot_dir)), 3, 0.01, {0;255;255; 0})
-            play_sound(SOUND_SHOOT)
-            for i I32; i < g_bullets.len; i += 1 {
-                if !g_bullets[i].used {
-                    mut bdir [2]F32 = player.dir * shoot_dir
-                    bdir.x += (rand_f32() - 0.5) * shot_spread
-                    bdir.y += (rand_f32() - 0.5) * shot_spread
-                    bdir = normalize(bdir)
-
-                    g_bullets[i] = {
-                        true
-                        player.pos + (player.dir * 3)
-                        bdir * bullet_speed
-                        0
-                        bullet_level
-                        powerups[PLAYER_POWERUP_EXPLOSIVE]
-                    }
-                    bullet_num += 1
-                    if bullet_num == num_shots {
-                        break
+                        g_bullets[i] = {
+                            true
+                            player.pos + (player.dir * 3)
+                            bdir * bullet_speed
+                            0
+                            bullet_level
+                            powerups[PLAYER_POWERUP_EXPLOSIVE]
+                        }
+                        bullet_num += 1
+                        if bullet_num == num_shots {
+                            break
+                        }
                     }
                 }
             }
-        }
 
-        if moving {
-            if !shooting {
-                player.dir = dir
-            }
-        }
-
-        if moving {
-            player.particle_timer += delta
-            if player.particle_timer > 0.15 {
-                player.particle_timer -= 0.15
-
-                play_sound(SOUND_WALK)
-
-                spawn_effect(player.pos, 1, rand_f32() * 8, {100; 100; 100; 0})
-            }
-        }
-
-        player.vel *= 0.9 // HACK
-        player.vel += dir * (delta * 1000)
-        player.pos += player.vel * delta
-
-        const RAD F32 = 5
-        player.pos.x = clamp(player.pos.x, RAD, conv(F32, RESOLUTION_X) - RAD)
-        player.pos.y = clamp(player.pos.y, RAD, conv(F32, RESOLUTION_Y) - RAD)
-
-        mut player_pos [2]F32 = player.pos
-        player_pos.y -= round((0.5 + (0.5 * sin(time * 30))) * clamp(length(player.vel), 0, 1))
-        draw_octagon(framebuffer, resolution, conv(I32, player_pos), 3, 5, {255; 150; 0; 0}, true)
-
-        mut gun_pos [2]I32 = conv(I32, player.pos)
-        gun_pos.x += conv(I32, ((player.dir.x * shoot_dir) * 3) * min(player.gun_timer * 10, 1.0))
-        gun_pos.y += conv(I32, ((player.dir.y * shoot_dir) * 3) * min(player.gun_timer * 10, 1.0))
-        gun_pos.y += 1
-
-        mut gun_size [2]I32 = {7; 2}
-        if player.dir.x == 0 {
-            gun_size = {gun_size.y + 1; gun_size.x - 1}
-        }
-
-        draw_rect(framebuffer, resolution, (gun_pos - {gun_size.x / 2; gun_size.y/2}) - g_camera, gun_size, {255; 255; 255; 255})
-    }
-
-    for i I32; i < g_bullets.len; i += 1 {
-        mut bullet Bullet = g_bullets[i]
-
-        if bullet.timer > 0.4 {
-            bullet.timer = 0
-            bullet.used = false
-        }
-
-        if bullet.used {
-            bullet.timer += delta
-
-            immut move [2]F32 = bullet.vel * delta
-
-            immut move_dir [2]F32 = normalize(move)
-
-            mut tmin F32 = length(move)
-            mut hit_enemy I32 = -1
-            for ei I32; ei < g_enemies.len; ei += 1 {
-                immut enemy Enemy = g_enemies[ei]
-                if enemy.state != ENEMY_STATE_ALIVE {
-                    continue
-                }
-                immut hit Hit = intersect_ray_aabb(
-                    bullet.pos,
-                    move_dir,
-                    enemy.pos - conv(F32, enemy.size + 1),
-                    enemy.pos + conv(F32, enemy.size + 1),
-                )
-
-                if hit.hit & conv(B8, hit.tmin < tmin) {
-                    tmin = hit.tmin
-                    hit_enemy = ei
+            if moving {
+                if !shooting {
+                    player.dir = dir
                 }
             }
 
-            if hit_enemy == -1 {
-                bullet.pos += move
-            } else {
-                bullet.pos += move_dir * tmin
+            if moving {
+                player.particle_timer += delta
+                if player.particle_timer > 0.15 {
+                    player.particle_timer -= 0.15
+
+                    play_sound(SOUND_WALK)
+
+                    spawn_effect(player.pos, 1, rand_f32() * 8, {100; 100; 100; 0})
+                }
+            }
+
+            player.vel *= 0.9 // HACK
+            player.vel += dir * (delta * 1000)
+            player.pos += player.vel * delta
+
+            const RAD F32 = 5
+            player.pos.x = clamp(player.pos.x, RAD, conv(F32, RESOLUTION_X) - RAD)
+            player.pos.y = clamp(player.pos.y, RAD, conv(F32, RESOLUTION_Y) - RAD)
+
+            mut player_pos [2]F32 = player.pos
+            player_pos.y -= round((0.5 + (0.5 * sin(time * 30))) * clamp(length(player.vel), 0, 1))
+            draw_octagon(framebuffer, resolution, conv(I32, player_pos), 3, 5, {255; 150; 0; 0})
+
+            mut gun_pos [2]I32 = conv(I32, player.pos)
+            gun_pos.x += conv(I32, ((player.dir.x * shoot_dir) * 3) * min(player.gun_timer * 10, 1.0))
+            gun_pos.y += conv(I32, ((player.dir.y * shoot_dir) * 3) * min(player.gun_timer * 10, 1.0))
+            gun_pos.y += 1
+
+            mut gun_size [2]I32 = {7; 2}
+            if player.dir.x == 0 {
+                gun_size = {gun_size.y + 1; gun_size.x - 1}
+            }
+
+            draw_rect(framebuffer, resolution, (gun_pos - {gun_size.x / 2; gun_size.y/2}) - g_camera, gun_size, {255; 255; 255; 255})
+        }
+
+        for i I32; i < g_bullets.len; i += 1 {
+            mut bullet Bullet = g_bullets[i]
+
+            if bullet.timer > 0.4 {
+                bullet.timer = 0
                 bullet.used = false
-
-                if bullet.explode {
-                    spawn_effect(bullet.pos, 32, 0.01, {0; 255; 255; 0})
-                    spawn_effect(bullet.pos, 22, 0.05, {255; 255; 255; 0})
-                    g_hit_pause = 0.09
-                    play_sound(SOUND_EXPLOSION)
-
-                    for ei I32; ei < g_enemies.len; ei += 1 {
-                        mut enemy Enemy = g_enemies[ei]
-                        if enemy.state != ENEMY_STATE_ALIVE {
-                            continue
-                        }
-                        if length2(enemy.pos - bullet.pos) < (32*32) {
-                            enemy.health -= 3
-                            enemy.damage_timer = 0
-                            enemy.vel = 0
-                            g_enemies[ei] = enemy
-                        }
-                    }
-                } else {
-                    spawn_effect(bullet.pos, 4, 0.1, {0; 255; 255; 0})
-                }
-
-                play_sound(SOUND_HIT)
-
-                mut enemy Enemy = g_enemies[hit_enemy]
-                enemy.health -= 1
-                enemy.damage_timer = 0
-                enemy.vel = bullet.vel
-                g_enemies[hit_enemy] = enemy
             }
 
-            draw_octagon(framebuffer, resolution, conv(I32, bullet.pos), 2, 2 + conv(I32, bullet.level), {0; 255; 255; 0}, true)
+            if bullet.used {
+                bullet.timer += delta
+
+                immut move [2]F32 = bullet.vel * delta
+
+                immut move_dir [2]F32 = normalize(move)
+
+                mut tmin F32 = length(move)
+                mut hit_enemy I32 = -1
+                for ei I32; ei < g_enemies.len; ei += 1 {
+                    immut enemy Enemy = g_enemies[ei]
+                    if enemy.state != ENEMY_STATE_ALIVE {
+                        continue
+                    }
+                    immut hit Hit = intersect_ray_aabb(
+                        bullet.pos,
+                        move_dir,
+                        enemy.pos - conv(F32, enemy.size + 1),
+                        enemy.pos + conv(F32, enemy.size + 1),
+                    )
+
+                    if hit.hit & conv(B8, hit.tmin < tmin) {
+                        tmin = hit.tmin
+                        hit_enemy = ei
+                    }
+                }
+
+                if hit_enemy == -1 {
+                    bullet.pos += move
+                } else {
+                    bullet.pos += move_dir * tmin
+                    bullet.used = false
+
+                    if bullet.explode {
+                        spawn_effect(bullet.pos, 32, 0.01, {0; 255; 255; 0})
+                        spawn_effect(bullet.pos, 22, 0.05, {255; 255; 255; 0})
+                        g_hit_pause = 0.09
+                        play_sound(SOUND_EXPLOSION)
+
+                        for ei I32; ei < g_enemies.len; ei += 1 {
+                            mut enemy Enemy = g_enemies[ei]
+                            if enemy.state != ENEMY_STATE_ALIVE {
+                                continue
+                            }
+                            if length2(enemy.pos - bullet.pos) < (32*32) {
+                                enemy.health -= 3
+                                enemy.damage_timer = 0
+                                enemy.vel = 0
+                                g_enemies[ei] = enemy
+                            }
+                        }
+                    } else {
+                        spawn_effect(bullet.pos, 4, 0.1, {0; 255; 255; 0})
+                    }
+
+                    play_sound(SOUND_HIT)
+
+                    mut enemy Enemy = g_enemies[hit_enemy]
+                    enemy.health -= 1
+                    enemy.damage_timer = 0
+                    enemy.vel = bullet.vel
+                    g_enemies[hit_enemy] = enemy
+                }
+
+                draw_octagon(framebuffer, resolution, conv(I32, bullet.pos), 2, 2 + conv(I32, bullet.level), {0; 255; 255; 0})
+            }
+
+            g_bullets[i] = bullet
         }
 
-        g_bullets[i] = bullet
-    }
+        if g_game_timer < GAME_MAX_TIME {
+            draw_rect(framebuffer, resolution, {0; 1}, {RESOLUTION_X - 1; 1}, {100; 100; 100; 100})
+            draw_rect(framebuffer, resolution, {0; 1}, {conv(I32, conv(F32, RESOLUTION_X) * (1.0 - (g_game_timer / GAME_MAX_TIME))); 1}, {255; 255; 255; 255})
+        } else {
+            draw_rect(framebuffer, resolution, {0; 1}, {RESOLUTION_X - 1; 1}, {255; 0; 0; 0})
+        }
 
-    if g_game_timer < GAME_MAX_TIME {
-        draw_rect(framebuffer, resolution, {0; 1}, {RESOLUTION_X - 1; 1}, {100; 100; 100; 100})
-        draw_rect(framebuffer, resolution, {0; 1}, {conv(I32, conv(F32, RESOLUTION_X) * (1.0 - (g_game_timer / GAME_MAX_TIME))); 1}, {255; 255; 255; 255})
-    } else {
-        draw_rect(framebuffer, resolution, {0; 1}, {RESOLUTION_X - 1; 1}, {255; 0; 0; 0})
-    }
-
-    draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 5},
-        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_FAST_FIRE]))); 3}, POWERUP_FAST_FIRE_COLOR)
-    draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 10},
-        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_SHOTGUN]))); 3}, POWERUP_SHOTGUN_COLOR)
-    draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 15},
-        {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_EXPLOSIVE]))); 3}, POWERUP_EXPLOSIVE_COLOR)
-
+        draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 5},
+            {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_FAST_FIRE]))); 3}, POWERUP_FAST_FIRE_COLOR)
+        draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 10},
+            {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_SHOTGUN]))); 3}, POWERUP_SHOTGUN_COLOR)
+        draw_rect(framebuffer, resolution, {1; RESOLUTION_Y - 15},
+            {max(0, conv(I32, 3.0 * ceil(player.powerup_timer[PLAYER_POWERUP_EXPLOSIVE]))); 3}, POWERUP_EXPLOSIVE_COLOR)
     }
 
     for audio_sample I32 = 0; audio_sample < audio_samples; audio_sample += 1 {
@@ -891,7 +852,6 @@ procedure draw_octagon (
     immut size                  I32
     immut rad                   I32
     immut color                 [4]U8
-    immut vector mask           B32
 ) {
     pos -= g_camera
     immut col U32 = color_to_u32(color)
@@ -914,33 +874,15 @@ procedure draw_octagon (
             immut vector rel [2]I32 = {x; y} - pos
             immut vector dist I32 = abs(rel.x) + abs(rel.y)
 
-            if mask {
-                if dist < rad {
-                    if x > x_start {
-                        if x < x_end {
-                            framebuffer[y_offset + xv] = col
-                        }
+            if dist < rad {
+                if x > x_start {
+                    if x < x_end {
+                        framebuffer[y_offset + xv] = col
                     }
                 }
             }
         }
     }
-}
-
-procedure normalize(immut x [2]F32) [2]F32 {
-    return x * rsqrt(length2(x))
-}
-
-procedure length2(immut x [2]F32) F32 {
-    return (x.x*x.x) + (x.y*x.y)
-}
-
-procedure length(immut x [2]F32) F32 {
-    return sqrt((x.x*x.x) + (x.y*x.y))
-}
-
-procedure dot(immut a [2]F32; immut b [2]F32) F32 {
-    return (a.x*b.x) + (a.y*b.y)
 }
 
 struct Hit {
@@ -978,7 +920,9 @@ procedure intersect_ray_aabb (
 }
 
 
-const PI F32 = 3.14159265358979
+//
+// Waves
+//
 
 procedure wave_sin (immut t F32) F32 {
     return sin((2.0 * PI) * t)
@@ -1000,15 +944,6 @@ procedure wave_triangle (immut t F32) F32 {
     return (abs((t + 0.25) - round(t + 0.25)) * 4.0) - 1.0
 }
 
-procedure hash_u32 (mut x U32) U32 {
-    x ^= x >> 16
-    x *= 0x7feb352d
-    x ^= x >> 15
-    x *= 0x846ca68b
-    x ^= x >> 16
-    return x
-}
-
 procedure wave_noise (immut t F32) F32 {
     return ((conv(F32, hash_u32(conv(U32, t))) / conv(F32, 0xffffffff)) - 0.5) * 2.0
 }
@@ -1020,11 +955,200 @@ procedure sample_t (immut index I32) F32 {
 
 
 //
+// Sounds
+//
+
+const SOUND_BEGIN       I32 = 0
+const SOUND_WALK        I32 = 1
+const SOUND_HIT         I32 = 2
+const SOUND_SHOOT       I32 = 3
+const SOUND_EXPLOSION   I32 = 4
+const SOUND_KILL        I32 = 5
+const SOUND_PICKUP      I32 = 6
+const SOUND_SPAWN       I32 = 7
+const SOUND_NUM         I32 = 8
+
+mut g_sound_sample  [8]I32
+mut g_sound_rand    [8]F32
+
+mut g_audio_sample I32
+
+procedure play_sound (immut sound I32) {
+    g_sound_sample[sound] = 0
+    g_sound_rand[sound] = rand_f32()
+}
+
+//
+// Music
+//
+
+// *S means #/sharp
+// Index is octave
+const NOTE_C  [9]F32 = {16.35; 32.7 ; 65.41 ; 130.81; 261.63; 523.25; 1046.5 ; 2093   ; 4186}
+const NOTE_CS [9]F32 = {17.32; 34.65; 69.3  ; 138.59; 277.18; 554.37; 1108.73; 2217.46; 4434.92}
+const NOTE_D  [9]F32 = {18.35; 36.71; 73.42 ; 146.83; 293.66; 587.33; 1174.66; 2349.32; 4698.63}
+const NOTE_DS [9]F32 = {19.45; 38.89; 77.78 ; 155.56; 311.13; 622.25; 1244.51; 2489   ; 4978}
+const NOTE_E  [9]F32 = {20.6 ; 41.2 ; 82.41 ; 164.81; 329.63; 659.25; 1318.51; 2637   ; 5274}
+const NOTE_F  [9]F32 = {21.83; 43.65; 87.31 ; 174.61; 349.23; 698.46; 1396.91; 2793.83; 5587.65}
+const NOTE_FS [9]F32 = {23.12; 46.25; 92.5  ; 185   ; 369.99; 739.99; 1479.98; 2959.96; 5919.91}
+const NOTE_G  [9]F32 = {24.5 ; 49   ; 98    ; 196   ; 392   ; 783.99; 1567.98; 3135.96; 6271.93}
+const NOTE_GS [9]F32 = {25.96; 51.91; 103.83; 207.65; 415.3 ; 830.61; 1661.22; 3322.44; 6644.88}
+const NOTE_A  [9]F32 = {27.5 ; 55   ; 110   ; 220   ; 440   ; 880   ; 1760   ; 3520   ; 7040}
+const NOTE_AS [9]F32 = {29.14; 58.27; 116.54; 233.08; 466.16; 932.33; 1864.66; 3729.31; 7458.62}
+const NOTE_B  [9]F32 = {30.87; 61.74; 123.47; 246.94; 493.88; 987.77; 1975.53; 3951   ; 7902.13}
+
+const MUSIC_BEAT_KICK  U8 = 1 << 0
+const MUSIC_BEAT_SNARE U8 = 1 << 1
+const MUSIC_BEAT_HIHAT U8 = 1 << 2
+
+mut g_music_beat_index I32
+mut g_music_beat_sample I32
+
+mut g_music_melody_index I32
+mut g_music_melody_sample I32
+
+mut g_music_bass_index I32
+mut g_music_bass_sample I32
+
+mut g_music_synth_index I32
+mut g_music_synth_sample I32
+
+
+// TEMP
+immut g_music_beat [16]U8 = {
+    MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE
+    0
+    MUSIC_BEAT_HIHAT
+    0
+
+    MUSIC_BEAT_KICK
+    0
+    MUSIC_BEAT_HIHAT
+    0
+
+    MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
+    0
+    0
+    MUSIC_BEAT_HIHAT
+
+    MUSIC_BEAT_KICK
+    0
+    MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
+    0
+}
+
+immut g_music_melody [4][3]F32 = {
+    {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
+    {NOTE_G [4]; NOTE_AS[4]; NOTE_D [5]}
+    {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
+    {NOTE_G [4]; NOTE_B [4]; NOTE_D [5]}
+}
+
+immut g_music_synth [16]F32 = {
+    NOTE_F [6 - 1]
+    NOTE_G [6 - 1]
+    NOTE_C [6 - 1]
+    0
+
+    NOTE_DS[6 - 1]
+    NOTE_G [6 - 1]
+    NOTE_C [6 - 1]
+    0
+
+    NOTE_F [6 - 1]
+    NOTE_G [6 - 1]
+    NOTE_C [6 - 1]
+    0
+
+    NOTE_C [6 - 1]
+    NOTE_G [6 - 1]
+    NOTE_C [6 - 1]
+    0
+}
+
+immut g_music_bass [64]F32 = {
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_C [3]
+    NOTE_C [3]
+    NOTE_C [3]
+    NOTE_C [3]
+
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_D [3]
+    NOTE_D [3]
+    NOTE_D [3]
+    NOTE_D [3]
+
+
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_C [3]
+    NOTE_C [3]
+    NOTE_C [3]
+    NOTE_C [3]
+
+    NOTE_F [3]
+    NOTE_F [3]
+    0
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+    NOTE_F [3]
+
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_G [3]
+    NOTE_AS[3]
+    NOTE_AS[3]
+    NOTE_AS[3]
+    NOTE_AS[3]
+}
+
+//
 // Glyphs
 //
 
 const GLYPH_WIDTH  I32 = 5
 const GLYPH_HEIGHT I32 = 6
+
+const GLYPH_ASCII_FIRST I32 = ' '
 
 immut g_glyphs [95]U32 = {
     0x00000000;0x08021084;0x0000294a;0x15f52bea;0x08fa38be;0x33a22e60;0x2e94d8a6;0x00001084;
@@ -1050,7 +1174,7 @@ procedure draw_text (
 ) {
     for i I32; i < text.len; i += 1 {
         draw_glyph(framebuffer, resolution,
-            g_glyphs[conv(I32, text[i]) - 32], {pos.x; pos.y}, color)
+            g_glyphs[conv(I32, text[i]) - GLYPH_ASCII_FIRST], {pos.x; pos.y}, color)
         pos.x += GLYPH_WIDTH + 1
     }
 }
@@ -1062,7 +1186,7 @@ procedure draw_glyph (
     immut pos                   [2]I32
     immut color                 U32
 ) {
-    // Just doesn't handle glyphs that aren't fully in the frame
+    // Just don't handle glyphs that aren't fully in the frame
     if pos.x < 0 { return }
     if pos.y < 0 { return }
     if pos.x > (resolution.x - GLYPH_WIDTH) { return }
@@ -1101,164 +1225,47 @@ procedure draw_glyph (
 
 
 //
-// Music
+// Misc
 //
 
-// *S means #/sharp
-// Index is octave
-const NOTE_C  [9]F32 = {16.35; 32.7 ; 65.41 ; 130.81; 261.63; 523.25; 1046.5 ; 2093   ; 4186}
-const NOTE_CS [9]F32 = {17.32; 34.65; 69.3  ; 138.59; 277.18; 554.37; 1108.73; 2217.46; 4434.92}
-const NOTE_D  [9]F32 = {18.35; 36.71; 73.42 ; 146.83; 293.66; 587.33; 1174.66; 2349.32; 4698.63}
-const NOTE_DS [9]F32 = {19.45; 38.89; 77.78 ; 155.56; 311.13; 622.25; 1244.51; 2489   ; 4978}
-const NOTE_E  [9]F32 = {20.6 ; 41.2 ; 82.41 ; 164.81; 329.63; 659.25; 1318.51; 2637   ; 5274}
-const NOTE_F  [9]F32 = {21.83; 43.65; 87.31 ; 174.61; 349.23; 698.46; 1396.91; 2793.83; 5587.65}
-const NOTE_FS [9]F32 = {23.12; 46.25; 92.5  ; 185   ; 369.99; 739.99; 1479.98; 2959.96; 5919.91}
-const NOTE_G  [9]F32 = {24.5 ; 49   ; 98    ; 196   ; 392   ; 783.99; 1567.98; 3135.96; 6271.93}
-const NOTE_GS [9]F32 = {25.96; 51.91; 103.83; 207.65; 415.3 ; 830.61; 1661.22; 3322.44; 6644.88}
-const NOTE_A  [9]F32 = {27.5 ; 55   ; 110   ; 220   ; 440   ; 880   ; 1760   ; 3520   ; 7040}
-const NOTE_AS [9]F32 = {29.14; 58.27; 116.54; 233.08; 466.16; 932.33; 1864.66; 3729.31; 7458.62}
-const NOTE_B  [9]F32 = {30.87; 61.74; 123.47; 246.94; 493.88; 987.77; 1975.53; 3951   ; 7902.13}
+procedure rand_u32 () U32 {
+    g_seed = (g_seed * 0x343fd) + 0x269ec3
+    return (g_seed >> 16) & 32767
+}
 
-const MUSIC_BEAT_KICK  U8 = 1 << 0
-const MUSIC_BEAT_SNARE U8 = 1 << 1
-const MUSIC_BEAT_HIHAT U8 = 1 << 2
+procedure rand_f32 () F32 {
+    return conv(F32, rand_u32()) / 32767.0
+}
 
-mut g_music_beat_index I32
-mut g_music_beat_sample I32
+procedure hash_u32 (mut x U32) U32 {
+    x ^= x >> 16
+    x *= 0x7feb352d
+    x ^= x >> 15
+    x *= 0x846ca68b
+    x ^= x >> 16
+    return x
+}
+procedure color_to_u32 (immut col [4]U8) U32 {
+    mut result U32
+    result  = conv(U32, col.b)
+    result |= conv(U32, col.g) << 8
+    result |= conv(U32, col.r) << 16
+    result |= conv(U32, col.a) << 24
+    return result
+}
 
-mut g_music_melody_index I32
-mut g_music_melody_sample I32
+procedure normalize(immut x [2]F32) [2]F32 {
+    return x * rsqrt(length2(x))
+}
 
-mut g_music_bass_index I32
-mut g_music_bass_sample I32
+procedure length2(immut x [2]F32) F32 {
+    return (x.x*x.x) + (x.y*x.y)
+}
 
-mut g_music_synth_index I32
-mut g_music_synth_sample I32
+procedure length(immut x [2]F32) F32 {
+    return sqrt((x.x*x.x) + (x.y*x.y))
+}
 
-
-    // TEMP
-    immut g_music_beat [16]U8 = {
-        MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE
-        0
-        MUSIC_BEAT_HIHAT
-        0
-
-        MUSIC_BEAT_KICK
-        0
-        MUSIC_BEAT_HIHAT
-        0
-
-        MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
-        0
-        0
-        MUSIC_BEAT_HIHAT
-
-        MUSIC_BEAT_KICK
-        0
-        MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
-        0
-    }
-
-    immut g_music_melody [4][3]F32 = {
-        {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
-        {NOTE_G [4]; NOTE_AS[4]; NOTE_D [5]}
-        {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
-        {NOTE_G [4]; NOTE_B [4]; NOTE_D [5]}
-    }
-
-    immut g_music_synth [16]F32 = {
-        NOTE_F [6 - 1]
-        NOTE_G [6 - 1]
-        NOTE_C [6 - 1]
-        0
-
-        NOTE_DS[6 - 1]
-        NOTE_G [6 - 1]
-        NOTE_C [6 - 1]
-        0
-
-        NOTE_F [6 - 1]
-        NOTE_G [6 - 1]
-        NOTE_C [6 - 1]
-        0
-
-        NOTE_C [6 - 1]
-        NOTE_G [6 - 1]
-        NOTE_C [6 - 1]
-        0
-    }
-
-    immut g_music_bass [64]F32 = {
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_C [3]
-        NOTE_C [3]
-        NOTE_C [3]
-        NOTE_C [3]
-
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_D [3]
-        NOTE_D [3]
-        NOTE_D [3]
-        NOTE_D [3]
-
-
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_C [3]
-        NOTE_C [3]
-        NOTE_C [3]
-        NOTE_C [3]
-
-        NOTE_F [3]
-        NOTE_F [3]
-        0
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_AS[3]
-        NOTE_AS[3]
-        NOTE_AS[3]
-        NOTE_AS[3]
-    }
+procedure dot(immut a [2]F32; immut b [2]F32) F32 {
+    return (a.x*b.x) + (a.y*b.y)
+}
