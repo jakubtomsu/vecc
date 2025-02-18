@@ -229,133 +229,6 @@ procedure export compute_frame (
         reset_game()
     }
 
-    // TEMP
-    immut g_music_beat [16]U8 = {
-        MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE
-        0
-        MUSIC_BEAT_HIHAT
-        0
-
-        MUSIC_BEAT_KICK
-        0
-        MUSIC_BEAT_HIHAT
-        0
-
-        MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
-        0
-        0
-        MUSIC_BEAT_HIHAT
-
-        MUSIC_BEAT_KICK
-        0
-        MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
-        0
-    }
-
-    immut g_music_melody [4][3]F32 = {
-        {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
-        {NOTE_G [4]; NOTE_AS[4]; NOTE_D [5]}
-        {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
-        {NOTE_G [4]; NOTE_B [4]; NOTE_D [5]}
-    }
-
-    immut g_music_synth [16]F32 = {
-        NOTE_F [6 - 1]
-        NOTE_G [6 - 1]
-        NOTE_C [6 - 1]
-        0
-
-        NOTE_DS[6 - 1]
-        NOTE_G [6 - 1]
-        NOTE_C [6 - 1]
-        0
-
-        NOTE_F [6 - 1]
-        NOTE_G [6 - 1]
-        NOTE_C [6 - 1]
-        0
-
-        NOTE_C [6 - 1]
-        NOTE_G [6 - 1]
-        NOTE_C [6 - 1]
-        0
-    }
-
-    immut g_music_bass [64]F32 = {
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_C [3]
-        NOTE_C [3]
-        NOTE_C [3]
-        NOTE_C [3]
-
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_D [3]
-        NOTE_D [3]
-        NOTE_D [3]
-        NOTE_D [3]
-
-
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_C [3]
-        NOTE_C [3]
-        NOTE_C [3]
-        NOTE_C [3]
-
-        NOTE_F [3]
-        NOTE_F [3]
-        0
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-        NOTE_F [3]
-
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_G [3]
-        NOTE_AS[3]
-        NOTE_AS[3]
-        NOTE_AS[3]
-        NOTE_AS[3]
-    }
-
     immut num_pixel_blocks I32 = (resolution.x * resolution.y) / vector_width
 
     mut end_game Bool
@@ -1261,3 +1134,131 @@ mut g_music_bass_sample I32
 
 mut g_music_synth_index I32
 mut g_music_synth_sample I32
+
+
+    // TEMP
+    immut g_music_beat [16]U8 = {
+        MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE
+        0
+        MUSIC_BEAT_HIHAT
+        0
+
+        MUSIC_BEAT_KICK
+        0
+        MUSIC_BEAT_HIHAT
+        0
+
+        MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
+        0
+        0
+        MUSIC_BEAT_HIHAT
+
+        MUSIC_BEAT_KICK
+        0
+        MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT
+        0
+    }
+
+    immut g_music_melody [4][3]F32 = {
+        {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
+        {NOTE_G [4]; NOTE_AS[4]; NOTE_D [5]}
+        {NOTE_F [4]; NOTE_GS[4]; NOTE_C [5]}
+        {NOTE_G [4]; NOTE_B [4]; NOTE_D [5]}
+    }
+
+    immut g_music_synth [16]F32 = {
+        NOTE_F [6 - 1]
+        NOTE_G [6 - 1]
+        NOTE_C [6 - 1]
+        0
+
+        NOTE_DS[6 - 1]
+        NOTE_G [6 - 1]
+        NOTE_C [6 - 1]
+        0
+
+        NOTE_F [6 - 1]
+        NOTE_G [6 - 1]
+        NOTE_C [6 - 1]
+        0
+
+        NOTE_C [6 - 1]
+        NOTE_G [6 - 1]
+        NOTE_C [6 - 1]
+        0
+    }
+
+    immut g_music_bass [64]F32 = {
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_C [3]
+        NOTE_C [3]
+        NOTE_C [3]
+        NOTE_C [3]
+
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_D [3]
+        NOTE_D [3]
+        NOTE_D [3]
+        NOTE_D [3]
+
+
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_C [3]
+        NOTE_C [3]
+        NOTE_C [3]
+        NOTE_C [3]
+
+        NOTE_F [3]
+        NOTE_F [3]
+        0
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+        NOTE_F [3]
+
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_G [3]
+        NOTE_AS[3]
+        NOTE_AS[3]
+        NOTE_AS[3]
+        NOTE_AS[3]
+    }

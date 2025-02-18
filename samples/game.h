@@ -7,34 +7,10 @@
 #include <stdio.h>
 #include <vecc_builtin.h>
 
-typedef struct { F32 data[2]; } Aos2F32;
-typedef struct Item {
-	Aos2F32 pos;
-	I32 powerup;
-	F32 timer;
-} Item;
-typedef struct Hit {
-	F32 tmin;
-	F32 tmax;
-	B8 hit;
-} Hit;
-typedef struct Bullet {
-	B8 used;
-	Aos2F32 pos;
-	Aos2F32 vel;
-	F32 timer;
-	U8 level;
-	B8 explode;
-} Bullet;
-typedef struct { U8 data[4]; } Aos4U8;
-typedef struct Effect {
-	Aos2F32 pos;
-	F32 rad;
-	F32 timer;
-	F32 dur;
-	Aos4U8 color;
-} Effect;
 typedef struct { F32 data[3]; } Aos3F32;
+typedef struct { Aos3F32 data[4]; } Aos4Aos3F32;
+typedef struct { F32 data[9]; } Aos9F32;
+typedef struct { F32 data[2]; } Aos2F32;
 typedef struct Player {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -43,6 +19,7 @@ typedef struct Player {
 	Aos3F32 powerup_timer;
 	F32 particle_timer;
 } Player;
+typedef struct { U8 data[4]; } Aos4U8;
 typedef struct Enemy {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -53,21 +30,52 @@ typedef struct Enemy {
 	U8 state;
 	U8 kind;
 } Enemy;
+typedef struct { U8 data[16]; } Aos16U8;
 typedef struct { U32 data[95]; } Aos95U32;
 typedef struct { Enemy data[256]; } Aos256Enemy;
-typedef struct { F32 data[9]; } Aos9F32;
-typedef struct { F32 data[8]; } Aos8F32;
-typedef struct { Effect data[32]; } Aos32Effect;
-typedef struct { Item data[32]; } Aos32Item;
-typedef struct { I32 data[2]; } Aos2I32;
+typedef struct Bullet {
+	B8 used;
+	Aos2F32 pos;
+	Aos2F32 vel;
+	F32 timer;
+	U8 level;
+	B8 explode;
+} Bullet;
 typedef struct { Bullet data[128]; } Aos128Bullet;
-typedef struct { I32 data[8]; } Aos8I32;
-typedef struct { V8I32 data[2]; } Aos2V8I32;
-typedef struct { U8 data[16]; } Aos16U8;
-typedef struct { Aos3F32 data[4]; } Aos4Aos3F32;
+typedef struct { I32 data[2]; } Aos2I32;
+typedef struct Item {
+	Aos2F32 pos;
+	I32 powerup;
+	F32 timer;
+} Item;
+typedef struct { Item data[32]; } Aos32Item;
 typedef struct { F32 data[16]; } Aos16F32;
+typedef struct Effect {
+	Aos2F32 pos;
+	F32 rad;
+	F32 timer;
+	F32 dur;
+	Aos4U8 color;
+} Effect;
+typedef struct { Effect data[32]; } Aos32Effect;
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
+typedef struct { I32 data[8]; } Aos8I32;
 typedef struct { F32 data[64]; } Aos64F32;
+typedef struct { F32 data[8]; } Aos8F32;
+typedef struct { V8I32 data[2]; } Aos2V8I32;
 typedef struct { B8 data[3]; } Aos3B8;
+static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
+static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
+static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
+static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2]}}; }
+static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
+static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
+static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
+static Aos4Aos3F32 aos4aos3f32_set(Aos3F32 v0, Aos3F32 v1, Aos3F32 v2, Aos3F32 v3) { return {{v0, v1, v2, v3}}; }
 static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
 static Aos2F32 aos2f32_set1(F32 a) { return {{a, a}}; }
 static Aos2I32 aos2f32_to_aos2i32(Aos2F32 a) { return {{(I32)a.data[0], (I32)a.data[1]}}; }
@@ -78,13 +86,6 @@ static Aos2F32 aos2f32_div(Aos2F32 a, Aos2F32 b) { return {{a.data[0] / b.data[0
 static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
 static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
 static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
-static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
-static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
-static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
-static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2]}}; }
-static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
-static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
-static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
 static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
@@ -105,7 +106,6 @@ static Aos2V8I32 aos2v8i32_mul(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_mul(a.
 static Aos2V8I32 aos2v8i32_and(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_and(a.data[0], b.data[0]), v8i32_and(a.data[1], b.data[1])}}; }
 static Aos2V8I32 aos2v8i32_or(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_or(a.data[0], b.data[0]), v8i32_or(a.data[1], b.data[1])}}; }
 static Aos2V8I32 aos2v8i32_xor(Aos2V8I32 a, Aos2V8I32 b) { return {{v8i32_xor(a.data[0], b.data[0]), v8i32_xor(a.data[1], b.data[1])}}; }
-static Aos4Aos3F32 aos4aos3f32_set(Aos3F32 v0, Aos3F32 v1, Aos3F32 v2, Aos3F32 v3) { return {{v0, v1, v2, v3}}; }
 static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
 static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
 static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }
@@ -221,6 +221,10 @@ I32 g_music_bass_index = 0;
 I32 g_music_bass_sample = 0;
 I32 g_music_synth_index = 0;
 I32 g_music_synth_sample = 0;
+const Aos16U8 g_music_beat = {{MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE, 0, MUSIC_BEAT_HIHAT, 0, MUSIC_BEAT_KICK, 0, MUSIC_BEAT_HIHAT, 0, MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT, 0, 0, MUSIC_BEAT_HIHAT, MUSIC_BEAT_KICK, 0, MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT, 0}};
+const Aos4Aos3F32 g_music_melody = {{{{NOTE_F.data[4], NOTE_GS.data[4], NOTE_C.data[5]}}, {{NOTE_G.data[4], NOTE_AS.data[4], NOTE_D.data[5]}}, {{NOTE_F.data[4], NOTE_GS.data[4], NOTE_C.data[5]}}, {{NOTE_G.data[4], NOTE_B.data[4], NOTE_D.data[5]}}}};
+const Aos16F32 g_music_synth = {{NOTE_F.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_DS.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_F.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_C.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f}};
+const Aos64F32 g_music_bass = {{NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_F.data[3], NOTE_F.data[3], 0.0f, NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_AS.data[3], NOTE_AS.data[3], NOTE_AS.data[3], NOTE_AS.data[3]}};
 
 // VECC function definitions
 
@@ -308,10 +312,6 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 	if (frame == 0) {
 		reset_game();
 	};
-	const Aos16U8 g_music_beat = {{MUSIC_BEAT_KICK | MUSIC_BEAT_SNARE, 0, MUSIC_BEAT_HIHAT, 0, MUSIC_BEAT_KICK, 0, MUSIC_BEAT_HIHAT, 0, MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT, 0, 0, MUSIC_BEAT_HIHAT, MUSIC_BEAT_KICK, 0, MUSIC_BEAT_KICK | MUSIC_BEAT_HIHAT, 0}};
-	const Aos4Aos3F32 g_music_melody = {{{{NOTE_F.data[4], NOTE_GS.data[4], NOTE_C.data[5]}}, {{NOTE_G.data[4], NOTE_AS.data[4], NOTE_D.data[5]}}, {{NOTE_F.data[4], NOTE_GS.data[4], NOTE_C.data[5]}}, {{NOTE_G.data[4], NOTE_B.data[4], NOTE_D.data[5]}}}};
-	const Aos16F32 g_music_synth = {{NOTE_F.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_DS.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_F.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f, NOTE_C.data[(6 - 1)], NOTE_G.data[(6 - 1)], NOTE_C.data[(6 - 1)], 0.0f}};
-	const Aos64F32 g_music_bass = {{NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_D.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_C.data[3], NOTE_F.data[3], NOTE_F.data[3], 0.0f, NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_F.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_G.data[3], NOTE_AS.data[3], NOTE_AS.data[3], NOTE_AS.data[3], NOTE_AS.data[3]}};
 	const I32 num_pixel_blocks = (resolution.data[0] * resolution.data[1]) / vector_width;
 	B8 end_game = false;
 	B32 should_hit_pause = g_hit_pause > 0.0f;
