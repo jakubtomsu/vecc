@@ -1,1 +1,1 @@
-call build.cmd %1 && %1.exe
+call build.cmd %* && %1.exe
