@@ -26,6 +26,7 @@ Type_Basic :: struct {
 }
 
 Type_Basic_Kind :: enum u8 {
+    Invalid = 0,
     B8,
     B16,
     B32,
@@ -123,6 +124,44 @@ type_is_integer :: proc(t: ^Type) -> bool {
     }
 }
 
+type_is_unsigned_integer :: proc(t: ^Type) -> bool {
+    #partial switch v in t.variant {
+    case Type_Basic:
+        #partial switch v.kind {
+        case .U8,
+             .U16,
+             .U32,
+             .U64:
+            return true
+
+        case:
+            return false
+        }
+
+    case:
+        return false
+    }
+}
+
+type_is_signed_integer :: proc(t: ^Type) -> bool {
+    #partial switch v in t.variant {
+    case Type_Basic:
+        #partial switch v.kind {
+        case .I8,
+             .I16,
+             .I32,
+             .I64:
+            return true
+
+        case:
+            return false
+        }
+
+    case:
+        return false
+    }
+}
+
 type_elem_basic_type :: proc(t: ^Type) -> ^Type {
     if t == nil {
         return nil
@@ -140,6 +179,28 @@ type_elem_basic_type :: proc(t: ^Type) -> ^Type {
     case Type_Struct:
     }
     return t
+}
+
+type_basic_to_bool :: proc(b: Type_Basic_Kind) -> Type_Basic_Kind {
+    switch b {
+    case .Invalid:return .Invalid
+    case .B8:     return .B8
+    case .B16:    return .B16
+    case .B32:    return .B32
+    case .B64:    return .B64
+    case .I8:     return .B8
+    case .I16:    return .B16
+    case .I32:    return .B32
+    case .I64:    return .B64
+    case .U8:     return .B8
+    case .U16:    return .B16
+    case .U32:    return .B32
+    case .U64:    return .B64
+    case .F32:    return .B32
+    case .F64:    return .B64
+    case .String: return .Invalid
+    }
+    return .Invalid
 }
 
 type_is_float :: proc(t: ^Type) -> bool {
@@ -191,6 +252,16 @@ type_is_vector :: proc(t: ^Type) -> bool {
             return true
         }
         return false
+
+    case:
+        return false
+    }
+}
+
+type_is_struct :: proc(t: ^Type) -> bool {
+    #partial switch v in t.variant {
+    case Type_Struct:
+        return true
 
     case:
         return false

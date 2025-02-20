@@ -42,6 +42,7 @@ mut g_hit_pause F32
 const PLAYER_POWERUP_FAST_FIRE  I32 = 0
 const PLAYER_POWERUP_SHOTGUN    I32 = 1
 const PLAYER_POWERUP_EXPLOSIVE  I32 = 2
+const POWERUP_NUM               I32 = 3
 
 const POWERUP_FAST_FIRE_COLOR [4]U8 = {0; 255; 0; 0}
 const POWERUP_SHOTGUN_COLOR   [4]U8 = {255; 255; 0; 0}
@@ -52,7 +53,7 @@ struct Player {
     vel             [2]F32
     dir             [2]F32
     gun_timer       F32
-    powerup_timer   [3]F32
+    powerup_timer   [POWERUP_NUM]F32
     particle_timer  F32
 }
 
@@ -109,24 +110,30 @@ struct Effect {
     color   [4]U8
 }
 
-mut g_effects [32]Effect
+mut vector g_effects [8]Effect
 
 procedure spawn_effect (
     immut pos   [2]F32
     immut rad   F32
     immut dur   F32
-    immut col   [4]U8
+    immut color [4]U8
 ) {
     for i I32; i < g_effects.len; i += 1 {
-        mut effect Effect = g_effects[i]
-        if effect.timer > effect.dur {
-            effect.pos = pos
-            effect.rad = rad
-            effect.timer = 0
-            effect.dur = dur
-            effect.color = col
-            g_effects[i] = effect
-            break
+        mut vector effect Effect = g_effects[i]
+        mut vector cond B32 = effect.timer > effect.dur
+        if reduce_any(cond) {
+            if vector_index == count_trailing_zeros(to_bitmask(cond)) {
+                g_effects[i].pos.x = pos.x
+                g_effects[i].pos.y = pos.y
+                g_effects[i].rad = rad
+                g_effects[i].timer = 0
+                g_effects[i].dur = dur
+                g_effects[i].color.r = color.r
+                g_effects[i].color.g = color.g
+                g_effects[i].color.b = color.b
+                g_effects[i].color.a = color.a
+                break
+            }
         }
     }
 }
@@ -236,7 +243,7 @@ procedure export compute_frame (
             draw_text(framebuffer, resolution, "         BY JAKUB TOMSU"        ,  {28; 70}      , 0x00333333)
             draw_text(framebuffer, resolution, "           controls"           , {28; 150 + 10}, 0x00777777)
             draw_text(framebuffer, resolution, "          MOVE     ARROW KEYS" , {28; 150 + 30}, 0x00bbbbbb)
-            draw_text(framebuffer, resolution, " SHOOT FORWARD     X"          , {28; 150 + 40}, 0x00bbbbbb)
+                draw_text(framebuffer, resolution, " SHOOT FORWARD     X"          , {28; 150 + 40}, 0x00bbbbbb)
             draw_text(framebuffer, resolution, "SHOOT BACKWARD     Z"          , {28; 150 + 50}, 0x00bbbbbb)
         }
 
@@ -425,20 +432,29 @@ procedure export compute_frame (
         }
 
         for i I32 = 0; i < g_effects.len; i += 1 {
-            mut effect Effect = g_effects[i]
+            mut vector effect Effect = g_effects[i]
             effect.timer += delta
 
             if effect.timer < effect.dur {
-                draw_octagon(framebuffer, resolution, conv(I32, effect.pos),
-                    conv(I32, effect.rad), conv(I32, effect.rad * 1.5), reinterpret([4]U8, effect.color))
+                mut bitmask U8 = to_bitmask(vector_mask)
+                for j I32 = 0; j < vector_width; j += 1 {
+                    if (bitmask & (1 << j)) != 0 {
+                        mut scal Effect = effect[j]
+                        draw_octagon(framebuffer, resolution,
+                            conv(I32, scal.pos),
+                            conv(I32, scal.rad),
+                            conv(I32, scal.rad * 1.5),
+                            reinterpret([4]U8, scal.color))
+                    }
+                }
             }
 
             g_effects[i] = effect
         }
 
         {
-            mut powerups [3]Bool
-            for i I32; i < 3; i += 1 {
+            mut powerups [POWERUP_NUM]Bool
+            for i I32; i < POWERUP_NUM; i += 1 {
                 player.powerup_timer[i] -= delta
                 if player.powerup_timer[i] > 0 {
                     powerups[i] = true
@@ -502,7 +518,7 @@ procedure export compute_frame (
 
                         g_bullets[i] = {
                             true
-                            player.pos + (player.dir * 3)
+                            player.pos + (player.dir * (6 * shoot_dir))
                             bdir * bullet_speed
                             0
                             bullet_level

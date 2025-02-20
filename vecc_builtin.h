@@ -5,6 +5,10 @@
 #ifndef VECC_BUILTIN_DEFINED
 #define VECC_BUILTIN_DEFINED 1
 
+#ifdef _MSC_VER
+#define VECC_MSVC 1
+#endif
+
 #include <stdint.h>
 #include <math.h>
 
@@ -132,6 +136,41 @@ vecc_op B64 b64_clamp(B64 a, B64 lo, B64 hi) { if(a < lo) return lo; if(a > hi) 
 vecc_op F32 f32_clamp(F32 a, F32 lo, F32 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
 vecc_op F64 f64_clamp(F64 a, F64 lo, F64 hi) { if(a < lo) return lo; if(a > hi) return hi; return a; }
 
+vecc_op I8  i8_blend (I8  a, I8  b, B8 mask) { return mask ? b : a; }
+vecc_op I16 i16_blend(I16 a, I16 b, B8 mask) { return mask ? b : a; }
+vecc_op I32 i32_blend(I32 a, I32 b, B8 mask) { return mask ? b : a; }
+vecc_op I64 i64_blend(I64 a, I64 b, B8 mask) { return mask ? b : a; }
+vecc_op U8  u8_blend (U8  a, U8  b, B8 mask) { return mask ? b : a; }
+vecc_op U16 u16_blend(U16 a, U16 b, B8 mask) { return mask ? b : a; }
+vecc_op U32 u32_blend(U32 a, U32 b, B8 mask) { return mask ? b : a; }
+vecc_op U64 u64_blend(U64 a, U64 b, B8 mask) { return mask ? b : a; }
+vecc_op B8  b8_blend (B8  a, B8  b, B8 mask) { return mask ? b : a; }
+vecc_op B16 b16_blend(B16 a, B16 b, B8 mask) { return mask ? b : a; }
+vecc_op B32 b32_blend(B32 a, B32 b, B8 mask) { return mask ? b : a; }
+vecc_op B64 b64_blend(B64 a, B64 b, B8 mask) { return mask ? b : a; }
+vecc_op F32 f32_blend(F32 a, F32 b, B8 mask) { return mask ? b : a; }
+vecc_op F64 f64_blend(F64 a, F64 b, B8 mask) { return mask ? b : a; }
+
+#ifdef VECC_MSVC
+vecc_op I32 i8_count_trailing_zeros (I8  a) { unsigned long i; _BitScanForward(&i, a); return i; }
+vecc_op I32 i16_count_trailing_zeros(I16 a) { unsigned long i; _BitScanForward(&i, a); return i; }
+vecc_op I32 i32_count_trailing_zeros(I32 a) { unsigned long i; _BitScanForward(&i, a); return i; }
+vecc_op I32 i64_count_trailing_zeros(I64 a) { unsigned long i; _BitScanForward64(&i, a); return i; }
+vecc_op I32 u8_count_trailing_zeros (U8  a) { unsigned long i; _BitScanForward(&i, a); return i; }
+vecc_op I32 u16_count_trailing_zeros(U16 a) { unsigned long i; _BitScanForward(&i, a); return i; }
+vecc_op I32 u32_count_trailing_zeros(U32 a) { unsigned long i; _BitScanForward(&i, a); return i; }
+vecc_op I32 u64_count_trailing_zeros(U64 a) { unsigned long i; _BitScanForward64(&i, a); return i; }
+
+vecc_op I32 i8_count_leading_zeros (I8  a) { unsigned long i; _BitScanReverse(&i, a); return i; }
+vecc_op I32 i16_count_leading_zeros(I16 a) { unsigned long i; _BitScanReverse(&i, a); return i; }
+vecc_op I32 i32_count_leading_zeros(I32 a) { unsigned long i; _BitScanReverse(&i, a); return i; }
+vecc_op I32 i64_count_leading_zeros(I64 a) { unsigned long i; _BitScanReverse64(&i, a); return i; }
+vecc_op I32 u8_count_leading_zeros (U8  a) { unsigned long i; _BitScanReverse(&i, a); return i; }
+vecc_op I32 u16_count_leading_zeros(U16 a) { unsigned long i; _BitScanReverse(&i, a); return i; }
+vecc_op I32 u32_count_leading_zeros(U32 a) { unsigned long i; _BitScanReverse(&i, a); return i; }
+vecc_op I32 u64_count_leading_zeros(U64 a) { unsigned long i; _BitScanReverse64(&i, a); return i; }
+#endif
+
 vecc_big_op void string_print   (String a) { printf("%.*s"  , int(a.len), a.data); }
 vecc_big_op void string_println (String a) { printf("%.*s\n", int(a.len), a.data); }
 vecc_big_op void i8_print       (I8     a) { printf("%i"  , (I32)a); }
@@ -168,6 +207,7 @@ vecc_big_op void f64_println    (F64    a) { printf("%g\n", a); }
 #ifdef VECC_AVX2
 #include <immintrin.h>
 
+// TODO: all underlying vector types should be padded up to at least one SSE vector size?
 
 typedef struct { I8      data[2]; } V2I8;
 typedef struct { I8      data[4]; } V4I8;
@@ -302,6 +342,7 @@ vecc_op V8I32 v8i32_set1(I32 a) { return {{_mm256_set1_epi32(a)}}; }
 vecc_op V8U32 v8u32_set1(U32 a) { return {{_mm256_set1_epi32(a)}}; }
 vecc_op V8B32 v8b32_set1(B32 a) { return {{_mm256_set1_epi32(a)}}; }
 vecc_op V8U16 v8u16_set1(U16 a) { return {{_mm_set1_epi16(a)}}; }
+vecc_op V8U8  v8u8_set1(U8 a) { return {{a,a,a,a,a,a,a,a}}; }
 
 vecc_op V8F32 v8f32_set(F32 a,F32 b,F32 c,F32 d,F32 e,F32 f,F32 g,F32 h) { return {{_mm256_setr_ps(a,b,c,d,e,f,g,h)}}; }
 vecc_op V8I32 v8i32_set(I32 a,I32 b,I32 c,I32 d,I32 e,I32 f,I32 g,I32 h) { return {{_mm256_setr_epi32(a,b,c,d,e,f,g,h)}}; }
@@ -325,6 +366,7 @@ vecc_op V8F32 v8f32_div (V8F32 a, V8F32 b)  { return {{_mm256_div_ps(a.data[0], 
 vecc_op V8F32 v8f32_and (V8F32 a, V8F32 b)  { return {{_mm256_and_ps(a.data[0], b.data[0])}}; }
 vecc_op V8F32 v8f32_or  (V8F32 a, V8F32 b)  { return {{_mm256_or_ps(a.data[0], b.data[0])}}; }
 vecc_op V8F32 v8f32_xor (V8F32 a, V8F32 b)  { return {{_mm256_xor_ps(a.data[0], b.data[0])}}; }
+vecc_op V8F32 v8f32_neg (V8F32 a)           { return {{_mm256_xor_ps(a.data[0], _mm256_set1_ps(-1.0f))}}; }
 
 vecc_op V4F64 v4f64_add (V4F64 a, V4F64 b)  { return {{_mm256_add_pd(a.data[0], b.data[0])}}; }
 vecc_op V4F64 v4f64_sub (V4F64 a, V4F64 b)  { return {{_mm256_sub_pd(a.data[0], b.data[0])}}; }
@@ -371,6 +413,83 @@ vecc_op V8U16 v8u16_xor (V8U16 a, V8U16 b)  { return {{_mm_xor_si128(a.data[0], 
 vecc_op V8U16 v8u16_sl  (V8U16 a, int b)    { return {{_mm_slli_epi16(a.data[0], b)}}; }
 vecc_op V8U16 v8u16_sr  (V8U16 a, int b)    { return {{_mm_srli_epi16(a.data[0], b)}}; }
 vecc_op V8U16 v8u16_andnot(V8U16 a, V8U16 b)  { return {{_mm_andnot_si128(b.data[0], a.data[0])}}; }
+
+// Not cool.
+
+vecc_op V8U8 v8u8_add(V8U8 a, V8U8 b) {
+    return {{
+        (U8)(a.data[0] + b.data[0]),
+        (U8)(a.data[1] + b.data[1]),
+        (U8)(a.data[2] + b.data[2]),
+        (U8)(a.data[3] + b.data[3]),
+        (U8)(a.data[4] + b.data[4]),
+        (U8)(a.data[5] + b.data[5]),
+        (U8)(a.data[6] + b.data[6]),
+        (U8)(a.data[7] + b.data[7]),
+    }};
+}
+vecc_op V8U8 v8u8_mul(V8U8 a, V8U8 b) {
+    return {{
+        (U8)(a.data[0] + b.data[0]),
+        (U8)(a.data[1] + b.data[1]),
+        (U8)(a.data[2] + b.data[2]),
+        (U8)(a.data[3] + b.data[3]),
+        (U8)(a.data[4] + b.data[4]),
+        (U8)(a.data[5] + b.data[5]),
+        (U8)(a.data[6] + b.data[6]),
+        (U8)(a.data[7] + b.data[7]),
+    }};
+}
+vecc_op V8U8 v8u8_and(V8U8 a, V8U8 b) {
+    return {{
+        (U8)(a.data[0] & b.data[0]),
+        (U8)(a.data[1] & b.data[1]),
+        (U8)(a.data[2] & b.data[2]),
+        (U8)(a.data[3] & b.data[3]),
+        (U8)(a.data[4] & b.data[4]),
+        (U8)(a.data[5] & b.data[5]),
+        (U8)(a.data[6] & b.data[6]),
+        (U8)(a.data[7] & b.data[7]),
+    }};
+}
+vecc_op V8U8 v8u8_or(V8U8 a, V8U8 b) {
+    return {{
+        (U8)(a.data[0] | b.data[0]),
+        (U8)(a.data[1] | b.data[1]),
+        (U8)(a.data[2] | b.data[2]),
+        (U8)(a.data[3] | b.data[3]),
+        (U8)(a.data[4] | b.data[4]),
+        (U8)(a.data[5] | b.data[5]),
+        (U8)(a.data[6] | b.data[6]),
+        (U8)(a.data[7] | b.data[7]),
+    }};
+}
+vecc_op V8U8 v8u8_xor(V8U8 a, V8U8 b) {
+    return {{
+        (U8)(a.data[0] ^ b.data[0]),
+        (U8)(a.data[1] ^ b.data[1]),
+        (U8)(a.data[2] ^ b.data[2]),
+        (U8)(a.data[3] ^ b.data[3]),
+        (U8)(a.data[4] ^ b.data[4]),
+        (U8)(a.data[5] ^ b.data[5]),
+        (U8)(a.data[6] ^ b.data[6]),
+        (U8)(a.data[7] ^ b.data[7]),
+    }};
+}
+vecc_op V8U8 v8u8_blend(V8U8 a, V8U8 b, V8B32 mask) {
+    // this is dumb
+    return {{
+        u8_blend(a.data[0], b.data[0], _mm256_extract_epi32(mask.data[0], 0)),
+        u8_blend(a.data[1], b.data[1], _mm256_extract_epi32(mask.data[0], 1)),
+        u8_blend(a.data[2], b.data[2], _mm256_extract_epi32(mask.data[0], 2)),
+        u8_blend(a.data[3], b.data[3], _mm256_extract_epi32(mask.data[0], 3)),
+        u8_blend(a.data[4], b.data[4], _mm256_extract_epi32(mask.data[0], 4)),
+        u8_blend(a.data[5], b.data[5], _mm256_extract_epi32(mask.data[0], 5)),
+        u8_blend(a.data[6], b.data[6], _mm256_extract_epi32(mask.data[0], 6)),
+        u8_blend(a.data[7], b.data[7], _mm256_extract_epi32(mask.data[0], 7)),
+    }};
+}
+
 
 vecc_op V8I32 v8i32_min (V8I32 a, V8I32 b)  { return {{_mm256_min_epi32(a.data[0], b.data[0])}}; }
 vecc_op V8I32 v8i32_max (V8I32 a, V8I32 b)  { return {{_mm256_max_epi32(a.data[0], b.data[0])}}; }
@@ -499,6 +618,13 @@ vecc_op V8F32 v8f32_pow(V8F32 a, V8F32 b) {
 
 vecc_op B32 v8b32_reduce_all(V8B32 a) { return _mm256_testc_si256(a.data[0], _mm256_set1_epi32(-1)) != 0; }
 vecc_op B32 v8b32_reduce_any(V8B32 a) { return _mm256_testz_si256(a.data[0], a.data[0]) == 0; }
+
+// HACK
+vecc_op U8 v8b32_to_bitmask(V8B32 a) { return _mm256_movemask_ps(_mm256_castsi256_ps(a.data[0])); }
+
+vecc_op F32 v8f32_extract(V8F32 a, int index) { F32 data[8]; _mm256_store_ps(data, a.data[0]); return data[index]; }
+vecc_op I32 v8i32_extract(V8I32 a, int index) { I32 data[8]; _mm256_store_si256((__m256i*)data, a.data[0]); return data[index]; }
+vecc_op U8 v8u8_extract(V8U8 a, int index) { return a.data[index]; }
 
 #endif // VECC_AVX2
 

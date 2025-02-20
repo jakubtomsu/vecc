@@ -26,6 +26,7 @@ Entity :: struct {
     variant:        Entity_Variant,
     // TODO
     depends:        map[string]struct{},
+    checked:        bool,
 }
 
 Entity_Variant :: union {
@@ -54,6 +55,7 @@ Entity_Builtin_Kind :: enum u8 {
     // Values
     Vector_Width,
     Vector_Index,
+    Vector_Mask,
     // Procs
     Print,
     Println,
@@ -84,6 +86,12 @@ Entity_Builtin_Kind :: enum u8 {
     Reduce_And,
     Reduce_All,
     Reduce_Any,
+    To_Bitmask,
+    To_Vector,
+    To_Scalar,
+    To_String,
+    Count_Leading_Zeros,
+    Count_Trailing_Zeros,
 }
 
 Entity_Struct :: struct {
@@ -127,6 +135,10 @@ check_ident :: proc(c: ^Checker, ast: ^Ast) -> ^Entity {
     name := ident.token.text
 
     if ent, scope, ok := find_entity(c.curr_scope, name); ok {
+        if !ent.checked {
+            check_entity(c, ent)
+        }
+
         #partial switch v in ent.variant {
         case Entity_Builtin:
             ast.type = v.type
@@ -163,7 +175,10 @@ check_type :: proc(c: ^Checker, ast: ^Ast) {
                 assert(l <= 64)
             }
         case:
-            assert(false)
+            checker_error(c, ast.token,
+                "Array length has to be a constant integer, got {}",
+                reflect.union_variant_typeid(v.len.value),
+            )
         }
 
     case Ast_Struct_Type:
@@ -205,6 +220,9 @@ check_basic_literal :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) {
 
     _to_value :: proc(c: ^Checker, pos: Pos, basic: Type_Basic_Kind, lit: Ast_Basic_Literal) -> Value {
         switch basic {
+        case .Invalid:
+            assert(false)
+
         case .B8,
              .B16,
              .B32,
@@ -435,6 +453,31 @@ check_call_expr :: proc(c: ^Checker, ast: ^Ast) {
             assert(ast.type == call_expr.args[1].type)
             assert(type_is_boolean(type_elem_basic_type(call_expr.args[2].type)))
             // assert(call_expr.args[2].type.size * 8 >= len)
+
+        case .Count_Leading_Zeros, .Count_Trailing_Zeros:
+            assert(len(call_expr.args) == 1)
+            assert(type_is_integer(call_expr.args[0].type))
+            ast.type = c.basic_types[.I32]
+
+        case .To_Bitmask:
+            assert(len(call_expr.args) == 1)
+            assert(type_is_vector(call_expr.args[0].type))
+            assert(type_is_boolean(type_elem_basic_type(call_expr.args[0].type)))
+
+            vec := call_expr.args[0].type.variant.(Type_Array)
+            switch vec.len {
+            case 8:
+                ast.type = c.basic_types[.U8]
+            case:
+                unimplemented()
+            }
+
+        case .To_Scalar:
+
+        case .To_Vector:
+
+        case .To_String:
+            assert(len(call_expr.args) == 1)
 
         case:
             checker_error(c, ast.token, "Builtin '{}' cannot be called", v.kind)
@@ -835,6 +878,9 @@ check_index_expr :: proc(c: ^Checker, ast: ^Ast) {
             checker_error(c, ast.token, "Cannot index {}", type_to_string(expr.left.type))
         }
 
+    case Type_Struct:
+        ast.type = type_scalarize(expr.left.type)
+
     case:
         assert(false)
     }
@@ -1014,24 +1060,62 @@ check_proc_param_field :: proc(c: ^Checker, ast: ^Ast) {
     ast.type = decl.type.type
 }
 
-check_are_types_assignable :: proc(c: ^Checker, left: ^Type, right: ^Type) -> bool {
-    if left == right {
+check_type_is_expandible :: proc(c: ^Checker, dst: ^Type, src: ^Type) -> bool {
+    if dst == src {
         return true
     }
 
-    if arr, ok := left.variant.(Type_Array); ok {
-        if arr.kind == .Vector && arr.type == right {
+    #partial switch vdst in dst.variant {
+    case Type_Array:
+        if vdst.type == src {
             return true
         }
 
-        if elem, ok := arr.type.variant.(Type_Array); ok &&
-           elem.kind == .Vector &&
-           elem.type == right {
-            return true
+        #partial switch vdst_elem in vdst.type.variant {
+        case Type_Array:
+            if vdst_elem.type == src {
+                return true
+            }
+
+            #partial switch vsrc in src.variant {
+            case Type_Array:
+                if vsrc.type == vdst_elem.type {
+                    return true
+                }
+            }
+
+        case Type_Basic:
+            #partial switch vsrc in src.variant {
+            case Type_Array:
+                if vsrc.type == vdst.type {
+                    return true
+                }
+            }
         }
     }
 
     return false
+}
+
+check_are_types_assignable :: proc(c: ^Checker, left: ^Type, right: ^Type) -> bool {
+    return check_type_is_expandible(c, dst = left, src = right)
+    // if left == right {
+    //     return true
+    // }
+
+    // if arr, ok := left.variant.(Type_Array); ok {
+    //     if arr.kind == .Vector && arr.type == right {
+    //         return true
+    //     }
+
+    //     if elem, ok := arr.type.variant.(Type_Array); ok &&
+    //        elem.kind == .Vector &&
+    //        elem.type == right {
+    //         return true
+    //     }
+    // }
+
+    // return false
 }
 
 check_stmt :: proc(c: ^Checker, ast: ^Ast) {
@@ -1405,6 +1489,10 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
 
         case:
             if ent, _, ok := find_entity(c.curr_scope, v.token.text); ok {
+                if !ent.checked {
+                    check_entity(c, ent)
+                }
+
                 #partial switch ev in ent.variant {
                 // TODO: alias
                 case Entity_Struct:
@@ -1413,6 +1501,7 @@ find_or_create_type_ast :: proc(c: ^Checker, ast: ^Ast, type_hint: ^Type = nil) 
                 case:
                     checker_error(c, ast.token, "Entity {} is not a type", v.token.text)
                 }
+
             } else {
                 checker_error(c, ast.token, "Unknown type: {}", v.token.text)
             }
@@ -1464,28 +1553,19 @@ check_type_decl :: proc(c: ^Checker, ast: ^Ast, name: string) {
 
 }
 
-check_scope_structs_recursive :: proc(c: ^Checker, scope: ^Scope) {
+check_entitites_recursive :: proc(c: ^Checker, scope: ^Scope) {
     for name, ent in scope.entities {
-        c.curr_entity = ent
-
-        #partial switch &v in ent.variant {
-        case Entity_Struct:
-            if ent.ast == nil do break
-            decl := ent.ast.variant.(Ast_Struct_Decl) or_break
-            check_type(c, decl.type)
-            ent.ast.type = decl.type.type
-            v.type = decl.type.type
-        }
+        check_entity(c, ent)
     }
 
     for child in scope.children {
         c.curr_scope = child
-        check_scope_structs_recursive(c, child)
+        check_entitites_recursive(c, child)
         c.curr_scope = c.curr_scope.parent
     }
 }
 
-check_scope_procedures_recursive :: proc(c: ^Checker, scope: ^Scope) {
+check_scope_procedure_types_recursive :: proc(c: ^Checker, scope: ^Scope) {
     for name, ent in scope.entities {
         c.curr_entity = ent
 
@@ -1499,29 +1579,66 @@ check_scope_procedures_recursive :: proc(c: ^Checker, scope: ^Scope) {
 
     for child in scope.children {
         c.curr_scope = child
-        check_scope_procedures_recursive(c, child)
+        check_scope_procedure_types_recursive(c, child)
         c.curr_scope = c.curr_scope.parent
     }
+}
+
+check_entity :: proc(c: ^Checker, ent: ^Entity) {
+    assert(ent != nil)
+    if ent.checked {
+        return
+    }
+
+    prev_ent := c.curr_entity
+    c.curr_entity = ent
+    defer c.curr_entity = prev_ent
+
+    switch &v in ent.variant {
+    case Entity_Variable:
+        decl := ent.ast.variant.(Ast_Value_Decl)
+        if decl.scope != c.curr_file_scope {
+            return
+        }
+        check_value_decl(c, ent.ast)
+        ent.ast.type = decl.type.type
+
+    case Entity_Struct:
+        if ent.ast == nil do break
+        decl := ent.ast.variant.(Ast_Struct_Decl) or_break
+        check_type(c, decl.type)
+        ent.ast.type = decl.type.type
+        v.type = decl.type.type
+
+    case
+        Entity_Builtin,
+        Entity_Struct_Field,
+        Entity_Proc:
+        return
+    }
+
+    ent.checked = true
 }
 
 // Check and codegen C
 check_program :: proc(c: ^Checker) {
     c.basic_types = [Type_Basic_Kind]^Type{
-        .B8  = new_clone(Type{size = 1, variant = Type_Basic{kind = .B8 }}),
-        .B16 = new_clone(Type{size = 2, variant = Type_Basic{kind = .B16}}),
-        .B32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .B32}}),
-        .B64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .B64}}),
-        .I8  = new_clone(Type{size = 1, variant = Type_Basic{kind = .I8 }}),
-        .I16 = new_clone(Type{size = 2, variant = Type_Basic{kind = .I16}}),
-        .I32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .I32}}),
-        .I64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .I64}}),
-        .U8  = new_clone(Type{size = 1, variant = Type_Basic{kind = .U8 }}),
-        .U16 = new_clone(Type{size = 2, variant = Type_Basic{kind = .U16}}),
-        .U32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .U32}}),
-        .U64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .U64}}),
-        .F32 = new_clone(Type{size = 4, variant = Type_Basic{kind = .F32}}),
-        .F64 = new_clone(Type{size = 8, variant = Type_Basic{kind = .F64}}),
-        .String = new_clone(Type{size = 16, variant = Type_Basic{kind = .String}}),
+        .Invalid = new_clone(Type{size = 0, variant = Type_Basic{kind = .Invalid}}),
+        .B8      = new_clone(Type{size = 1, variant = Type_Basic{kind = .B8 }}),
+        .B16     = new_clone(Type{size = 2, variant = Type_Basic{kind = .B16}}),
+        .B32     = new_clone(Type{size = 4, variant = Type_Basic{kind = .B32}}),
+        .B64     = new_clone(Type{size = 8, variant = Type_Basic{kind = .B64}}),
+        .I8      = new_clone(Type{size = 1, variant = Type_Basic{kind = .I8 }}),
+        .I16     = new_clone(Type{size = 2, variant = Type_Basic{kind = .I16}}),
+        .I32     = new_clone(Type{size = 4, variant = Type_Basic{kind = .I32}}),
+        .I64     = new_clone(Type{size = 8, variant = Type_Basic{kind = .I64}}),
+        .U8      = new_clone(Type{size = 1, variant = Type_Basic{kind = .U8 }}),
+        .U16     = new_clone(Type{size = 2, variant = Type_Basic{kind = .U16}}),
+        .U32     = new_clone(Type{size = 4, variant = Type_Basic{kind = .U32}}),
+        .U64     = new_clone(Type{size = 8, variant = Type_Basic{kind = .U64}}),
+        .F32     = new_clone(Type{size = 4, variant = Type_Basic{kind = .F32}}),
+        .F64     = new_clone(Type{size = 8, variant = Type_Basic{kind = .F64}}),
+        .String  = new_clone(Type{size = 16, variant = Type_Basic{kind = .String}}),
     }
 
     for t in c.basic_types {
@@ -1532,10 +1649,16 @@ check_program :: proc(c: ^Checker) {
         kind = .Vector, len = 8, type = c.basic_types[.I32],
     }}))
 
+    v8b32_type := find_or_create_type(c, new_clone(Type{variant = Type_Array{
+        kind = .Vector, len = 8, type = c.basic_types[.B32],
+    }}))
+
     create_entity(c.curr_file_scope, "vector_width", nil, Entity_Builtin{
         kind = .Vector_Width, value = VECTOR_WIDTH, type = c.basic_types[.I32]})
     create_entity(c.curr_file_scope, "vector_index", nil, Entity_Builtin{
         kind = .Vector_Index, value = [8]i32{0, 1, 2, 3, 4, 5, 6, 7}, type = v8i32_type})
+    create_entity(c.curr_file_scope, "vector_mask", nil, Entity_Builtin{
+        kind = .Vector_Index, type = v8b32_type})
 
     create_entity(c.curr_file_scope, "print"   , nil, Entity_Builtin{kind = .Print})
     create_entity(c.curr_file_scope, "println" , nil, Entity_Builtin{kind = .Println})
@@ -1566,29 +1689,20 @@ check_program :: proc(c: ^Checker) {
     create_entity(c.curr_file_scope, "reduce_and",nil,Entity_Builtin{kind = .Reduce_And})
     create_entity(c.curr_file_scope, "reduce_all",nil,Entity_Builtin{kind = .Reduce_All})
     create_entity(c.curr_file_scope, "reduce_any",nil,Entity_Builtin{kind = .Reduce_Any})
+    create_entity(c.curr_file_scope, "to_bitmask", nil, Entity_Builtin{kind = .To_Bitmask})
+    create_entity(c.curr_file_scope, "to_vector", nil, Entity_Builtin{kind = .To_Vector})
+    create_entity(c.curr_file_scope, "to_scalar", nil, Entity_Builtin{kind = .To_Scalar})
+    create_entity(c.curr_file_scope, "to_string", nil, Entity_Builtin{kind = .To_String})
+    create_entity(c.curr_file_scope, "count_leading_zeros", nil, Entity_Builtin{kind = .Count_Leading_Zeros})
+    create_entity(c.curr_file_scope, "count_trailing_zeros", nil, Entity_Builtin{kind = .Count_Trailing_Zeros})
 
     // 1. check all types
     // 2. check all entity declarations
     // 3. check procedure bodies - needs proc declarations for checking
 
-    check_scope_structs_recursive(c, c.curr_file_scope)
+    check_entitites_recursive(c, c.curr_file_scope)
 
-    for name, ent in c.curr_file_scope.entities {
-        c.curr_entity = ent
-
-        #partial switch v in ent.variant {
-        case Entity_Variable:
-            decl := ent.ast.variant.(Ast_Value_Decl)
-            if decl.scope != c.curr_file_scope {
-                continue
-            }
-
-            check_value_decl(c, ent.ast)
-            ent.ast.type = decl.type.type
-        }
-    }
-
-    check_scope_procedures_recursive(c, c.curr_file_scope)
+    check_scope_procedure_types_recursive(c, c.curr_file_scope)
 
     for name, ent in c.curr_file_scope.entities {
         c.curr_entity = ent

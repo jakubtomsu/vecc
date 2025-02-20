@@ -4,6 +4,7 @@ package vecc
 import "core:fmt"
 import "core:strings"
 import "core:slice"
+import "core:reflect"
 import "core:math"
 
 Gen :: struct {
@@ -284,7 +285,28 @@ gen_compound_literal :: proc(g: ^Gen, ast: ^Ast) {
 
 gen_ident :: proc(g: ^Gen, ast: ^Ast) {
     ident := ast.variant.(Ast_Ident)
-    gen_print(g, ident.token.text)
+    switch ident.token.text {
+    case "vector_mask":
+        masked_id := -1
+        for s := g.curr_scope; s != nil; s = s.parent {
+            if .Masked in s.flags {
+                masked_id = s.local_id
+                break
+            }
+        }
+
+        if masked_id == -1 {
+            assert(false)
+        }
+
+        gen_printf(g,
+            "vecc_mask{0}",
+            masked_id,
+        )
+
+    case:
+        gen_print(g, ident.token.text)
+    }
 }
 
 gen_call_expr :: proc(g: ^Gen, ast: ^Ast) {
@@ -766,6 +788,13 @@ gen_index_expr :: proc(g: ^Gen, ast: ^Ast) {
             assert(false)
         }
 
+    case Type_Struct:
+        gen_printf(g, "{}_extract(", expr.left.type.cname_lower)
+        gen_expr(g, expr.left)
+        gen_print(g, ", ")
+        gen_expr(g, expr.index)
+        gen_print(g, ")")
+
     case:
         assert(false)
     }
@@ -999,6 +1028,54 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
             gen_print(g, ";\n")
         }
 
+        // {
+        //     name, _ := reflect.enum_name_from_value(type_basic_to_bool(type_elem_basic_type(v.type).variant.(Type_Basic).kind))
+        //     gen_printf(g, "static {0} {1}_blend({0} a, {0} b, V{2}{3} mask)",
+        //         type.cname, type.cname_lower, v.len,
+        //         name,
+        //     )
+        //     if defs {
+        //         gen_print(g, " { ")
+        //         gen_print(g, "return {{", )
+        //         for i in 0..<v.len {
+        //             gen_printf(g, "{}_blend(", v.type.cname_lower)
+        //             gen_printf(g, "a.data[{}], ", i)
+        //             gen_printf(g, "b.data[{}], ", i)
+        //             gen_printf(g, "mask.data[{}]", i)
+        //             gen_print(g, ")")
+        //             if i + 1 < v.len {
+        //                 gen_print(g, ", ")
+        //             }
+        //         }
+        //         gen_print(g, "}};")
+        //         gen_print(g, " }\n")
+        //     } else {
+        //         gen_print(g, ";\n")
+        //     }
+        // }
+
+        if type.scalarized != nil {
+            gen_printf(g, "static {0} {1}_extract({2} a, I32 index)",
+                type.scalarized.cname, type.cname_lower, type.cname,
+            )
+            if defs {
+                gen_print(g, " { ")
+                gen_print(g, "return {", )
+                for i in 0..<v.len {
+                    gen_printf(g, "{}_extract(", v.type.cname_lower)
+                    gen_printf(g, "a.data[%i], ", i)
+                    gen_print(g, "index)")
+                    if i + 1 < v.len {
+                        gen_print(g, ", ")
+                    }
+                }
+                gen_print(g, "};")
+                gen_print(g, " }\n")
+            } else {
+                gen_print(g, ";\n")
+            }
+        }
+
         // THIS IS VERY SILLY
         // Generating all possible conversion procs is not fun and it generates a shit ton of code.
         // Alternative is remembering which ones get used during type checking? I don't like that either tho.
@@ -1068,6 +1145,9 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
 
         for op in _gen_named_binary_ops {
             if !_gen_type_matches_op_proc(v.type, op) do continue
+            if op.op == .Sub && type_is_unsigned_integer(type_elem_basic_type(v.type)) {
+                continue
+            }
             gen_printf(g, "static {0} {1}_{2}({0} a, {0} b)", type.cname, type.cname_lower, op.name)
             if defs {
                 gen_print(g, " { ")
@@ -1142,6 +1222,27 @@ gen_type_procs :: proc(g: ^Gen, type: ^Type, defs := false) {
         //     gen_print(g, ";\n")
         // }
 
+        if type.scalarized != nil {
+            gen_printf(g, "static {0} {1}_extract({2} a, I32 index)",
+                type.scalarized.cname, type.cname_lower, type.cname,
+            )
+            if defs {
+                gen_print(g, " { ")
+                gen_print(g, "return {", )
+                for field, i in v.fields {
+                    gen_printf(g, "{}_extract(", field.type.cname_lower)
+                    gen_printf(g, "a.{}, ", field.name)
+                    gen_print(g, "index)")
+                    if i + 1 < len(v.fields) {
+                        gen_print(g, ", ")
+                    }
+                }
+                gen_print(g, "};")
+                gen_print(g, " }\n")
+            } else {
+                gen_print(g, ";\n")
+            }
+        }
     }
 }
 
@@ -1154,6 +1255,7 @@ gen_type_generate_cname :: proc(g: ^Gen, type: ^Type) -> string {
     #partial switch v in type.variant {
     case Type_Basic:
         switch v.kind {
+        case .Invalid: return "INVALID"
         case .B8:   return "B8"
         case .B16:  return "B16"
         case .B32:  return "B32"
@@ -1217,6 +1319,9 @@ gen_value_decl :: proc(g: ^Gen, ast: ^Ast) {
         #partial switch v in decl.type.type.variant {
         case Type_Basic:
             switch v.kind {
+            case .Invalid:
+                assert(false)
+
             case .B8,
                  .B16,
                  .B32,
@@ -1450,7 +1555,12 @@ gen_assign_stmt :: proc(g: ^Gen, ast: ^Ast) {
         is_root_parent := root_scope.depth < g.curr_scope.depth
 
         if is_root_parent {
-            gen_printf(g, "v{}{}_blend(", v.len, v.type.cname_lower)
+            switch v.kind {
+            case .Vector:
+                gen_printf(g, "v{}{}_blend(", v.len, v.type.cname_lower)
+            case .Fixed_Array:
+                gen_printf(g, "aos{}{}_blend(", v.len, v.type.cname_lower)
+            }
             gen_expr(g, stmt.left)
             gen_print(g, ", ")
             suffix = fmt.tprintf(", vecc_mask{})", masked_id)

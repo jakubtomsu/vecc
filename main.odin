@@ -11,8 +11,10 @@ import "core:reflect"
 import "core:slice"
 import "core:mem/virtual"
 
+g_disallow_vectors := false
+
 main :: proc() {
-    if len(os.args) != 2 {
+    if len(os.args) < 2 {
         fmt.println("Enter source code file name")
         return
     }
@@ -21,6 +23,13 @@ main :: proc() {
     if !ok {
         fmt.println("Failed to open file")
         return
+    }
+
+
+    if len(os.args) == 3 {
+        if os.args[2] == "-no-vectors" {
+            assert(false)
+        }
     }
 
     allocator := context.allocator

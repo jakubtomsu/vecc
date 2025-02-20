@@ -68,6 +68,11 @@ parse_ident :: proc(p: ^Parser, token: Token) -> ^Ast {
     result.variant = Ast_Ident{
         token = token,
     }
+
+    if p.curr_entity != nil {
+        p.curr_entity.depends[token.text] = {}
+    }
+
     // if p.curr_entity != nil {
     //     p.curr_entity.depends[token.text] = {}
     // }
@@ -483,49 +488,50 @@ parse_for_stmt :: proc(p: ^Parser) -> ^Ast {
 }
 
 parse_range_stmt :: proc(p: ^Parser) -> ^Ast {
-    expect(p, .Range)
+    unimplemented()
+    // expect(p, .Range)
 
-    ast := create_ast(p)
-    for_stmt: Ast_For_Range_Stmt
+    // ast := create_ast(p)
+    // for_stmt: Ast_For_Range_Stmt
 
-    parse_begin_scope(p)
+    // parse_begin_scope(p)
 
-    ident_tok := expect(p, .Ident)
-    for_stmt.ident = parse_ident(p, ident_tok)
+    // ident_tok := expect(p, .Ident)
+    // for_stmt.ident = parse_ident(p, ident_tok)
 
-    type := create_ast(p)
-    type.variant = Ast_Ident{token = {text = "i64"}}
-    register_value_entity(p,
-        mut = .Mutable,
-        export = false,
-        vector = .Scalar,
-        private = false,
-        ident_tok = ident_tok,
-        name = for_stmt.ident,
-        type = type,
-        value = nil,
-    )
+    // type := create_ast(p)
+    // type.variant = Ast_Ident{token = {text = "i64"}}
+    // register_value_entity(p,
+    //     mut = .Mutable,
+    //     export = false,
+    //     vector = .Scalar,
+    //     private = false,
+    //     ident_tok = ident_tok,
+    //     name = for_stmt.ident,
+    //     type = type,
+    //     value = nil,
+    // )
 
-    expect(p, .Colon)
+    // expect(p, .Colon)
 
-    for_stmt.start = parse_expr(p)
-    for_stmt.range = p.curr_token
-    #partial switch peek(p) {
-    case .Range_Incl:
-        expect(p, .Range_Incl)
-    case .Range_Excl:
-        expect(p, .Range_Excl)
-    case:
-        parser_error(p, p.curr_token, "Invalid range")
-    }
-    for_stmt.end = parse_expr(p)
+    // for_stmt.start = parse_expr(p)
+    // for_stmt.range = p.curr_token
+    // #partial switch peek(p) {
+    // case .Range_Incl:
+    //     expect(p, .Range_Incl)
+    // case .Range_Excl:
+    //     expect(p, .Range_Excl)
+    // case:
+    //     parser_error(p, p.curr_token, "Invalid range")
+    // }
+    // for_stmt.end = parse_expr(p)
 
-    for_stmt.body = parse_block(p, ignore_scope = true)
+    // for_stmt.body = parse_block(p, ignore_scope = true)
 
-    ast.variant = for_stmt
+    // ast.variant = for_stmt
 
-    parse_end_curr_scope(p)
-    return ast
+    // parse_end_curr_scope(p)
+    // return ast
 }
 
 parse_stmt_list :: proc(p: ^Parser, end: Token_Kind) -> []^Ast {
@@ -688,7 +694,11 @@ parse_type :: proc(p: ^Parser) -> (result: ^Ast) {
 }
 
 parse_value_decl :: proc(p: ^Parser, mut: Value_Mutablity) -> ^Ast {
-    // TODO: unordered
+    ast := create_ast(p)
+    value_decl: Ast_Value_Decl
+
+    value_decl.scope = p.curr_scope
+    value_decl.mut = mut
 
     private := allow(p, .Private)
     export := allow(p, .Export)
@@ -701,23 +711,40 @@ parse_value_decl :: proc(p: ^Parser, mut: Value_Mutablity) -> ^Ast {
 
 
     ident_tok := next(p)
-    name := parse_ident(p, ident_tok)
-    type := parse_type(p)
-    value: ^Ast
+    name := ident_tok.text
+
+    entity := register_entity(p,
+        scope   = value_decl.scope,
+        name    = name,
+        ast     = ast,
+        variant = Entity_Variable{},
+    )
+
+    prev_entity := p.curr_entity
+    p.curr_entity = entity
+    defer p.curr_entity = prev_entity
+
+    value_decl.name = parse_ident(p, ident_tok)
+    value_decl.type = parse_type(p)
+
     if allow(p, .Assign) {
-        value = parse_expr(p)
+        value_decl.value = parse_expr(p)
     }
 
-    return register_value_entity(p,
-        mut         = mut,
-        export      = export,
-        vector      = vector ? .Vector : .Default,
-        private     = private,
-        ident_tok   = ident_tok,
-        name        = name,
-        type        = type,
-        value       = value,
-    )
+    value_decl.private = private
+    value_decl.export = export
+    value_decl.vector = vector ? .Vector : .Scalar
+
+
+    switch mut {
+    case .Constant:
+        ast.order_index = -1
+    case .Invalid, .Mutable, .Immutable:
+    }
+
+
+    ast.variant = value_decl
+    return ast
 }
 
 parse_field :: proc(p: ^Parser) -> ^Ast {
@@ -810,6 +837,12 @@ parse_proc_decl :: proc(p: ^Parser) -> ^Ast {
         variant = Entity_Proc{},
     )
 
+    prev_entity := p.curr_entity
+    // WARNING
+    // we don't care about dependencies within procedures for now
+    p.curr_entity = nil
+    defer p.curr_entity = prev_entity
+
     parse_begin_scope(p)
 
     proc_decl.entity = entity
@@ -837,6 +870,10 @@ parse_struct_decl :: proc(p: ^Parser) -> ^Ast {
         ast = ast,
         variant = Entity_Struct{},
     )
+
+    prev_entity := p.curr_entity
+    p.curr_entity = entity
+    defer p.curr_entity = prev_entity
 
     ast.variant = Ast_Struct_Decl{
         entity = entity,
