@@ -60,7 +60,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 	for (I32 i = 0; i < num_pixel_blocks; i = i + 1) {
 		framebuffer[i] = v8u32_set1((U32)((i & 1) * 50));
 	};
-	draw_text(framebuffer, resolution, {"AHOJ! ASLKDJASLKDJASLKDJASLDKJASDLKJ", 36}, {{4, (I32)(80.0f + (f32_sin(time * 3.0f) * 10.0f))}}, 4278233600 | (U32)(frame * 500));
+	draw_text(framebuffer, resolution, {"AHOJ!", 5}, {{80, (I32)(80.0f + (f32_sin(time * 3.0f) * 10.0f))}}, 4278233600 | (U32)(frame * 500));
 	I32 y = 2;
 	I32 x = 2;
 	for (I32 i = 0; i < VECC_LEN(g_glyphs.data); i = i + 1) {

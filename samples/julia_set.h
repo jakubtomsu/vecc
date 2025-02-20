@@ -77,18 +77,18 @@ static Aos4V8U32 aos4v8u32_xor(Aos4V8U32 a, Aos4V8U32 b) { return {{v8u32_xor(a.
 // VECC exported constants
 
 const String SAMPLE_NAME = {"Julia Set", 9};
-const I32 RESOLUTION_X = (320 * 4);
-const I32 RESOLUTION_Y = (184 * 4);
+const I32 RESOLUTION_X = 320 * 4;
+const I32 RESOLUTION_Y = 184 * 4;
 const I32 RESOLUTION_SCALE = 1;
-const I32 KEY_LEFT_BIT = (1 << 0);
-const I32 KEY_RIGHT_BIT = (1 << 1);
-const I32 KEY_UP_BIT = (1 << 2);
-const I32 KEY_DOWN_BIT = (1 << 3);
-const I32 KEY_Z_BIT = (1 << 4);
-const I32 KEY_X_BIT = (1 << 5);
+const I32 KEY_LEFT_BIT = 1 << 0;
+const I32 KEY_RIGHT_BIT = 1 << 1;
+const I32 KEY_UP_BIT = 1 << 2;
+const I32 KEY_DOWN_BIT = 1 << 3;
+const I32 KEY_Z_BIT = 1 << 4;
+const I32 KEY_X_BIT = 1 << 5;
 
 // VECC exported function declarations
-void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys);
+void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys, F32* audio_buffer, I32 audio_samples);
 #endif // VECC_DEFINED
 
 
@@ -102,26 +102,26 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 
 // VECC function definitions
 
-void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys) {
-	const F32 ltime = (0.5f - (0.5f * f32_cos((time * 0.119999997f))));
-	const F32 zoom = f32_pow(0.89999998f, (50.0f * ltime));
+void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, I32 frame, U32 keys, F32* audio_buffer, I32 audio_samples) {
+	const F32 ltime = 0.5f - (0.5f * f32_cos(time * 0.119999997f));
+	const F32 zoom = f32_pow(0.89999998f, 50.0f * ltime);
 	Aos2F32 cen = {{0.2655f, 0.301f}};
-	cen = aos2f32_add(cen, aos2f32_set1(((zoom * 0.8f) * f32_cos((4.0f + (2.0f * ltime))))));
-	Aos2F32 c = aos2f32_sub({{-0.745f, 0.186f}}, aos2f32_mul(aos2f32_mul(aos2f32_set1(0.045f), aos2f32_set1(zoom)), aos2f32_sub(aos2f32_set1(1.0f), aos2f32_set1((ltime * 0.5f)))));
+	cen = aos2f32_add(cen, aos2f32_set1((zoom * 0.8f) * f32_cos(4.0f + (2.0f * ltime))));
+	Aos2F32 c = aos2f32_sub({{-0.745f, 0.186f}}, aos2f32_mul(aos2f32_mul(aos2f32_set1(0.045f), aos2f32_set1(zoom)), aos2f32_sub(aos2f32_set1(1.0f), aos2f32_set1(ltime * 0.5f))));
 	Aos2F32 inv_res = aos2f32_div(aos2f32_set1(1.0f), aos2i32_to_aos2f32(resolution));
-	for (I32 y = 0; (y < resolution.data[1]); y = y + 1) {
-		for (I32 x = 0; (x < (resolution.data[0] / vector_width)); x = x + 1) {
-			V8I32 pixel_x = v8i32_add(vector_index, v8i32_set1((x * vector_width)));
+	for (I32 y = 0; y < resolution.data[1]; y = y + 1) {
+		for (I32 x = 0; x < (resolution.data[0] / vector_width); x = x + 1) {
+			V8I32 pixel_x = v8i32_add(vector_index, v8i32_set1(x * vector_width));
 			Aos2V8F32 uv = {0};
 			uv.data[0] = v8f32_mul(v8i32_to_v8f32(pixel_x), v8f32_set1(inv_res.data[0]));
-			uv.data[1] = v8f32_set1(((F32)y * inv_res.data[1]));
+			uv.data[1] = v8f32_set1((F32)y * inv_res.data[1]);
 			Aos2V8F32 p = {{v8i32_to_v8f32(pixel_x), v8f32_set1((F32)y)}};
 			p = aos2v8f32_mul(aos2v8f32_sub(aos2v8f32_mul(p, aos2v8f32_set1(v8f32_set1(2.0f))), aos2v8f32_set_scalar(aos2i32_to_aos2f32(resolution))), aos2v8f32_set1(v8f32_set1(inv_res.data[1])));
 			Aos2V8F32 z = aos2v8f32_add(aos2v8f32_mul(aos2v8f32_sub(p, aos2v8f32_set_scalar(cen)), aos2v8f32_set1(v8f32_set1(zoom))), aos2v8f32_set_scalar(cen));
 			V8F32 ld2 = v8f32_set1(1.0f);
 			V8F32 lz2 = v8f32_add(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1]));
 			V8B32 break_mask = {0};
-			for (I32 i = 0; (i < 256); i = i + 1) {
+			for (I32 i = 0; i < 256; i = i + 1) {
 				z = aos2v8f32_add({{v8f32_sub(v8f32_mul(z.data[0], z.data[0]), v8f32_mul(z.data[1], z.data[1])), v8f32_mul(v8f32_mul(z.data[0], z.data[1]), v8f32_set1(2.0f))}}, aos2v8f32_set_scalar(c));
 				V8B32 vecc_mask7 = v8b32_not(break_mask); { // vector if
 					ld2 = v8f32_blend(ld2, v8f32_mul(ld2, v8f32_mul(lz2, v8f32_set1(4.0f))), vecc_mask7);
@@ -151,7 +151,7 @@ void compute_frame(V8U32* framebuffer, Aos2I32 resolution, F32 time, F32 delta, 
 			col_rgba = v8u32_or(col_rgba, v8u32_sl(col_int.data[1], 8));
 			col_rgba = v8u32_or(col_rgba, v8u32_sl(col_int.data[0], 16));
 			col_rgba = v8u32_or(col_rgba, v8u32_sl(col_int.data[3], 24));
-			const I32 index = (x + (y * (resolution.data[0] / vector_width)));
+			const I32 index = x + (y * (resolution.data[0] / vector_width));
 			framebuffer[index] = col_rgba;
 		};
 	};
