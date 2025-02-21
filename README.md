@@ -22,7 +22,9 @@ https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/lectures/07_gpucore.p
 - optional semicolons
 
 # Samples
-> [!NOTE] Most samples currently work only on windows
+
+> [!NOTE]
+> Most samples currently work only on windows
 
 To see the samples in action, first:
 ```
@@ -30,8 +32,11 @@ cd samples
 ```
 
 then:
-```cmd
+```
 build <sample_name>
+```
+or
+```
 run <sample_name>
 ```
 
