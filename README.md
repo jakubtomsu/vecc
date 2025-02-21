@@ -23,6 +23,8 @@ https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/lectures/07_gpucore.p
 
 # Samples
 
+One of the samples is a simple software-rendered game I released on [itch.io](https://jakubtomsu.itch.io/120plus)
+
 > [!NOTE]
 > Most samples currently work only on windows
 
