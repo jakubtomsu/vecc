@@ -12,7 +12,7 @@ https://pharr.org/matt/blog/2018/04/21/ispc-volta-c-and-spmd
 https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/lectures/07_gpucore.pdf
 
 # Features
-- procedural code
+- procedural
 - strong static type checking
     - type hint system for inferring literal types
 - constant folding
@@ -21,12 +21,37 @@ https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/lectures/07_gpucore.p
 - C codegen backend
 - optional semicolons
 
+# Samples
+> [!NOTE] Most samples currently work only on windows
+
+To see the samples in action, first:
+```
+cd samples
+```
+
+then:
+```cmd
+build <sample_name>
+run <sample_name>
+```
+
+Samples include:
+- `hello_world`
+- `game`
+- `julia_set`
+- `audio`
+- `text`
 
 # TODO
 - SIMD bytecode?
     - exec mask vs active lane unordered array
 - first parameter overloading and self call expressions
 - combined vs underlying (native) vector types
+- calling scalar procedures with vector parameters
+- more vector "intrinsics" as language features, e.g. ISPC's `foreach_active`
+- generate multiple versions of procedures based on the parameter vectorization
+- polish auto-coversions between array/vector/scalar programming
+
 
 # Credits
 Many parts of this compiler are inspired by [Blaise](https://github.com/gingerBill/blaise) and the [Odin](https://github.com/odin-lang/Odin) compiler.

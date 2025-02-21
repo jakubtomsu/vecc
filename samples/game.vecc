@@ -790,7 +790,7 @@ procedure export compute_frame (
             music += kick * 2
             music += snare * 2
             music += hihat * 0.5
-            music += melody
+            music += melody * 0.5
             music += bass * 2
             music += synth * 2
         }
