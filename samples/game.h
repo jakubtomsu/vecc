@@ -7,51 +7,7 @@
 #include <stdio.h>
 #include <vecc_builtin.h>
 
-typedef struct { F32 data[9]; } Aos9F32;
-typedef struct { U8 data[16]; } Aos16U8;
 typedef struct { F32 data[2]; } Aos2F32;
-typedef struct { U8 data[4]; } Aos4U8;
-typedef struct Effect {
-	Aos2F32 pos;
-	F32 rad;
-	F32 timer;
-	F32 dur;
-	Aos4U8 color;
-} Effect;
-typedef struct Hit {
-	F32 tmin;
-	F32 tmax;
-	B8 hit;
-} Hit;
-typedef struct { I32 data[8]; } Aos8I32;
-typedef struct Bullet {
-	B8 used;
-	Aos2F32 pos;
-	Aos2F32 vel;
-	F32 timer;
-	U8 level;
-	B8 explode;
-} Bullet;
-typedef struct Item {
-	Aos2F32 pos;
-	I32 powerup;
-	F32 timer;
-} Item;
-typedef struct { Item data[32]; } Aos32Item;
-typedef struct { F32 data[8]; } Aos8F32;
-typedef struct { U32 data[95]; } Aos95U32;
-typedef struct { F32 data[64]; } Aos64F32;
-typedef struct { Bullet data[128]; } Aos128Bullet;
-typedef struct { F32 data[3]; } Aos3F32;
-typedef struct Player {
-	Aos2F32 pos;
-	Aos2F32 vel;
-	Aos2F32 dir;
-	F32 gun_timer;
-	Aos3F32 powerup_timer;
-	F32 particle_timer;
-} Player;
-typedef struct { Aos3F32 data[4]; } Aos4Aos3F32;
 typedef struct Enemy {
 	Aos2F32 pos;
 	Aos2F32 vel;
@@ -62,9 +18,27 @@ typedef struct Enemy {
 	U8 state;
 	U8 kind;
 } Enemy;
+typedef struct { F32 data[9]; } Aos9F32;
 typedef struct { I32 data[2]; } Aos2I32;
-typedef struct { Enemy data[256]; } Aos256Enemy;
-typedef struct { F32 data[16]; } Aos16F32;
+typedef struct { F32 data[64]; } Aos64F32;
+typedef struct { U32 data[95]; } Aos95U32;
+typedef struct { F32 data[3]; } Aos3F32;
+typedef struct Player {
+	Aos2F32 pos;
+	Aos2F32 vel;
+	Aos2F32 dir;
+	F32 gun_timer;
+	Aos3F32 powerup_timer;
+	F32 particle_timer;
+} Player;
+typedef struct { U8 data[4]; } Aos4U8;
+typedef struct Effect {
+	Aos2F32 pos;
+	F32 rad;
+	F32 timer;
+	F32 dur;
+	Aos4U8 color;
+} Effect;
 typedef struct { Effect data[8]; } Aos8Effect;
 typedef struct { V8F32 data[2]; } Aos2V8F32;
 typedef struct { V8U8 data[4]; } Aos4V8U8;
@@ -76,6 +50,32 @@ typedef struct V8Effect {
 	Aos4V8U8 color;
 } V8Effect;
 typedef struct { V8Effect data[8]; } Aos8V8Effect;
+typedef struct Item {
+	Aos2F32 pos;
+	I32 powerup;
+	F32 timer;
+} Item;
+typedef struct Bullet {
+	B8 used;
+	Aos2F32 pos;
+	Aos2F32 vel;
+	F32 timer;
+	U8 level;
+	B8 explode;
+} Bullet;
+typedef struct { Bullet data[128]; } Aos128Bullet;
+typedef struct { Enemy data[256]; } Aos256Enemy;
+typedef struct { F32 data[16]; } Aos16F32;
+typedef struct { F32 data[8]; } Aos8F32;
+typedef struct { U8 data[16]; } Aos16U8;
+typedef struct Hit {
+	F32 tmin;
+	F32 tmax;
+	B8 hit;
+} Hit;
+typedef struct { I32 data[8]; } Aos8I32;
+typedef struct { Item data[32]; } Aos32Item;
+typedef struct { Aos3F32 data[4]; } Aos4Aos3F32;
 typedef struct { B8 data[3]; } Aos3B8;
 typedef struct { V8I32 data[2]; } Aos2V8I32;
 static Aos2F32 aos2f32_set(F32 v0, F32 v1) { return {{v0, v1}}; }
@@ -86,16 +86,6 @@ static Aos2F32 aos2f32_sub(Aos2F32 a, Aos2F32 b) { return {{a.data[0] - b.data[0
 static Aos2F32 aos2f32_mul(Aos2F32 a, Aos2F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1]}}; }
 static Aos2F32 aos2f32_div(Aos2F32 a, Aos2F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1]}}; }
 static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
-static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
-static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
-static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
-static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
-static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
-static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2]}}; }
-static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
-static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
-static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
-static Aos4Aos3F32 aos4aos3f32_set(Aos3F32 v0, Aos3F32 v1, Aos3F32 v2, Aos3F32 v3) { return {{v0, v1, v2, v3}}; }
 static Aos2I32 aos2i32_set(I32 v0, I32 v1) { return {{v0, v1}}; }
 static Aos2I32 aos2i32_set1(I32 a) { return {{a, a}}; }
 static Aos2F32 aos2i32_to_aos2f32(Aos2I32 a) { return {{(F32)a.data[0], (F32)a.data[1]}}; }
@@ -107,6 +97,15 @@ static Aos2I32 aos2i32_and(Aos2I32 a, Aos2I32 b) { return {{a.data[0] & b.data[0
 static Aos2I32 aos2i32_or(Aos2I32 a, Aos2I32 b) { return {{a.data[0] | b.data[0], a.data[1] | b.data[1]}}; }
 static Aos2I32 aos2i32_xor(Aos2I32 a, Aos2I32 b) { return {{a.data[0] ^ b.data[0], a.data[1] ^ b.data[1]}}; }
 static Aos2I32 aos2i32_neg(Aos2I32 a) { return {{-a.data[0], -a.data[1]}}; }
+static Aos3F32 aos3f32_set(F32 v0, F32 v1, F32 v2) { return {{v0, v1, v2}}; }
+static Aos3F32 aos3f32_set1(F32 a) { return {{a, a, a}}; }
+static Aos3F32 aos3f32_add(Aos3F32 a, Aos3F32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2]}}; }
+static Aos3F32 aos3f32_sub(Aos3F32 a, Aos3F32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2]}}; }
+static Aos3F32 aos3f32_mul(Aos3F32 a, Aos3F32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2]}}; }
+static Aos3F32 aos3f32_div(Aos3F32 a, Aos3F32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2]}}; }
+static Aos3F32 aos3f32_neg(Aos3F32 a) { return {{-a.data[0], -a.data[1], -a.data[2]}}; }
+static Aos4U8 aos4u8_set(U8 v0, U8 v1, U8 v2, U8 v3) { return {{v0, v1, v2, v3}}; }
+static Aos4U8 aos4u8_set1(U8 a) { return {{a, a, a, a}}; }
 static Aos2V8F32 aos2v8f32_set(V8F32 v0, V8F32 v1) { return {{v0, v1}}; }
 static Aos2V8F32 aos2v8f32_set_scalar(Aos2F32 a) { return {{v8f32_set1(a.data[0]), v8f32_set1(a.data[1])}}; }
 static Aos2V8F32 aos2v8f32_set1(V8F32 a) { return {{a, a}}; }
@@ -124,6 +123,7 @@ static Aos4V8U8 aos4v8u8_and(Aos4V8U8 a, Aos4V8U8 b) { return {{v8u8_and(a.data[
 static Aos4V8U8 aos4v8u8_or(Aos4V8U8 a, Aos4V8U8 b) { return {{v8u8_or(a.data[0], b.data[0]), v8u8_or(a.data[1], b.data[1]), v8u8_or(a.data[2], b.data[2]), v8u8_or(a.data[3], b.data[3])}}; }
 static Aos4V8U8 aos4v8u8_xor(Aos4V8U8 a, Aos4V8U8 b) { return {{v8u8_xor(a.data[0], b.data[0]), v8u8_xor(a.data[1], b.data[1]), v8u8_xor(a.data[2], b.data[2]), v8u8_xor(a.data[3], b.data[3])}}; }
 static Effect v8effect_extract(V8Effect a, I32 index) { return {aos2v8f32_extract(a.pos, index), v8f32_extract(a.rad, index), v8f32_extract(a.timer, index), v8f32_extract(a.dur, index), aos4v8u8_extract(a.color, index)}; }
+static Aos4Aos3F32 aos4aos3f32_set(Aos3F32 v0, Aos3F32 v1, Aos3F32 v2, Aos3F32 v3) { return {{v0, v1, v2, v3}}; }
 static Aos3B8 aos3b8_set(B8 v0, B8 v1, B8 v2) { return {{v0, v1, v2}}; }
 static Aos3B8 aos3b8_set1(B8 a) { return {{a, a, a}}; }
 static Aos3B8 aos3b8_not(Aos3B8 a) { return {{!a.data[0], !a.data[1], !a.data[2]}}; }

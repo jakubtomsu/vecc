@@ -36,6 +36,7 @@ static Aos2F32 aos2f32_neg(Aos2F32 a) { return {{-a.data[0], -a.data[1]}}; }
 static Aos2V8F32 aos2v8f32_set(V8F32 v0, V8F32 v1) { return {{v0, v1}}; }
 static Aos2V8F32 aos2v8f32_set_scalar(Aos2F32 a) { return {{v8f32_set1(a.data[0]), v8f32_set1(a.data[1])}}; }
 static Aos2V8F32 aos2v8f32_set1(V8F32 a) { return {{a, a}}; }
+static Aos2F32 aos2v8f32_extract(Aos2V8F32 a, I32 index) { return {v8f32_extract(a.data[0], index), v8f32_extract(a.data[1], index)}; }
 static Aos2V8F32 aos2v8f32_add(Aos2V8F32 a, Aos2V8F32 b) { return {{v8f32_add(a.data[0], b.data[0]), v8f32_add(a.data[1], b.data[1])}}; }
 static Aos2V8F32 aos2v8f32_sub(Aos2V8F32 a, Aos2V8F32 b) { return {{v8f32_sub(a.data[0], b.data[0]), v8f32_sub(a.data[1], b.data[1])}}; }
 static Aos2V8F32 aos2v8f32_mul(Aos2V8F32 a, Aos2V8F32 b) { return {{v8f32_mul(a.data[0], b.data[0]), v8f32_mul(a.data[1], b.data[1])}}; }
@@ -50,6 +51,7 @@ static Aos4F32 aos4f32_neg(Aos4F32 a) { return {{-a.data[0], -a.data[1], -a.data
 static Aos4V8F32 aos4v8f32_set(V8F32 v0, V8F32 v1, V8F32 v2, V8F32 v3) { return {{v0, v1, v2, v3}}; }
 static Aos4V8F32 aos4v8f32_set_scalar(Aos4F32 a) { return {{v8f32_set1(a.data[0]), v8f32_set1(a.data[1]), v8f32_set1(a.data[2]), v8f32_set1(a.data[3])}}; }
 static Aos4V8F32 aos4v8f32_set1(V8F32 a) { return {{a, a, a, a}}; }
+static Aos4F32 aos4v8f32_extract(Aos4V8F32 a, I32 index) { return {v8f32_extract(a.data[0], index), v8f32_extract(a.data[1], index), v8f32_extract(a.data[2], index), v8f32_extract(a.data[3], index)}; }
 static Aos4V8F32 aos4v8f32_add(Aos4V8F32 a, Aos4V8F32 b) { return {{v8f32_add(a.data[0], b.data[0]), v8f32_add(a.data[1], b.data[1]), v8f32_add(a.data[2], b.data[2]), v8f32_add(a.data[3], b.data[3])}}; }
 static Aos4V8F32 aos4v8f32_sub(Aos4V8F32 a, Aos4V8F32 b) { return {{v8f32_sub(a.data[0], b.data[0]), v8f32_sub(a.data[1], b.data[1]), v8f32_sub(a.data[2], b.data[2]), v8f32_sub(a.data[3], b.data[3])}}; }
 static Aos4V8F32 aos4v8f32_mul(Aos4V8F32 a, Aos4V8F32 b) { return {{v8f32_mul(a.data[0], b.data[0]), v8f32_mul(a.data[1], b.data[1]), v8f32_mul(a.data[2], b.data[2]), v8f32_mul(a.data[3], b.data[3])}}; }
@@ -57,7 +59,6 @@ static Aos4U32 aos4u32_set(U32 v0, U32 v1, U32 v2, U32 v3) { return {{v0, v1, v2
 static Aos4U32 aos4u32_set1(U32 a) { return {{a, a, a, a}}; }
 static Aos4F32 aos4u32_to_aos4f32(Aos4U32 a) { return {{(F32)a.data[0], (F32)a.data[1], (F32)a.data[2], (F32)a.data[3]}}; }
 static Aos4U32 aos4u32_add(Aos4U32 a, Aos4U32 b) { return {{a.data[0] + b.data[0], a.data[1] + b.data[1], a.data[2] + b.data[2], a.data[3] + b.data[3]}}; }
-static Aos4U32 aos4u32_sub(Aos4U32 a, Aos4U32 b) { return {{a.data[0] - b.data[0], a.data[1] - b.data[1], a.data[2] - b.data[2], a.data[3] - b.data[3]}}; }
 static Aos4U32 aos4u32_mul(Aos4U32 a, Aos4U32 b) { return {{a.data[0] * b.data[0], a.data[1] * b.data[1], a.data[2] * b.data[2], a.data[3] * b.data[3]}}; }
 static Aos4U32 aos4u32_div(Aos4U32 a, Aos4U32 b) { return {{a.data[0] / b.data[0], a.data[1] / b.data[1], a.data[2] / b.data[2], a.data[3] / b.data[3]}}; }
 static Aos4U32 aos4u32_and(Aos4U32 a, Aos4U32 b) { return {{a.data[0] & b.data[0], a.data[1] & b.data[1], a.data[2] & b.data[2], a.data[3] & b.data[3]}}; }
@@ -67,8 +68,8 @@ static Aos4U32 aos4u32_neg(Aos4U32 a) { return {{-a.data[0], -a.data[1], -a.data
 static Aos4V8U32 aos4v8u32_set(V8U32 v0, V8U32 v1, V8U32 v2, V8U32 v3) { return {{v0, v1, v2, v3}}; }
 static Aos4V8U32 aos4v8u32_set_scalar(Aos4U32 a) { return {{v8u32_set1(a.data[0]), v8u32_set1(a.data[1]), v8u32_set1(a.data[2]), v8u32_set1(a.data[3])}}; }
 static Aos4V8U32 aos4v8u32_set1(V8U32 a) { return {{a, a, a, a}}; }
+static Aos4U32 aos4v8u32_extract(Aos4V8U32 a, I32 index) { return {v8u32_extract(a.data[0], index), v8u32_extract(a.data[1], index), v8u32_extract(a.data[2], index), v8u32_extract(a.data[3], index)}; }
 static Aos4V8U32 aos4v8u32_add(Aos4V8U32 a, Aos4V8U32 b) { return {{v8u32_add(a.data[0], b.data[0]), v8u32_add(a.data[1], b.data[1]), v8u32_add(a.data[2], b.data[2]), v8u32_add(a.data[3], b.data[3])}}; }
-static Aos4V8U32 aos4v8u32_sub(Aos4V8U32 a, Aos4V8U32 b) { return {{v8u32_sub(a.data[0], b.data[0]), v8u32_sub(a.data[1], b.data[1]), v8u32_sub(a.data[2], b.data[2]), v8u32_sub(a.data[3], b.data[3])}}; }
 static Aos4V8U32 aos4v8u32_mul(Aos4V8U32 a, Aos4V8U32 b) { return {{v8u32_mul(a.data[0], b.data[0]), v8u32_mul(a.data[1], b.data[1]), v8u32_mul(a.data[2], b.data[2]), v8u32_mul(a.data[3], b.data[3])}}; }
 static Aos4V8U32 aos4v8u32_and(Aos4V8U32 a, Aos4V8U32 b) { return {{v8u32_and(a.data[0], b.data[0]), v8u32_and(a.data[1], b.data[1]), v8u32_and(a.data[2], b.data[2]), v8u32_and(a.data[3], b.data[3])}}; }
 static Aos4V8U32 aos4v8u32_or(Aos4V8U32 a, Aos4V8U32 b) { return {{v8u32_or(a.data[0], b.data[0]), v8u32_or(a.data[1], b.data[1]), v8u32_or(a.data[2], b.data[2]), v8u32_or(a.data[3], b.data[3])}}; }

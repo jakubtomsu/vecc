@@ -1,9 +1,9 @@
-build hello_world || goto :error
-build test1 || goto :error
-build text || goto :error
-build julia_set || goto :error
-build game || goto :error
+call build hello_world || goto :error
+call build game || goto :error
+call build text || goto :error
+call build julia_set || goto :error
 
 goto :EOF
+
 :error
 exit /b 2

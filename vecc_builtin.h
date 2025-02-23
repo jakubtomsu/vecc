@@ -622,8 +622,10 @@ vecc_op B32 v8b32_reduce_any(V8B32 a) { return _mm256_testz_si256(a.data[0], a.d
 // HACK
 vecc_op U8 v8b32_to_bitmask(V8B32 a) { return _mm256_movemask_ps(_mm256_castsi256_ps(a.data[0])); }
 
+// HACK
 vecc_op F32 v8f32_extract(V8F32 a, int index) { F32 data[8]; _mm256_store_ps(data, a.data[0]); return data[index]; }
 vecc_op I32 v8i32_extract(V8I32 a, int index) { I32 data[8]; _mm256_store_si256((__m256i*)data, a.data[0]); return data[index]; }
+vecc_op U32 v8u32_extract(V8U32 a, int index) { U32 data[8]; _mm256_store_si256((__m256i*)data, a.data[0]); return data[index]; }
 vecc_op U8 v8u8_extract(V8U8 a, int index) { return a.data[index]; }
 
 #endif // VECC_AVX2
